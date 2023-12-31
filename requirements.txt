@@ -1,0 +1,2 @@
+pyyaml
+garminexport[impersonate_browser]

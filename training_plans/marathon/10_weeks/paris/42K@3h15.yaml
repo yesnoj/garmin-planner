@@ -1,0 +1,276 @@
+config:
+  paces:
+    pace1: 6:00-5:07
+    pace2: 5:07-4:26
+    marathon: 4:40-4:35
+  margins:
+    faster: 0:03
+    slower: 0:03
+  name_prefix: '42K@3h15 '
+
+W01S01 Intervals:
+- warmup: lap-button
+- repeat 5:
+  - interval: 1500m in 5:53
+  - recovery: 120s -- Jogging
+- cooldown: 15min @ pace1
+
+W01S02 Jogging:
+- interval: 60min @ pace1
+- other: 10min -- abdominals/sheathing
+- other: 10min -- stretches
+
+W01S03 Hills:
+- warmup: lap-button
+- repeat 15:
+  - interval: 20s -- Uphill on a moderate slope. Fast and relaxed, without sprinting
+  - recovery: lap-button -- Recovery downhill
+- cooldown: 15min @ pace1
+
+W01S04 Jogging:
+- interval: 70min @ pace1
+- other: 10min -- abdominals/sheathing
+
+W01S05 Long run:
+- interval: 30min @ pace2
+- repeat 4:
+  - interval: 10min @ 4:36
+  - recovery: 180s -- Jogging
+- cooldown: 11min @ pace1
+
+W02S01 Intervals:
+- warmup: lap-button
+- interval: 3000m in 13:48
+- recovery: 120s -- Jogging
+- interval: 2000m in 8:18
+- recovery: 120s -- Jogging
+- interval: 2000m in 8:18
+- recovery: 120s -- Jogging
+- interval: 1000m in 3:55
+- recovery: 120s -- Jogging
+- cooldown: 15min @ pace1
+
+W02S02 Jogging:
+- interval: 60min @ pace1
+- other: 10min -- abdominals/sheathing
+- other: 10min -- stretches
+
+W02S03 Hills:
+- warmup: lap-button
+- repeat 6:
+  - interval: 30s -- Uphill on a moderate slope. Fast and relaxed, without sprinting
+  - recovery: lap-button -- Recovery downhill
+- recovery: 3min -- Jogging
+- repeat 6:
+  - interval: 30s -- Uphill on a moderate slope. Fast and relaxed, without sprinting
+  - recovery: lap-button -- Recovery downhill
+- cooldown: 15min @ pace1
+
+W02S04 Jogging:
+- interval: 70min @ pace1
+- other: 10min -- abdominals/sheathing
+
+W02S05 Long run:
+- interval: 105min @ pace2
+
+W03S01 Intervals:
+- warmup: lap-button
+- repeat 8:
+  - interval: 1000m @ 4:10-3:55
+  - recovery: 90s -- Jogging
+- cooldown: 15min @ pace1
+
+W03S02 Jogging:
+- interval: 75min @ pace1
+- other: 10min -- abdominals/sheathing
+- other: 10min -- stretches
+
+W03S03 Hills:
+- warmup: lap-button
+- repeat 10:
+  - interval: 40s -- Uphill on a moderate slope. Fast and relaxed, without sprinting
+  - recovery: lap-button -- Recovery downhill
+- cooldown: 15min @ pace1
+
+W03S04 Recovery run:
+- interval: 75min @ pace2
+- other: 10min -- abdominals/sheathing
+
+W03S05 Long run:
+- interval: 40min @ pace2
+- repeat 4:
+  - interval: 15min @ 4:36
+  - recovery: 3min
+- cooldown: 11min @ pace1
+
+W04S01 Intervals:
+- warmup: lap-button
+- repeat 3:
+  - interval: 2500m in 10:23
+  - recovery: 3min -- Jogging
+- cooldown: 10min @ pace1
+
+W04S02 Jogging:
+- interval: 75min @ pace1
+- other: 10min -- abdominals/sheathing
+- other: 10min -- stretches
+
+W04S03 Hills:
+- warmup: lap-button
+- repeat 4:
+  - interval: 30s -- Uphill on a moderate slope. Fast and relaxed, without sprinting
+  - recovery: lap-button -- Recovery downhill
+  - interval: 20s -- Uphill on a moderate slope. Fast and relaxed, without sprinting
+  - recovery: lap-button -- Recovery downhill
+  - interval: 10s -- Uphill on a moderate slope. Fast and relaxed, without sprinting
+  - recovery: lap-button -- Recovery downhill
+- cooldown: 15min @ pace1
+
+W04S04 Long run:
+- interval: 90min @ pace2 -- Progressive
+
+W04S05 Pre-competition:
+- interval: 30min @ pace2
+
+W05S01 Intervals:
+- warmup: lap-button
+- interval: 5000m in 23:05
+- recovery: 2min -- Jogging
+- interval: 2000m in 8:20
+- recovery: 2min -- Jogging
+- interval: 1000m in 3:55
+- cooldown: 15min @ pace1
+
+W05S02 Jogging:
+- interval: 75min @ pace1
+- other: 10min -- abdominals/sheathing
+- other: 10min -- stretches
+
+W05S03 Jogging + accelerations:
+- interval: 45min @ pace1
+- repeat 10:
+  - interval: 100m -- Progressive acceleration
+  - recovery: lap-button -- Back jogging to starting point
+- cooldown: 15min @ pace1
+
+W05S04 Pre-competition:
+- interval: 30min @ pace2
+
+W05S05 Salida larga:
+- interval: 25min @ pace2
+- interval: 21km in 90:00
+- cooldown: 10min @ pace1
+
+W06S01 Jogging:
+- interval: 60min @ pace1
+
+W06S02 Marathon pace:
+- interval: 55min @ pace1
+- interval: 20min @ marathon
+
+W06S03 Intervals:
+- warmup: lap-button
+- repeat 10:
+  - interval: 800m in 3:15
+  - recovery: 90s -- Jogging
+- cooldown: 15min @ pace1
+
+W06S04 Jogging or rest:
+- interval: 75min @ pace1
+- other: 10min -- abdominals/sheathing
+
+W06S05 Long run:
+- interval: 50min @ pace2
+- repeat 3:
+  - interval: 20min @ 4:36
+  - recovery: 3min -- Jogging
+- cooldown: 15min @ pace1
+
+W07S01 Intervals:
+- warmup: lap-button
+- repeat 3:
+  - interval: 3000m in 12:27
+  - recovery: 400m -- Jogging
+- cooldown: 15min @ pace1
+
+W07S02 Jogging:
+- interval: 75min @ pace2
+- other: 10min -- abdominals/sheathing
+- other: 10min -- stretches
+
+W07S03 Intervals:
+- warmup: lap-button
+- repeat 12:
+  - interval: 500m in 1:51
+  - recovery: 75s -- Jogging
+- cooldown: 15min @ pace1
+
+W07S04 Jogging:
+- interval: 75min @ pace1
+- other: 10min -- abdominals/sheathing
+
+W07S05 Long run:
+- interval: 140min @ pace2
+
+W08S01 Intervals:
+- warmup: lap-button
+- interval: 4000m in 18:28
+- recovery: 400m -- Jogging
+- interval: 4000m in 16:36
+- cooldown: 15min @ pace1
+
+W08S02 Jogging:
+- interval: 75min @ pace2
+- other: 10min -- abdominals/sheathing
+- other: 10min -- stretches
+
+W08S03 Intervals:
+- warmup: lap-button
+- repeat 8:
+  - interval: 600m in 2:17
+  - recovery: 200m in 2:25
+
+W08S04 Jogging:
+- interval: 75min @ pace1
+- other: 10min -- abdominals/sheathing
+
+W08S05 Long run:
+- interval: 40min @ pace2
+- repeat 4:
+  - interval: 15min @ 4:36
+  - recovery: 3min -- Jogging
+- cooldown: 11min @ pace1
+
+W09S01 Jogging marathon:
+- interval: 30min @ pace2
+- interval: 5000m in 23:05
+- cooldown: 10min @ pace2
+
+W09S02 Jogging:
+- interval: 60min @ pace2
+- other: 10min -- abdominals/sheathing
+- other: 10min -- stretches
+
+W09S03 Intervals:
+- warmup: lap-button
+- repeat 6:
+  - interval: 500m in 1:57
+  - recovery: 70s -- Jogging
+
+W09S04 Jogging:
+- interval: 70min @ pace2
+
+W10S01 Jogging marathon:
+- interval: 20min @ pace2
+- interval: 2000m in 9:14
+- cooldown: 10min @ pace1
+
+W10S02 Jogging:
+- interval: 35min @ pace1
+- other: 10min -- stretches
+
+W10S03 Pre-race:
+- interval: 20min @ pace2
+
+W10S04 Race:
+- interval: 42.2 in 180:15
