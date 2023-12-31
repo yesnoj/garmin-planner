@@ -3,7 +3,7 @@ import sys
 import argparse
 import logging
 
-from planner.fartlek import cmd_farlek
+from planner.fartlek import cmd_fartlek
 from planner.import_export import cmd_import_workouts
 from planner.import_export import cmd_export_workouts
 from planner.import_export import cmd_delete_workouts
@@ -56,10 +56,11 @@ def parse_args(argv):
     unschedule.add_argument('--start-date', required=False, help='the date from which to start looking for workouts in the calendar.')
     unschedule.add_argument('--training-plan', required=True, help='the training plan ID. Corresponds to the common prefix of all workouts in the plan.')
 
-    farlek = subparsers.add_parser('farlek', help='create a random farlek workout')
-    farlek.set_defaults(func=cmd_farlek)
-    farlek.add_argument('--duration', help='workout duration in mm:ss')
-    farlek.add_argument('--target-pace', help='target pace in mm:ss')
+    fartlek = subparsers.add_parser('fartlek', help='create a random fartlek workout')
+    fartlek.set_defaults(func=cmd_fartlek)
+    fartlek.add_argument('--duration', required=True, help='workout duration in mm:ss')
+    fartlek.add_argument('--target-pace', required=True, help='target pace in mm:ss')
+    fartlek.add_argument('--schedule', required=False, help='schedule this workout (today, tomorrow, YYY-MM-DD)')
 
     return parser.parse_args(argv)
 
