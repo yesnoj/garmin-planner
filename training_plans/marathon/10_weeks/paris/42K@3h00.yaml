@@ -1,16 +1,16 @@
 # Training plan from the Paris marathon.
 # Duration: 10 weeks
-# Objective: 3h15
-# Source: https://www.timeto.com/Assets/TimeTo/plans/Plan_Marathon_3h15_UK.pdf
+# Objective: 3h00
+# Source: https://www.timeto.com/Assets/TimeTo/plans/Plan_Marathon_3h00_UK.pdf
 config:
   paces:
     pace1: 6:00-5:07
     pace2: 5:07-4:26
-    marathon: 4:40-4:35
+    marathon: 4:10-4:20
   margins:
     faster: 0:03
     slower: 0:03
-  name_prefix: '42K@3h15 '
+  name_prefix: '42K@3h00 '
 
 W01S01 Intervals:
 - warmup: lap-button
@@ -38,19 +38,19 @@ W01S04 Jogging:
 W01S05 Long run:
 - interval: 30min @ pace2
 - repeat 4:
-  - interval: 10min @ 4:36
+  - interval: 10min @ 4:15
   - recovery: 180s -- Jogging
 - cooldown: 11min @ pace1
 
 W02S01 Intervals:
 - warmup: lap-button
-- interval: 3000m in 13:48
+- interval: 3000m in 13:00
 - recovery: 120s -- Jogging
-- interval: 2000m in 8:18
+- interval: 2000m in 7:50
 - recovery: 120s -- Jogging
-- interval: 2000m in 8:18
+- interval: 2000m in 7:38
 - recovery: 120s -- Jogging
-- interval: 1000m in 3:55
+- interval: 1000m in 3:49
 - recovery: 120s -- Jogging
 - cooldown: 15min @ pace1
 
@@ -80,7 +80,7 @@ W02S05 Long run:
 W03S01 Intervals:
 - warmup: lap-button
 - repeat 8:
-  - interval: 1000m @ 4:10-3:55
+  - interval: 1000m @ 3:55-3:42
   - recovery: 90s -- Jogging
 - cooldown: 15min @ pace1
 
@@ -103,16 +103,16 @@ W03S04 Recovery run:
 W03S05 Long run:
 - interval: 40min @ pace2
 - repeat 4:
-  - interval: 15min @ 4:36
+  - interval: 15min @ 4:15
   - recovery: 3min
 - cooldown: 11min @ pace1
 
 W04S01 Intervals:
 - warmup: lap-button
 - repeat 3:
-  - interval: 2500m in 10:23
+  - interval: 2500m in 9:47
   - recovery: 3min -- Jogging
-- cooldown: 10min @ pace1
+- cooldown: 15min @ pace1
 
 W04S02 Jogging:
 - interval: 75min @ pace1
@@ -135,11 +135,11 @@ W04S04 Long run:
 
 W05S01 Intervals:
 - warmup: lap-button
-- interval: 5000m in 23:05
+- interval: 5000m in 21:30
 - recovery: 2min -- Jogging
-- interval: 2000m in 8:20
+- interval: 2000m in 7:50
 - recovery: 2min -- Jogging
-- interval: 1000m in 3:55
+- interval: 1000m in 3:49
 - cooldown: 15min @ pace1
 
 W05S02 Jogging:
@@ -157,9 +157,9 @@ W05S03 Jogging + accelerations:
 W05S04 Pre-competition:
 - interval: 30min @ pace2
 
-W05S05 Salida larga:
+W05S05 Preparatory competition:
 - interval: 25min @ pace2
-- interval: 21km in 90:00
+- interval: 21km in 84:00
 - cooldown: 10min @ pace1
 
 W06S01 Jogging:
@@ -173,7 +173,7 @@ W06S02 Marathon pace:
 W06S03 Intervals:
 - warmup: lap-button
 - repeat 10:
-  - interval: 800m in 3:15
+  - interval: 800m in 3:00
   - recovery: 90s -- Jogging
 - cooldown: 15min @ pace1
 
@@ -184,14 +184,14 @@ W06S04 Jogging or rest:
 W06S05 Long run:
 - interval: 50min @ pace2
 - repeat 3:
-  - interval: 20min @ 4:36
+  - interval: 20min @ 4:15
   - recovery: 3min -- Jogging
 - cooldown: 15min @ pace1
 
 W07S01 Intervals:
 - warmup: lap-button
 - repeat 3:
-  - interval: 3000m in 12:27
+  - interval: 3000m in 11:45
   - recovery: 400m -- Jogging
 - cooldown: 15min @ pace1
 
@@ -203,7 +203,7 @@ W07S02 Jogging:
 W07S03 Intervals:
 - warmup: lap-button
 - repeat 12:
-  - interval: 500m in 1:51
+  - interval: 500m in 1:45
   - recovery: 75s -- Jogging
 - cooldown: 15min @ pace1
 
@@ -216,9 +216,9 @@ W07S05 Long run:
 
 W08S01 Intervals:
 - warmup: lap-button
-- interval: 4000m in 18:28
+- interval: 4000m in 17:00
 - recovery: 400m -- Jogging
-- interval: 4000m in 16:36
+- interval: 4000m in 16:00
 - cooldown: 15min @ pace1
 
 W08S02 Jogging:
@@ -229,7 +229,7 @@ W08S02 Jogging:
 W08S03 Intervals:
 - warmup: lap-button
 - repeat 8:
-  - interval: 600m in 2:17
+  - interval: 600m in 2:10
   - recovery: 200m in 2:25
 
 W08S04 Jogging:
@@ -239,13 +239,13 @@ W08S04 Jogging:
 W08S05 Long run:
 - interval: 40min @ pace2
 - repeat 4:
-  - interval: 15min @ 4:36
+  - interval: 15min @ 4:15
   - recovery: 3min -- Jogging
 - cooldown: 11min @ pace1
 
 W09S01 Jogging marathon:
 - interval: 30min @ pace2
-- interval: 5000m in 23:05
+- interval: 5000m in 21:20
 - cooldown: 10min @ pace2
 
 W09S02 Jogging:
@@ -256,15 +256,15 @@ W09S02 Jogging:
 W09S03 Intervals:
 - warmup: lap-button
 - repeat 6:
-  - interval: 500m in 1:57
+  - interval: 500m in 1:51
   - recovery: 70s -- Jogging
 
 W09S04 Jogging:
-- interval: 70min @ pace2
+- interval: 80min @ pace2
 
 W10S01 Jogging marathon:
 - interval: 20min @ pace2
-- interval: 2000m in 9:14
+- interval: 2000m in 8:30
 - cooldown: 10min @ pace1
 
 W10S02 Jogging:
@@ -275,4 +275,4 @@ W10S03 Pre-race:
 - interval: 20min @ pace2
 
 W10S04 Race:
-- interval: 42.2 in 180:15
+- interval: 42.2 in 180:00
