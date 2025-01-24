@@ -11,69 +11,66 @@ def cmd_import_workouts(args):
     logging.info('importing workouts from ' + args.workouts_file)
     existing_workouts = []
 
-    with GarminClient(args.garmin_id, args.garmin_password) as client:
-        if not args.dry_run:
+    client = GarminClient(args.oauth_folder)
+    if not args.dry_run:
+        if args.replace:
+            existing_workouts = client.list_workouts()
+
+    for workout in import_workouts(args.workouts_file):
+        # filter workouts
+        if args.name_filter and not re.search(args.name_filter, workout.workout_name):
+            continue
+
+        if args.dry_run:
+            print(json.dumps(workout.garminconnect_json()))
+        else:
+            logging.info('creating workout: ' + workout.workout_name)
+            workouts_to_delete = []
             if args.replace:
-                res = client.list_workouts()
-                existing_workouts = res[1]
-
-        for workout in import_workouts(args.workouts_file):
-            # filter workouts
-            if args.name_filter and not re.search(args.name_filter, workout.workout_name):
-                continue
-
-            if args.dry_run:
-                print(json.dumps(workout.garminconnect_json()))
-            else:
-                logging.info('creating workout: ' + workout.workout_name)
-                workouts_to_delete = []
-                if args.replace:
-                    print(existing_workouts)
-                    for wo in existing_workouts:
-                        if wo['workoutName'] == workout.workout_name:
-                            workouts_to_delete.append(str(wo['workoutId']))
-                res = client.add_workout(workout)
-                if res[0] in [200, 204]:
-                    for wod in workouts_to_delete:
-                        client.delete_workout(wod)
+                print(existing_workouts)
+                for wo in existing_workouts:
+                    if wo['workoutName'] == workout.workout_name:
+                        workouts_to_delete.append(str(wo['workoutId']))
+            res = client.add_workout(workout)
+            print('Added workout:' + str(res))
+            for wod in workouts_to_delete:
+                client.delete_workout(wod)
 
     return None
 
 def cmd_export_workouts(args):
-    with GarminClient(args.garmin_id, args.garmin_password) as client:
-        response = client.list_workouts()
+    client = GarminClient(args.oauth_folder)
+    workouts = client.list_workouts()
 
-        workouts = response[1]
+    formatted_output = ''
+    export_format = args.format
 
-        formatted_output = ''
-        export_format = args.format
+    # If export format was not indicated in the command line, the file extension can decide it
+    file_extension = args.export_file.split('.')[-1].upper() if '.' in args.export_file else None
+    if not export_format and file_extension:        
+        if file_extension in ['JSON', 'JSN']:
+            export_format = 'JSON'
+        elif file_extension in ['YAML', 'YML']:
+            export_format = 'YAML'
 
-        # If export format was not indicated in the command line, the file extension can decide it
-        file_extension = args.export_file.split('.')[-1].upper() if '.' in args.export_file else None
-        if not export_format and file_extension:        
-            if file_extension in ['JSON', 'JSN']:
-                export_format = 'JSON'
-            elif file_extension in ['YAML', 'YML']:
-                export_format = 'YAML'
+    if not export_format or export_format == 'JSON':
+        formatted_output = json.dumps(workouts, indent=2)
+    elif export_format == 'YAML':
+        formatted_output = yaml.dump(workouts)
 
-        if not export_format or export_format == 'JSON':
-            formatted_output = json.dumps(workouts, indent=2)
-        elif export_format == 'YAML':
-            formatted_output = yaml.dump(workouts)
-
-        if args.export_file != '':
-            print('exporting workouts to file '+ args.export_file)
-            f = open(args.export_file, 'w')
-            f.write(formatted_output)
-            f.close()
-        else:
-            print(formatted_output)
+    if args.export_file != '':
+        print('exporting workouts to file '+ args.export_file)
+        f = open(args.export_file, 'w')
+        f.write(formatted_output)
+        f.close()
+    else:
+        print(formatted_output)
 
     return None
 
 def cmd_delete_workouts(args):
     valid_ids = []
-    client = GarminClient(args.garmin_id, args.garmin_password)
+    client = GarminClient(args.oauth_folder)
     if args.workout_ids:
         if ',' in args.workout_ids:
             workout_ids = args.workout_ids.split(',')
@@ -88,12 +85,8 @@ def cmd_delete_workouts(args):
                 valid_ids.append(workout_id)
 
     if args.name_filter:
-        client.connect()
         logging.info(f'getting list of workouts.')
-        response = client.list_workouts()
-        if response[0] not in [200, 204]:
-            print(str(response[0]) + ': ' + str(response[1]))
-        workouts_list = response[1]
+        workouts_list = client.list_workouts()
         for workout in workouts_list:
             if re.search(args.name_filter, workout['workoutName']):
                 logging.info(f'found workout named "{workout["workoutName"]}" with ID {workout["workoutId"]}.')
@@ -103,9 +96,6 @@ def cmd_delete_workouts(args):
         logging.warning('couldn\'t find any valid workout ID.')
         return
 
-    if not args.name_filter:
-        client.connect()
-
     for workout_id in valid_ids:
         res = client.delete_workout(workout_id)
 
@@ -113,10 +103,19 @@ def cmd_delete_workouts(args):
 
 config = {}
 
-def get_description(step_txt):
+def get_description(step_txt, target=None):
+    description = None
     if ' -- ' in step_txt:
-        return step_txt[step_txt.find(' -- ') + 4:].strip()
-    return None
+        description = step_txt[step_txt.find(' -- ') + 4:].strip()
+    if target and target.target == 'pace.zone':
+        avg_pace = (target.from_value + target.to_value) / 2
+        avg_pace_kmph = avg_pace / 0.27778
+        avg_pace_kmph_str = f'{avg_pace_kmph:.1f} kmph'
+        if description:
+            description += '\n' + avg_pace_kmph_str
+        else:
+            description = avg_pace_kmph_str
+    return description
 
 def clean_step(step_txt):
     # remove description, if any
@@ -227,13 +226,14 @@ def import_workouts(plan_file):
                 for k, v in step.items():
                   if not k.startswith('repeat'):
                     end_condition = get_end_condition(v)
+                    ws_target=get_target(v)
                     ws = WorkoutStep(
                         0,
                         k,
-                        get_description(v),
+                        get_description(v, ws_target),
                         end_condition=end_condition,
                         end_condition_value=get_end_condition_value(v, end_condition),
-                        target=get_target(v)
+                        target=ws_target
                     )
                     w.add_step(ws)
                   else:
@@ -251,13 +251,14 @@ def import_workouts(plan_file):
                       for step in v:
                         for rk, rv in step.items():
                           end_condition = get_end_condition(rv)
+                          rws_target=get_target(rv)
                           rws = WorkoutStep(
                               0,
                               rk,
-                              get_description(rv),
+                              get_description(rv, rws_target),
                               end_condition=end_condition,
                               end_condition_value=get_end_condition_value(rv, end_condition),
-                              target=get_target(rv)
+                              target=rws_target
                           )
                         ws.add_step(rws)
                         w.add_step(ws)

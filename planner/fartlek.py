@@ -9,24 +9,9 @@ from planner.garmin_client import GarminClient
 
 
 def cmd_fartlek(args):
-    with GarminClient(args.garmin_id, args.garmin_password) as client:
-        workout = create_fartlek_workout(args.duration, args.target_pace)
-        res = client.add_workout(workout)
-        if res[0] in [200, 204]:
-            workout_id = res[1]['workoutId']
-            logging.info(f'Added workout {workout_id}')
-            if args.schedule:
-                date = None
-                if args.schedule.lower() == 'today':
-                    date = datetime.today().strftime('%Y-%m-%d')
-                elif args.schedule.lower() == 'tomorrow':
-                    date = (datetime.today() + timedelta(1)).strftime('%Y-%m-%d')
-                elif re.match(r'\d{4}-\d{2}-\d{2}', args.schedule):
-                    date = args.schedule
-                else:
-                    logging.warning(f'invalid date {args.schedule} (must be \'today\', \'tomorrow\', \'YYYY-MM-DD\'). Workout not scheduled.')
-                logging.info(f'scheduling workout {workout_id} on {date}.')
-                client.schedule_workout(workout_id, date)
+    client = GarminClient(args.oauth_folder)
+    workout = create_fartlek_workout(args.duration, args.target_pace)
+    res = client.add_workout(workout)
     return None
 
 def fartlek(target_time):

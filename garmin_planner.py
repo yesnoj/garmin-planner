@@ -9,15 +9,14 @@ from planner.import_export import cmd_export_workouts
 from planner.import_export import cmd_delete_workouts
 from planner.schedule import cmd_schedule_workouts
 from planner.schedule import cmd_unschedule_workouts
+from planner.garmin_client import cmd_login
 
 def parse_args(argv):
     parser = argparse.ArgumentParser()
 
     # common options
     parser.add_argument('--dry-run', action='store_true', default=False, help='Do not modify anything, only show what would be done.')
-    parser.add_argument('--garmin-id', required=True, help='Garmin account ID')
-    parser.add_argument('--garmin-password', required=True, help='Garmin account password')
-    #parser.add_argument('--cookie-jar', help='Use cookies from this file')
+    parser.add_argument('--oauth-folder', default='~/.garth', help='Folder where the Garmin oauth token is stored.')
 
     parser.add_argument('--log-level', required=False,
                         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
@@ -26,6 +25,10 @@ def parse_args(argv):
 
     # add sub commands
     subparsers = parser.add_subparsers(help='available commands')
+
+    garmin_login = subparsers.add_parser('login', help='refresh or create Oauth credentials for your Garmin account')
+    garmin_login.set_defaults(func=cmd_login)
+
 
     import_wo = subparsers.add_parser('import', help='import workouts')
     import_wo.set_defaults(func=cmd_import_workouts)

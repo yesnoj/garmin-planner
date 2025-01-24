@@ -11,7 +11,10 @@ def seconds_to_mmss(seconds):
     seconds = seconds - mins * 60
     return f"{mins:02}:{seconds:02}"
 
-def pace_to_ms(pace):
+def pace_to_kmph(pace):
     seconds = mmss_to_seconds(pace)
     km_h = 60 / (seconds / 60)
-    return km_h * 0.27778
+    return km_h
+
+def pace_to_ms(pace):
+    return pace_to_kmph(pace) * 0.27778

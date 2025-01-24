@@ -2,71 +2,54 @@
 
 import json
 import logging
+import garth
+from getpass import getpass
 
-import garminexport.garminclient
+class GarminClient():
 
-class GarminClient(garminexport.garminclient.GarminClient):
+  def __init__(self, oauth_folder='oauth-folder'):
+    garth.resume(oauth_folder)
 
   def list_workouts(self):
-    response = self.session.get(
-        'https://connect.garmin.com/workout-service/workouts',
+    response = garth.connectapi(
+        '/workout-service/workouts',
         params={'start': 1, 'limit': 999, 'myWorkoutsOnly': True})
-    if response.status_code != 200:
-      raise Exception(
-        u'failed to fetch workouts: {}\n{}'.format(
-          response.status_code, response.text))
-    json_resp = json.loads(response.text)
-    return (response.status_code, json_resp) 
+    return response 
 
   def add_workout(self, workout):
-    response = self.session.post(
-      'https://connect.garmin.com/workout-service/workout',
+    response = garth.connectapi(
+      '/workout-service/workout', method="POST",
       json=workout.garminconnect_json())
-
-    if response.status_code > 299:
-      print('Add workout response status:' + str(response.status_code))
-      print('Add workout response json:' + str(response.text))
-    json_resp = json.loads(response.text)
-    return (response.status_code, json_resp) 
+    return response 
 
   def delete_workout(self, workout_id):
     logging.info(f'deleting workout {workout_id}')
-    response = self.session.delete(
-      'https://connect.garmin.com/workout-service/workout/' + workout_id)
-
-    if response.status_code > 299:
-      logging.warn(f'could not delete workout {workout_id}. Resp code: {response.status_code}. Error: {response.text}')
-    return response.status_code
+    response = garth.connectapi(
+      '/workout-service/workout/' + workout_id, method="DELETE")
+    return response 
 
   def get_calendar(self, year, month):
     logging.info(f'getting calendar. Year: {year}, month: {month}')
-    response = self.session.get(
-        f'https://connect.garmin.com/calendar-service/year/{year}/month/{month-1}')
-    if response.status_code != 200:
-      raise Exception(
-        u'failed to fetch calendar: {}\n{}'.format(
-          response.status_code, response.text))
-    json_resp = json.loads(response.text)
-    return json_resp
+    response = garth.connectapi(
+        f'/calendar-service/year/{year}/month/{month-1}')
+    return response 
 
   def schedule_workout(self, workout_id, date):
     date_formatted = date
     if type(date_formatted) is not str:
       date_formatted = date.strftime('%Y-%m-%d')
-    response = self.session.post(
-      f'https://connect.garmin.com/workout-service/schedule/{workout_id}',
+    response = garth.connectapi(
+      f'/workout-service/schedule/{workout_id}', method="POST",
       json={'date' :date_formatted})
-
-    if response.status_code > 299:
-      print('Add workout response status:' + str(response.status_code))
-      print('Add workout response json:' + str(response.text))
-    return response.status_code
+    return response 
 
   def unschedule_workout(self, schedule_id):
-    response = self.session.delete(
-      f'https://connect.garmin.com/workout-service/schedule/{schedule_id}')
+    response = garth.connectapi(
+      f'/workout-service/schedule/{schedule_id}', method="DELETE")
+    return response 
 
-    if response.status_code > 299:
-      print('Unschedule workout response status:' + str(response.status_code))
-      print('Unschedule workout response json:' + str(response.text))
-    return response.status_code
+def cmd_login(args):
+    email = input('Enter email address: ')
+    password = getpass('Enter password: ')
+    garth.login(email, password)
+    garth.save(args.oauth_folder)
