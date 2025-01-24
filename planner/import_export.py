@@ -21,18 +21,19 @@ def cmd_import_workouts(args):
         if args.name_filter and not re.search(args.name_filter, workout.workout_name):
             continue
 
+        if args.treadmill:
+            workout.dist_to_time()
+
         if args.dry_run:
             print(json.dumps(workout.garminconnect_json()))
         else:
             logging.info('creating workout: ' + workout.workout_name)
             workouts_to_delete = []
             if args.replace:
-                print(existing_workouts)
                 for wo in existing_workouts:
                     if wo['workoutName'] == workout.workout_name:
                         workouts_to_delete.append(str(wo['workoutId']))
             res = client.add_workout(workout)
-            print('Added workout:' + str(res))
             for wod in workouts_to_delete:
                 client.delete_workout(wod)
 

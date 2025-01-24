@@ -31,6 +31,10 @@ class Workout:
             step.order = len(self.workout_steps) + 1
         self.workout_steps.append(step)
 
+    def dist_to_time(self):
+        for ws in self.workout_steps:
+            ws.dist_to_time()
+
     def garminconnect_json(self):
         return {
             "sportType": {
@@ -97,6 +101,23 @@ class WorkoutStep:
             return m * 60 + s
         else:
             return self.end_condition_value
+
+    def dist_to_time(self):
+        """
+        Convert steps with distance end condition and pace target to time end
+        condition. This is better for treadmill runs, where the pace is hard to
+        estimate.
+        """
+        if self.end_condition == 'distance' and self.target.target == 'pace.zone':
+            target_pace_ms = (self.target.from_value + self.target.from_value) / 2
+            end_condition_sec = int(self.parsed_end_condition_value()) / target_pace_ms
+            # Round it to the nearest 10 seconds
+            end_condition_sec = int(round(end_condition_sec/10, 0) * 10)
+            self.end_condition = 'time'
+            self.end_condition_value = f'{end_condition_sec:.0f}'
+        elif self.end_condition == 'iterations' and len(self.workout_steps) > 0:
+            for ws in self.workout_steps:
+                ws.dist_to_time()
 
     def garminconnect_json(self):
         base_json = {

@@ -17,6 +17,7 @@ def parse_args(argv):
     # common options
     parser.add_argument('--dry-run', action='store_true', default=False, help='Do not modify anything, only show what would be done.')
     parser.add_argument('--oauth-folder', default='~/.garth', help='Folder where the Garmin oauth token is stored.')
+    parser.add_argument('--treadmill', action='store_true', default=False, help='Convert distance end conditions to time end conditions where possible (treadmill mode).')
 
     parser.add_argument('--log-level', required=False,
                         choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
