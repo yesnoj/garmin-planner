@@ -7,6 +7,9 @@ from .utils import mmss_to_seconds, pace_to_ms, seconds_to_mmss
 from .workout import Target, Workout, WorkoutStep
 from planner.garmin_client import GarminClient
 
+CLEAN_KEYS = ['author', 'createdDate', 'ownerId', 'shared', 'updatedDate']
+
+
 def cmd_import_workouts(args):
     logging.info('importing workouts from ' + args.workouts_file)
     existing_workouts = []
@@ -40,8 +43,39 @@ def cmd_import_workouts(args):
     return None
 
 def cmd_export_workouts(args):
+
+    def clean(wo_dict):
+        if isinstance(wo_dict, list):
+            for ldict in wo_dict:
+                clean(ldict)
+        elif isinstance(wo_dict, dict):
+            keys = list(wo_dict.keys())
+            for k in keys:
+                v = wo_dict[k]
+                if k in CLEAN_KEYS or v == None or v == 'null':
+                    del wo_dict[k]
+                elif isinstance(v, dict) or isinstance(v, list):
+                    final_size = clean(v)
+                    if final_size == 0:
+                        del wo_dict[k]
+        return len(wo_dict)
+
     client = GarminClient(args.oauth_folder)
-    workouts = client.list_workouts()
+    workout_ids = client.list_workouts()
+
+    if args.name_filter:
+        filtered = []
+        for workout in workout_ids:
+            if re.search(args.name_filter, workout['workoutName']):
+                filtered.append(workout)
+        workout_ids = filtered
+
+    workouts = []
+    for wid in workout_ids:
+        workout = client.get_workout(wid['workoutId'])
+        if args.clean:
+            clean(workout)
+        workouts.append(workout)
 
     formatted_output = ''
     export_format = args.format

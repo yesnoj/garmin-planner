@@ -14,7 +14,7 @@ class GarminClient():
     response = garth.connectapi(
         '/workout-service/workouts',
         params={'start': 1, 'limit': 999, 'myWorkoutsOnly': True})
-    return response 
+    return response
 
   def add_workout(self, workout):
     response = garth.connectapi(
@@ -26,6 +26,12 @@ class GarminClient():
     logging.info(f'deleting workout {workout_id}')
     response = garth.connectapi(
       '/workout-service/workout/' + workout_id, method="DELETE")
+    return response 
+
+  def get_workout(self, workout_id):
+    logging.info(f'getting workout {workout_id}')
+    response = garth.connectapi(
+      '/workout-service/workout/' + str(workout_id), method="GET")
     return response 
 
   def get_calendar(self, year, month):

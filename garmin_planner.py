@@ -44,6 +44,9 @@ def parse_args(argv):
                         choices=['JSON', 'YAML'],
                         default=None,
                         help='format of the export file')
+    export_wos.add_argument('--clean', required=False, action='store_true', default=False,
+                        help='remove null items and useless data')
+    export_wos.add_argument('--name-filter', required=False, help='name (or part of the name) of workshop to export. Accepts regular expressions.')
 
     delete_wo = subparsers.add_parser('delete', help='delete workouts')
     delete_wo.set_defaults(func=cmd_delete_workouts)
