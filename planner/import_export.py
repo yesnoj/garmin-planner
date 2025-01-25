@@ -32,13 +32,15 @@ def cmd_import_workouts(args):
         else:
             logging.info('creating workout: ' + workout.workout_name)
             workouts_to_delete = []
+            id_to_replace = None
             if args.replace:
                 for wo in existing_workouts:
                     if wo['workoutName'] == workout.workout_name:
-                        workouts_to_delete.append(str(wo['workoutId']))
-            res = client.add_workout(workout)
-            for wod in workouts_to_delete:
-                client.delete_workout(wod)
+                        id_to_replace = wo['workoutId']
+            if id_to_replace != None:
+                client.update_workout(id_to_replace, workout)
+            else:
+                client.add_workout(workout)
 
     return None
 

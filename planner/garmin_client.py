@@ -34,6 +34,15 @@ class GarminClient():
       '/workout-service/workout/' + str(workout_id), method="GET")
     return response 
 
+  def update_workout(self, workout_id, workout):
+    logging.info(f'updating workout {workout_id}')
+    wo_json = workout.garminconnect_json()
+    wo_json['workoutId'] = workout_id
+    response = garth.connectapi(
+      '/workout-service/workout/' + str(workout_id), method="PUT", json=wo_json)
+    print(response)
+    return response 
+
   def get_calendar(self, year, month):
     logging.info(f'getting calendar. Year: {year}, month: {month}')
     response = garth.connectapi(
