@@ -104,6 +104,13 @@ options:
 Sample commands:
 
 ```bash
+# log into Garmin Connect (use the --oauth-folder ~/.garth_user2 )
+python3 garmin_planner.py login
+
+# log in using an alternate credentials file. This allows you to manage several
+# Garmin accounts
+python3 --oauth-folder ~/.garth_user2 garmin_planner.py login
+
 # Import a training plan
 python3 garmin_planner.py import --workouts-file=training_plans/marathon/10_weeks/paris/42K\@3h00.yaml
 
