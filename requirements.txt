@@ -1,2 +1,2 @@
 pyyaml
-garminexport[impersonate_browser]
+garth

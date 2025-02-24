@@ -9,6 +9,7 @@ from planner.import_export import cmd_export_workouts
 from planner.import_export import cmd_delete_workouts
 from planner.schedule import cmd_schedule_workouts
 from planner.schedule import cmd_unschedule_workouts
+from planner.manage import cmd_list_scheduled
 from planner.garmin_client import cmd_login
 
 def parse_args(argv):
@@ -46,12 +47,12 @@ def parse_args(argv):
                         help='format of the export file')
     export_wos.add_argument('--clean', required=False, action='store_true', default=False,
                         help='remove null items and useless data')
-    export_wos.add_argument('--name-filter', required=False, help='name (or part of the name) of workshop to export. Accepts regular expressions.')
+    export_wos.add_argument('--name-filter', required=False, help='name (or part of the name) of workout to export. Accepts regular expressions.')
 
     delete_wo = subparsers.add_parser('delete', help='delete workouts')
     delete_wo.set_defaults(func=cmd_delete_workouts)
     delete_wo.add_argument('--workout-ids', required=False, help='comma separated list of workouts to delete')
-    delete_wo.add_argument('--name-filter', required=False, help='name (or part of the name) of workshop to delete. Accepts regular expressions.')
+    delete_wo.add_argument('--name-filter', required=False, help='name (or part of the name) of workout to delete. Accepts regular expressions.')
 
     schedule = subparsers.add_parser('schedule', help='schedule workouts in a training plan. Workouts should have previously been added, and be named: [PLAN_ID] W01S01 [DESCRIPTION]')
     schedule.set_defaults(func=cmd_schedule_workouts)
@@ -62,6 +63,13 @@ def parse_args(argv):
     unschedule.set_defaults(func=cmd_unschedule_workouts)
     unschedule.add_argument('--start-date', required=False, help='the date from which to start looking for workouts in the calendar.')
     unschedule.add_argument('--training-plan', required=True, help='the training plan ID. Corresponds to the common prefix of all workouts in the plan.')
+
+    list_scheduled = subparsers.add_parser('list', help='list scheduled workouts')
+    list_scheduled.set_defaults(func=cmd_list_scheduled)
+    list_scheduled.add_argument('--start-date', required=False, help='the date from which to start looking for workouts in the calendar.')
+    list_scheduled.add_argument('--end-date', required=False, help='the date frup to which to look for workouts in the calendar.')
+    list_scheduled.add_argument('--date-range', required=False, help='the date range. Can be: today, tomorrow, current_week, current_month.')
+    list_scheduled.add_argument('--name-filter', required=False, help='name (or part of the name) of workout to export. Accepts regular expressions.')
 
     fartlek = subparsers.add_parser('fartlek', help='create a random fartlek workout')
     fartlek.set_defaults(func=cmd_fartlek)
