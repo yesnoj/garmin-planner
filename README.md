@@ -62,7 +62,7 @@ W02S01 Intervals:
 ```
 
 Sometimes, you need to do a workout in the abominable treadmil. I do this for hard
-interval sessions where it's difficult to keep the target pace unless I am force to.
+interval sessions where it's difficult to keep the target pace unless I am forced to.
 In these cases, it is better to have a time end condition rather than a distance
 end condition, because Garmin watches have a hard time estimating the distance on
 a treadmill. For these cases, you can use the `--treadmill` flag to convert your
