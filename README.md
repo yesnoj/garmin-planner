@@ -62,7 +62,7 @@ W02S01 Intervals:
 ```
 
 Sometimes, you need to do a workout in the abominable treadmil. I do this for hard
-interval sessions where it's difficult to keep the target pace unless you are force to.
+interval sessions where it's difficult to keep the target pace unless I am force to.
 In these cases, it is better to have a time end condition rather than a distance
 end condition, because Garmin watches have a hard time estimating the distance on
 a treadmill. For these cases, you can use the `--treadmill` flag to convert your
@@ -75,7 +75,7 @@ that only accept speed, and not pace.
 Here is the current set of commands and options. Under the [training_plans](./training_plans)
 folder there are a few sample training plans.
 
-```bash
+```
 $ python3 garmin_planner.py --help
 usage: garmin_planner.py [-h] [--dry-run] [--oauth-folder OAUTH_FOLDER] [--treadmill] [--log-level {DEBUG,INFO,WARNING,ERROR,CRITICAL}] {login,import,export,delete,schedule,unschedule,list,fartlek} ...
 
@@ -104,11 +104,11 @@ options:
 Sample commands:
 
 ```bash
-# log into Garmin Connect (use the --oauth-folder ~/.garth_user2 )
+# log into Garmin Connect 
 python3 garmin_planner.py login
 
 # log in using an alternate credentials file. This allows you to manage several
-# Garmin accounts
+# Garmin accounts (use the --oauth-folder option)
 python3 --oauth-folder ~/.garth_user2 garmin_planner.py login
 
 # Import a training plan
