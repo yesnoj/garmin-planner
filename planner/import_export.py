@@ -24,7 +24,7 @@ def cmd_import_workouts(args):
         if args.name_filter and not re.search(args.name_filter, workout.workout_name):
             continue
 
-        if args.treadmill:
+        if args.treadmill or workout.workout_name.strip().endswith('(T)'):
             workout.dist_to_time()
 
         if args.dry_run:
