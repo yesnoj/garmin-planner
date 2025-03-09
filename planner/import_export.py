@@ -3,7 +3,7 @@ import re
 import logging
 import json
 
-from .utils import mmss_to_seconds, pace_to_ms, seconds_to_mmss
+from .utils import hhmmss_to_seconds, pace_to_ms, seconds_to_mmss, ms_to_pace, dist_time_to_ms
 from .workout import Target, Workout, WorkoutStep
 from planner.garmin_client import GarminClient
 
@@ -206,9 +206,9 @@ def add_pace_margins(fixed_pace, margins):
     if not margins:
         return fixed_pace + '-' + fixed_pace
         
-    fixed_pace_s = mmss_to_seconds(fixed_pace)
-    fast_margin_s = mmss_to_seconds(margins['faster'])
-    slow_margin_s = mmss_to_seconds(margins['slower'])
+    fixed_pace_s = hhmmss_to_seconds(fixed_pace)
+    fast_margin_s = hhmmss_to_seconds(margins['faster'])
+    slow_margin_s = hhmmss_to_seconds(margins['slower'])
     fast_pace_s = fixed_pace_s - fast_margin_s
     slow_pace_s = fixed_pace_s + slow_margin_s
     return seconds_to_mmss(slow_pace_s) + '-' + seconds_to_mmss(fast_pace_s)
@@ -218,33 +218,37 @@ def get_target(step_txt):
 
     m = re.compile('^(.+) @ (.+)$').match(step_txt)
     if m:
+        scale = 1
         target = m.group(2).strip()
+
+        # See if the target can be found in the config block
         if target in config['paces']:
             target = config['paces'][target]
+
+        # Check if the target is of type 75% marathon_pace
+        tm = re.compile(r'^([\d.]+)%\s*(.+)$').match(target)
+        if tm:
+            scale = float(tm.group(1)) / 100
+            target = tm.group(2).strip()
+
+            # Check again if the new target is found in the config block
+            if target in config['paces']:
+                target = config['paces'][target]
+
         if re.compile(r'^\d{1,2}:\d{1,2}$').match(target):
             target = add_pace_margins(target, config.get('margins', None))
 
         pm = re.compile(r'^(\d{1,2}:\d{1,2})-(\d{1,2}:\d{1,2})$').match(target)
         if pm:
-            return Target("pace.zone", pace_to_ms(pm.group(1)), pace_to_ms(pm.group(2)))
+            return Target("pace.zone", scale*pace_to_ms(pm.group(1)), scale*pace_to_ms(pm.group(2)))
             
     m = re.compile('^(.+) in (.+)$').match(step_txt)
     if m:
-        end_condition = get_end_condition(step_txt)
-        if end_condition != 'distance':
-            print('invalid step. "in" target requires distance condition: ' + step_txt)
-            return None
-        target = m.group(2).strip()
-        if re.compile(r'^\d{1,2}:\d{1,2}$').match(target):
-            full_time = pace_to_ms(target)
-            full_distance = int(get_end_condition_value(step_txt))
-            km_distance = full_distance / 1000
-            target_pace = full_time * km_distance
-            # print('full_time: ' + str(full_time))
-            # print('full_distance: ' + str(full_distance))
-            # print('km_distance: ' + str(km_distance))
-            # print('target_pace: ' + str(target_pace))
-            return Target("pace.zone", target_pace, target_pace)
+        target = ms_to_pace(dist_time_to_ms(step_txt))
+        target = add_pace_margins(target, config.get('margins', None))
+        pm = re.compile(r'^(\d{1,2}:\d{1,2})-(\d{1,2}:\d{1,2})$').match(target)
+        if pm:
+            return Target("pace.zone", pace_to_ms(pm.group(1)), pace_to_ms(pm.group(2)))
     return None
 
 def import_workouts(plan_file):
@@ -256,6 +260,8 @@ def import_workouts(plan_file):
         # remove the config entry, if present
         global config
         config = import_json.pop('config', {})
+
+        expand_config(config)
 
         for name, steps in import_json.items():
             w = Workout("running", config.get('name_prefix', '') + name)
@@ -303,3 +309,11 @@ def import_workouts(plan_file):
             #print(json.dumps(w.garminconnect_json(), indent=2))
             workouts.append(w)
         return workouts
+
+def expand_config(config):
+    paces = config.get('paces', [])
+    # If we find paces in <distance> in <time> format, convert them to mm:ss
+    for pk, pv in paces.items():
+        if re.compile('^.+ in .+$').match(pv.strip()):
+            paces[pk] = ms_to_pace(dist_time_to_ms(pv))
+    return

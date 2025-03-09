@@ -34,6 +34,28 @@ config:
   name_prefix: '42K@3h15 '
 ```
 
+Paces can be defined in several ways:
+
+```yaml
+config:
+  paces:
+    marathon: 42.2km in 03:00:00 # is equivalent to 04:16
+    long_run: 85% marathon
+    fixed_pace: 04:15 # margins (if defined) will be applied
+    pace_range: 04:25-04:10
+  margins:
+    faster: 0:03
+    slower: 0:03
+
+# You can use these paces in workwout steps, as shown below
+W0TS0T Test paces:
+- interval: 10km @ marathon
+- interval: 10km @ long_run
+- interval: 10km in 40:00 # equivalent to 04:00
+- interval: 10km @ 75% marathon
+- interval: 10km @ 04:25-04:10
+```
+
 You can also add comments that will be attached to the workout steps:
 
 ```yaml

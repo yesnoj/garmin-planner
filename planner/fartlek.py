@@ -3,7 +3,7 @@ import random
 import re
 from datetime import datetime, timedelta
 
-from .utils import mmss_to_seconds, pace_to_ms, seconds_to_mmss
+from .utils import hhmmss_to_seconds, pace_to_ms, seconds_to_mmss
 from .workout import Target, Workout, WorkoutStep
 from planner.garmin_client import GarminClient
 
@@ -15,7 +15,7 @@ def cmd_fartlek(args):
     return None
 
 def fartlek(target_time):
-    target_seconds = mmss_to_seconds(target_time)
+    target_seconds = hhmmss_to_seconds(target_time)
 
     if target_seconds >= 40 * 60:
         # runs greater than 40 minutes == 10 minute warmup / cooldown
