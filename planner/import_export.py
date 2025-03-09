@@ -212,12 +212,6 @@ def get_description(step_txt, target=None):
             description = avg_pace_kmph_str
     return description
 
-def clean_step(step_txt):
-    # remove description, if any
-    if ' -- ' in step_txt:
-        step_txt = step_txt[:step_txt.find(' -- ')].strip()
-    return step_txt    
-
 def get_end_condition(step_txt):
     step_txt = clean_step(step_txt)
     p_distance = re.compile(r'^\d+(m|km)\s?')
@@ -307,6 +301,12 @@ def add_pace_margins(fixed_pace, margins):
     fast_pace_s = fixed_pace_s - fast_margin_s
     slow_pace_s = fixed_pace_s + slow_margin_s
     return seconds_to_mmss(slow_pace_s) + '-' + seconds_to_mmss(fast_pace_s)
+
+def clean_step(step_txt):
+    # remove description, if any
+    if ' -- ' in step_txt:
+        step_txt = step_txt[:step_txt.find(' -- ')].strip()
+    return step_txt    
 
 def expand_config(config):
     paces = config.get('paces', [])
