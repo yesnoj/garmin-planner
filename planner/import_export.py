@@ -9,7 +9,6 @@ from planner.garmin_client import GarminClient
 
 CLEAN_KEYS = ['author', 'createdDate', 'ownerId', 'shared', 'updatedDate']
 
-
 def cmd_import_workouts(args):
     logging.info('importing workouts from ' + args.workouts_file)
     existing_workouts = []
@@ -140,6 +139,65 @@ def cmd_delete_workouts(args):
 
 config = {}
 
+def import_workouts(plan_file):
+
+    with open(plan_file, 'r') as file:
+        workouts = []
+        import_json = yaml.safe_load(file)
+
+        # remove the config entry, if present
+        global config
+        config = import_json.pop('config', {})
+
+        expand_config(config)
+
+        for name, steps in import_json.items():
+            w = Workout("running", config.get('name_prefix', '') + name)
+            for step in steps:
+                for k, v in step.items():
+                  if not k.startswith('repeat'):
+                    end_condition = get_end_condition(v)
+                    ws_target=get_target(v)
+                    ws = WorkoutStep(
+                        0,
+                        k,
+                        get_description(v, ws_target),
+                        end_condition=end_condition,
+                        end_condition_value=get_end_condition_value(v, end_condition),
+                        target=ws_target
+                    )
+                    w.add_step(ws)
+                  else:
+                      m = re.compile(r'^repeat\s+(\d+)$').match(k)
+                      iterations = int(m.group(1))
+                      # create the repetition step
+                      ws = WorkoutStep(
+                          0,
+                          'repeat',
+                          get_description(v),
+                          end_condition='iterations',
+                          end_condition_value=iterations
+                      )
+                      # create the repeated steps
+                      for step in v:
+                        for rk, rv in step.items():
+                          end_condition = get_end_condition(rv)
+                          rws_target=get_target(rv)
+                          rws = WorkoutStep(
+                              0,
+                              rk,
+                              get_description(rv, rws_target),
+                              end_condition=end_condition,
+                              end_condition_value=get_end_condition_value(rv, end_condition),
+                              target=rws_target
+                          )
+                        ws.add_step(rws)
+                        w.add_step(ws)
+
+            #print(json.dumps(w.garminconnect_json(), indent=2))
+            workouts.append(w)
+        return workouts
+
 def get_description(step_txt, target=None):
     description = None
     if ' -- ' in step_txt:
@@ -238,65 +296,6 @@ def get_target(step_txt):
         if pm:
             return Target("pace.zone", pace_to_ms(pm.group(1)), pace_to_ms(pm.group(2)))
     return None
-
-def import_workouts(plan_file):
-
-    with open(plan_file, 'r') as file:
-        workouts = []
-        import_json = yaml.safe_load(file)
-
-        # remove the config entry, if present
-        global config
-        config = import_json.pop('config', {})
-
-        expand_config(config)
-
-        for name, steps in import_json.items():
-            w = Workout("running", config.get('name_prefix', '') + name)
-            for step in steps:
-                for k, v in step.items():
-                  if not k.startswith('repeat'):
-                    end_condition = get_end_condition(v)
-                    ws_target=get_target(v)
-                    ws = WorkoutStep(
-                        0,
-                        k,
-                        get_description(v, ws_target),
-                        end_condition=end_condition,
-                        end_condition_value=get_end_condition_value(v, end_condition),
-                        target=ws_target
-                    )
-                    w.add_step(ws)
-                  else:
-                      m = re.compile(r'^repeat\s+(\d+)$').match(k)
-                      iterations = int(m.group(1))
-                      # create the repetition step
-                      ws = WorkoutStep(
-                          0,
-                          'repeat',
-                          get_description(v),
-                          end_condition='iterations',
-                          end_condition_value=iterations
-                      )
-                      # create the repeated steps
-                      for step in v:
-                        for rk, rv in step.items():
-                          end_condition = get_end_condition(rv)
-                          rws_target=get_target(rv)
-                          rws = WorkoutStep(
-                              0,
-                              rk,
-                              get_description(rv, rws_target),
-                              end_condition=end_condition,
-                              end_condition_value=get_end_condition_value(rv, end_condition),
-                              target=rws_target
-                          )
-                        ws.add_step(rws)
-                        w.add_step(ws)
-
-            #print(json.dumps(w.garminconnect_json(), indent=2))
-            workouts.append(w)
-        return workouts
 
 def add_pace_margins(fixed_pace, margins):
     if not margins:
