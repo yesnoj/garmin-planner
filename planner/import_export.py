@@ -202,17 +202,6 @@ def get_end_condition_value(step_txt, condition_type=None):
         return str(cv)
     return None
 
-def add_pace_margins(fixed_pace, margins):
-    if not margins:
-        return fixed_pace + '-' + fixed_pace
-        
-    fixed_pace_s = hhmmss_to_seconds(fixed_pace)
-    fast_margin_s = hhmmss_to_seconds(margins['faster'])
-    slow_margin_s = hhmmss_to_seconds(margins['slower'])
-    fast_pace_s = fixed_pace_s - fast_margin_s
-    slow_pace_s = fixed_pace_s + slow_margin_s
-    return seconds_to_mmss(slow_pace_s) + '-' + seconds_to_mmss(fast_pace_s)
-
 def get_target(step_txt):
     step_txt = clean_step(step_txt)
 
@@ -242,8 +231,7 @@ def get_target(step_txt):
         if pm:
             return Target("pace.zone", scale*pace_to_ms(pm.group(1)), scale*pace_to_ms(pm.group(2)))
             
-    m = re.compile('^(.+) in (.+)$').match(step_txt)
-    if m:
+    if re.compile('^.+ in .+$').match(step_txt):
         target = ms_to_pace(dist_time_to_ms(step_txt))
         target = add_pace_margins(target, config.get('margins', None))
         pm = re.compile(r'^(\d{1,2}:\d{1,2})-(\d{1,2}:\d{1,2})$').match(target)
@@ -309,6 +297,17 @@ def import_workouts(plan_file):
             #print(json.dumps(w.garminconnect_json(), indent=2))
             workouts.append(w)
         return workouts
+
+def add_pace_margins(fixed_pace, margins):
+    if not margins:
+        return fixed_pace + '-' + fixed_pace
+        
+    fixed_pace_s = hhmmss_to_seconds(fixed_pace)
+    fast_margin_s = hhmmss_to_seconds(margins['faster'])
+    slow_margin_s = hhmmss_to_seconds(margins['slower'])
+    fast_pace_s = fixed_pace_s - fast_margin_s
+    slow_pace_s = fixed_pace_s + slow_margin_s
+    return seconds_to_mmss(slow_pace_s) + '-' + seconds_to_mmss(fast_pace_s)
 
 def expand_config(config):
     paces = config.get('paces', [])
