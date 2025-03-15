@@ -22,8 +22,8 @@ def hhmmss_to_seconds(s):
     if not isinstance(s, str):
         raise TypeError("Input must be a string.")
     s = s.strip()
-    if re.compile(r'^(\d+)\s*([hms])$').match(s):
-        m = re.compile(r'^(\d+)\s*([hms])$').match(s)
+    if re.compile(r'^(\d+)\s*([hms]?)$').match(s):
+        m = re.compile(r'^(\d+)\s*([hms]?)$').match(s)
         amount = int(m.group(1))
         unit = m.group(2)
         if unit == 'h':
@@ -31,6 +31,8 @@ def hhmmss_to_seconds(s):
         if unit == 'm':
             return 60 * amount
         if unit == 's':
+            return amount
+        else:
             return amount
     else:    
         parts = s.split(":")
@@ -180,6 +182,77 @@ def dist_time_to_ms(dist_time):
     else:
         raise ValueError("Input must be in the format <distance> in <time>.")
 
+def normalize_pace(orig_pace):
+    '''
+    Normalizes a pace string to the format mm:ss or hh:mm:ss with zero-padding.
+
+    This function takes a pace string and ensures it is in a consistent format
+    of mm:ss or hh:mm:ss, adding leading zeros where necessary. It also validates
+    that the minutes and seconds components are below 60.
+
+    Args:
+        orig_pace: The pace string to normalize (e.g., "4:40", "04:4", "12:4:4").
+
+    Returns:
+        The normalized pace string in mm:ss or hh:mm:ss format (e.g., "04:40", "04:04", "12:04:04").
+
+    Raises:
+        ValueError: If the input string is not in a valid pace format or if minutes/seconds are >= 60.
+    '''
+    m = re.compile(r'^\d{1,2}:\d{1,2}:?\d{0,2}$')
+    if m.match(orig_pace):
+        parts = [int(part) for part in orig_pace.split(":")]
+        # minutes and seconds must be belows 60
+        if parts[len(parts)-1] >= 60 or parts[len(parts)-2] >= 60:
+            raise ValueError('Invalid pace format: ' + orig_pace)
+
+        # Add zero padding
+        padded = [str(part).zfill(2) for part in parts]
+        return ":".join(padded)
+    else:
+        raise ValueError('Invalid pace format: ' + orig_pace)
+
+def get_pace_range(orig_pace, margins):
+    """Calculates a pace range based on an original pace and optional margins.
+
+    This function can handle single paces (e.g., "04:40") or pace ranges (e.g., "04:40-04:00").
+    If a single pace is provided and margins are given, it calculates a range by adding/subtracting
+    the margin values. If a pace range is provided, it returns the range as is.
+
+    Args:
+        orig_pace: The original pace or pace range string (e.g., "04:40", "04:40-04:00").
+        margins: A dictionary containing 'faster' and 'slower' margin values in mm:ss format (e.g., {'faster': '0:03', 'slower': '0:03'}).
+                 If None, no margins are applied.
+
+    Returns:
+        A tuple containing the slow and fast pace limits in seconds (slow_pace_s, fast_pace_s).
+
+    Raises:
+        ValueError: If the input pace string is not in a valid format.
+    """
+    m = re.compile(r'^(\d{1,2}:\d{1,2})(?:-(\d{1,2}:\d{1,2}))?').match(orig_pace)
+    if not m:
+        raise ValueError('Invalid pace format: ' + orig_pace)
+    
+    # If only one pace was provided (e.g. 04:40)
+    if not m.group(2):
+        orig_pace_s = hhmmss_to_seconds(orig_pace)
+        # If we have margins to add/substract
+        if margins:
+            fast_margin_s = hhmmss_to_seconds(margins.get('faster', '0'))
+            slow_margin_s = hhmmss_to_seconds(margins.get('slower', '0'))
+            fast_pace_s = orig_pace_s - fast_margin_s
+            slow_pace_s = orig_pace_s + slow_margin_s
+            return (slow_pace_s, fast_pace_s)
+        # Single pace and no margins. We return the original pace for both limits.
+        else:
+            return (orig_pace_s, orig_pace_s)
+    # If we were provided both paces, no additional margins are needed.
+    else:
+        pace_1 = hhmmss_to_seconds(m.group(1))
+        pace_2 = hhmmss_to_seconds(m.group(2))
+        return (pace_1, pace_2)
+
 # --- Main block for testing ---
 if __name__ == "__main__":
     print("Testing hhmmss_to_seconds...")
@@ -190,6 +263,7 @@ if __name__ == "__main__":
     assert hhmmss_to_seconds("1h") == 3600
     assert hhmmss_to_seconds("2m") == 120
     assert hhmmss_to_seconds("30s") == 30
+    assert hhmmss_to_seconds("30") == 30
     try:
         hhmmss_to_seconds("invalid")
         assert False
@@ -261,5 +335,18 @@ if __name__ == "__main__":
     print("Testing time/distance to pace.")
     assert ms_to_pace(dist_time_to_ms("10000m in 40:00")) == '04:00'
     assert ms_to_pace(dist_time_to_ms("42.2km in 03:00:00")) == '04:16'
+
+    print("Testing normalize_pace...")
+    assert normalize_pace('04:40') == '04:40'
+    assert normalize_pace('4:40') == '04:40'
+    assert normalize_pace('04:4') == '04:04'
+    assert normalize_pace('4:4') == '04:04'
+    assert normalize_pace('12:4:4') == '12:04:04'
+    assert normalize_pace('2:4:4') == '02:04:04'
+
+    print("Testing get_pace_range...")
+    assert get_pace_range('04:40', None) == (280, 280)
+    assert get_pace_range('04:40', {'faster': '0:10', 'slower': '0:10'}) == (290, 270)
+    assert get_pace_range('04:40-04:20', None) == (280, 260)
 
     print("All tests passed!")
