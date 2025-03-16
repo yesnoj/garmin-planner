@@ -34,20 +34,23 @@ def hhmmss_to_seconds(s):
             return amount
         else:
             return amount
+    elif re.compile(r'^(\d+)\s*min$').match(s):
+        m = re.compile(r'^(\d+)\s*min$').match(s)
+        return 60 * int(m.group(1))
     else:    
         parts = s.split(":")
         if len(parts) == 2:
             try:
                 return int(parts[0]) * 60 + int(parts[1])
             except ValueError:
-                raise ValueError("Invalid duration provided, must use mm:ss format")
+                raise ValueError("Invalid duration provided, must use mm:ss format: " + s)
         elif len(parts) == 3:
             try:
                 return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
             except ValueError:
-                raise ValueError("Invalid duration provided, must use hh:mm:ss format")
+                raise ValueError("Invalid duration provided, must use hh:mm:ss format: " + s)
         else:
-            raise ValueError("Invalid duration provided, must use mm:ss or hh:mm:ss format")
+            raise ValueError("Invalid duration provided, must use mm:ss or hh:mm:ss format: " + s)
 
 def seconds_to_mmss(seconds):
     """Converts a time in seconds to a string in mm:ss format.
@@ -230,6 +233,13 @@ def get_pace_range(orig_pace, margins):
     Raises:
         ValueError: If the input pace string is not in a valid format.
     """
+    # Handle case where pace provided has already been converted to tuple
+    if isinstance(orig_pace, tuple):
+        if isinstance (orig_pace[0], str) and (orig_pace[1], str):
+            return orig_pace
+        else:
+            raise ValueError('Invalid pace format: ' + str(orig_pace))
+
     m = re.compile(r'^(\d{1,2}:\d{1,2})(?:-(\d{1,2}:\d{1,2}))?').match(orig_pace)
     if not m:
         raise ValueError('Invalid pace format: ' + orig_pace)
@@ -241,16 +251,16 @@ def get_pace_range(orig_pace, margins):
         if margins:
             fast_margin_s = hhmmss_to_seconds(margins.get('faster', '0'))
             slow_margin_s = hhmmss_to_seconds(margins.get('slower', '0'))
-            fast_pace_s = orig_pace_s - fast_margin_s
-            slow_pace_s = orig_pace_s + slow_margin_s
-            return (slow_pace_s, fast_pace_s)
+            fast_pace = seconds_to_mmss(orig_pace_s - fast_margin_s)
+            slow_pace = seconds_to_mmss(orig_pace_s + slow_margin_s)
+            return (slow_pace, fast_pace)
         # Single pace and no margins. We return the original pace for both limits.
         else:
             return (orig_pace_s, orig_pace_s)
     # If we were provided both paces, no additional margins are needed.
     else:
-        pace_1 = hhmmss_to_seconds(m.group(1))
-        pace_2 = hhmmss_to_seconds(m.group(2))
+        pace_1 = m.group(1)
+        pace_2 = m.group(2)
         return (pace_1, pace_2)
 
 # --- Main block for testing ---

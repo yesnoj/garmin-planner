@@ -3,7 +3,7 @@ import re
 import logging
 import json
 
-from .utils import hhmmss_to_seconds, pace_to_ms, seconds_to_mmss, ms_to_pace, dist_time_to_ms
+from .utils import ms_to_pace, dist_time_to_ms, get_pace_range, pace_to_ms
 from .workout import Target, Workout, WorkoutStep
 from planner.garmin_client import GarminClient
 
@@ -18,11 +18,7 @@ def cmd_import_workouts(args):
         if args.replace:
             existing_workouts = client.list_workouts()
 
-    for workout in import_workouts(args.workouts_file):
-        # filter workouts
-        if args.name_filter and not re.search(args.name_filter, workout.workout_name):
-            continue
-
+    for workout in import_workouts(args.workouts_file, args.name_filter):
         if args.treadmill or workout.workout_name.strip().endswith('(T)'):
             workout.dist_to_time()
 
@@ -139,7 +135,7 @@ def cmd_delete_workouts(args):
 
 config = {}
 
-def import_workouts(plan_file):
+def import_workouts(plan_file, name_filter=None):
 
     with open(plan_file, 'r') as file:
         workouts = []
@@ -152,6 +148,9 @@ def import_workouts(plan_file):
         expand_config(config)
 
         for name, steps in import_json.items():
+            if name_filter and not re.search(name_filter, name):
+                continue
+
             w = Workout("running", config.get('name_prefix', '') + name)
             for step in steps:
                 for k, v in step.items():
@@ -254,53 +253,55 @@ def get_end_condition_value(step_txt, condition_type=None):
         return str(cv)
     return None
 
-def get_target(step_txt):
+def get_target(step_txt, verbose=False):
     step_txt = clean_step(step_txt)
+    target_type = None
+    target = None
+    scale_min = 1
+    scale_max = 1
 
-    m = re.compile('^(.+) @ (.+)$').match(step_txt)
-    if m:
-        scale = 1
-        target = m.group(2).strip()
-
-        # See if the target can be found in the config block
-        if target in config['paces']:
-            target = config['paces'][target]
-
-        # Check if the target is of type 75% marathon_pace
-        tm = re.compile(r'^([\d.]+)%\s*(.+)$').match(target)
-        if tm:
-            scale = float(tm.group(1)) / 100
-            target = tm.group(2).strip()
-
-            # Check again if the new target is found in the config block
-            if target in config['paces']:
-                target = config['paces'][target]
-
-        if re.compile(r'^\d{1,2}:\d{1,2}$').match(target):
-            target = add_pace_margins(target, config.get('margins', None))
-
-        pm = re.compile(r'^(\d{1,2}:\d{1,2})-(\d{1,2}:\d{1,2})$').match(target)
-        if pm:
-            return Target("pace.zone", scale*pace_to_ms(pm.group(1)), scale*pace_to_ms(pm.group(2)))
-            
-    if re.compile('^.+ in .+$').match(step_txt):
+    if ' in ' in step_txt:
+        target_type = 'pace.zone'
         target = ms_to_pace(dist_time_to_ms(step_txt))
-        target = add_pace_margins(target, config.get('margins', None))
-        pm = re.compile(r'^(\d{1,2}:\d{1,2})-(\d{1,2}:\d{1,2})$').match(target)
-        if pm:
-            return Target("pace.zone", pace_to_ms(pm.group(1)), pace_to_ms(pm.group(2)))
-    return None
+    elif ' @ ' in step_txt:
+        target_type = 'pace.zone'
+        parts = [p.strip() for p in step_txt.split(' @ ')]
+        target = parts[1]
 
-def add_pace_margins(fixed_pace, margins):
-    if not margins:
-        return fixed_pace + '-' + fixed_pace
-        
-    fixed_pace_s = hhmmss_to_seconds(fixed_pace)
-    fast_margin_s = hhmmss_to_seconds(margins['faster'])
-    slow_margin_s = hhmmss_to_seconds(margins['slower'])
-    fast_pace_s = fixed_pace_s - fast_margin_s
-    slow_pace_s = fixed_pace_s + slow_margin_s
-    return seconds_to_mmss(slow_pace_s) + '-' + seconds_to_mmss(fast_pace_s)
+        if re.compile(r'^\d{1,2}:\d{1,2}(?:-\d{1,2}:\d{1,2})?').match(target):
+            target = target
+        else:
+            while not re.compile(r'^\d{1,2}:\d{1,2}(?:-\d{1,2}:\d{1,2})?').match(target):
+                # Check if the target is of type 75% marathon_pace
+                tm = re.compile(r'^(\d+-?\d+)%\s*(\S+)$').match(target)
+                if tm:
+                    # Get the scale in the form 75% or 70-80%
+                    scales = sorted([float(s)/100 for s in tm.group(1).split('-')])
+                    scale_min = scale_max = scales[0]
+                    if len(scales) == 2:
+                        scale_max = scales[1]
+                    target = tm.group(2).strip()
+
+                # Check if the target is found in the paces config block
+                if target in config['paces']:
+                    target = config['paces'][target]
+                else:
+                    raise ValueError(f'Cannot find pace target \'{target}\' in workout step \'{step_txt}\'')
+    elif ' w ' in step_txt:
+        target_type = 'heart.rate.zone'
+    else:
+        raise ValueError('Invalid step description: ' + step_txt)
+
+    if target_type == 'pace.zone':
+        target_range = get_pace_range(target, config.get('margins', None))
+        return Target(target_type, scale_min*pace_to_ms(target_range[0]), scale_max*pace_to_ms(target_range[1]))
+    elif target_type == 'heart.rate.zone': # TODO: implement heart rate zones
+        return Target(target_type, 120, 130)
+
+    raise ValueError('Invalid step description: ' + step_txt)
+
+def get_hr_range(step_txt):
+    return None
 
 def clean_step(step_txt):
     # remove description, if any
