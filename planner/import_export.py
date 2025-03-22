@@ -287,17 +287,30 @@ def get_target(step_txt, verbose=False):
                     target = config['paces'][target]
                 else:
                     raise ValueError(f'Cannot find pace target \'{target}\' in workout step \'{step_txt}\'')
-    elif ' w ' in step_txt:
+    elif ' hr ' in step_txt:
         target_type = 'heart.rate.zone'
+        parts = [p.strip() for p in step_txt.split(' hr ')]
+        target = parts[1]
+        if target in config['heart_rates']:
+            target = config['heart_rates'][target]
+
+        if isinstance(target, int):
+            target = f'{target}-{target}'            
     else:
         raise ValueError('Invalid step description: ' + step_txt)
 
     if target_type == 'pace.zone':
         target_range = get_pace_range(target, config.get('margins', None))
         return Target(target_type, scale_min*pace_to_ms(target_range[0]), scale_max*pace_to_ms(target_range[1]))
-    elif target_type == 'heart.rate.zone': # TODO: implement heart rate zones
-        return Target(target_type, 120, 130)
-
+    elif target_type == 'heart.rate.zone':
+        if re.compile(r'^\d{2,3}-\d{2,3}$').match(target):
+            target_range = [int(t) for t in target.split('-')]
+            return Target(target_type, target_range[0], target_range[1])
+        m = re.compile(r'^(z|zone)[-_]?([1-5])$').match(target)
+        if m:
+            return Target(target_type, zone=int(m.group(2)))
+        raise ValueError('Invalid heart rate target: ' + step_txt)
+        
     raise ValueError('Invalid step description: ' + step_txt)
 
 def get_hr_range(step_txt):
@@ -315,4 +328,34 @@ def expand_config(config):
     for pk, pv in paces.items():
         if re.compile('^.+ in .+$').match(pv.strip()):
             paces[pk] = ms_to_pace(dist_time_to_ms(pv))
+    heart_rates = config.get('heart_rates', [])
+    for hrk, hrv in heart_rates.items():
+        hr_range = []
+        hr_up = heart_rates.get('hr_up', 0)
+        hr_down = heart_rates.get('hr_down', 0)
+
+        # If we get an integer, this is a fixed hr. We leave it as it is.
+        if isinstance(hrv, int):
+            continue
+
+        m = re.compile(r'^\s*(\d{2}-?\d{0,2})% (.+)\s*$').match(hrv)
+        if m:
+            ref_hr = m.group(2)
+            if not ref_hr in heart_rates:
+                raise ValueError(f'Cannot find heart rate target \'{ref_hr}\' in heart rate config. Found in \'{hrk}\')')
+            ref_hr = heart_rates[ref_hr]
+            hr_range = m.group(1)
+            hr_range = hr_range.split('-')
+
+            # If only one value was given, we apply the margins
+            if len(hr_range) == 1:
+                hr_range.append(hr_range[0])
+                hr_range[0] -=  hr_down
+                hr_range[1] += hr_up
+
+            # Calculate the actual HR range based on the % value
+            hr_range[0] = round(ref_hr * float(hr_range[0])/100)
+            hr_range[1] = round(ref_hr * float(hr_range[1])/100)
+            heart_rates[hrk] = '-'.join([str(hr) for hr in hr_range])
+    
     return

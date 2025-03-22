@@ -34,26 +34,47 @@ config:
   name_prefix: '42K@3h15 '
 ```
 
-Paces can be defined in several ways:
+Paces and heart rates can be defined in several ways:
 
 ```yaml
 config:
+  heart_rates:
+    max_hr: 170
+    rest_hr: 45
+    long_run_hr: 75-84% max_hr
+    lt_hr: 82-91% max_hr
+    recovery_hr: 70-76% max_hr
+    vo2max_hr: 93-95% max_hr
+    fixed: 120
+    range: 120-130
   paces:
-    marathon: 42.2km in 03:00:00 # is equivalent to 04:16
+    marathon: 42.2km in 03:00:00
+    5kpace: 5km in 19:00
     long_run: 85% marathon
-    fixed_pace: 04:15 # margins (if defined) will be applied
-    pace_range: 04:25-04:10
+    gen_aerobic: 80% marathon
   margins:
     faster: 0:03
     slower: 0:03
+    hr_up: 5
+    hr_down: 5
+  name_prefix: ''
 
-# You can use these paces in workwout steps, as shown below
 W0TS0T Test paces:
+- interval: 1000m @ 04:40
+- interval: 1000m @ 4:40
+- interval: 1000m @ 4:4
+- interval: 1000m @ 04:40-04:00
+- interval: 1000m in 4min
+- interval: 10km in 40:00
+- interval: 42.2km in 03:00:00
 - interval: 10km @ marathon
+- interval: 10km @ 80% marathon
+- interval: 10km @ 80-90% marathon
 - interval: 10km @ long_run
-- interval: 10km in 40:00 # equivalent to 04:00
-- interval: 10km @ 75% marathon
-- interval: 10km @ 04:25-04:10
+- interval: 10km @ gen_aerobic
+- interval: 10km hr recovery_hr
+- interval: 10km hr 115-135
+- interval: 10km hr zone_2
 ```
 
 You can also add comments that will be attached to the workout steps:
