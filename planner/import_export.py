@@ -296,8 +296,8 @@ def get_target(step_txt, verbose=False):
 
         if isinstance(target, int):
             target = f'{target}-{target}'            
-    else:
-        raise ValueError('Invalid step description: ' + step_txt)
+    else: # No target
+        return None
 
     if target_type == 'pace.zone':
         target_range = get_pace_range(target, config.get('margins', None))
