@@ -287,9 +287,9 @@ def get_target(step_txt, verbose=False):
                     target = config['paces'][target]
                 else:
                     raise ValueError(f'Cannot find pace target \'{target}\' in workout step \'{step_txt}\'')
-    elif ' hr ' in step_txt:
+    elif ' @hr ' in step_txt:
         target_type = 'heart.rate.zone'
-        parts = [p.strip() for p in step_txt.split(' hr ')]
+        parts = [p.strip() for p in step_txt.split(' @hr ')]
         target = parts[1]
         if target in config['heart_rates']:
             target = config['heart_rates'][target]

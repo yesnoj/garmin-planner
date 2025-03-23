@@ -72,9 +72,9 @@ W0TS0T Test paces:
 - interval: 10km @ 80-90% marathon
 - interval: 10km @ long_run
 - interval: 10km @ gen_aerobic
-- interval: 10km hr recovery_hr
-- interval: 10km hr 115-135
-- interval: 10km hr zone_2
+- interval: 10km @hr recovery_hr
+- interval: 10km @hr 115-135
+- interval: 10km @hr zone_2
 ```
 
 You can also add comments that will be attached to the workout steps:
