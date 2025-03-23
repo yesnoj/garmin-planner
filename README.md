@@ -34,31 +34,36 @@ config:
   name_prefix: '42K@3h15 '
 ```
 
-Paces and heart rates can be defined in several ways:
+Target paces and heart rates can be defined in several ways:
 
 ```yaml
 config:
   heart_rates:
-    max_hr: 170
-    rest_hr: 45
-    long_run_hr: 75-84% max_hr
+    max_hr: 170 # Maximum hear rate. Used to calculate most target heart rates.
+    rest_hr: 45 # Resting heart rate. Used to calculate heart rate reserve (TODO).
+    long_run_hr: 75-84% max_hr # HR targets based on percentages of max HR.
     lt_hr: 82-91% max_hr
     recovery_hr: 70-76% max_hr
     vo2max_hr: 93-95% max_hr
-    fixed: 120
-    range: 120-130
+    fixed: 120 # Sample fixed heart rate. No range will be applied.
+    range: 120-130 # Sample fixed range HR target.
   paces:
     marathon: 42.2km in 03:00:00
     5kpace: 5km in 19:00
-    long_run: 85% marathon
+    long_run: 80-85% marathon
+    long_run_end: 85-90% marathon
     gen_aerobic: 80% marathon
-  margins:
-    faster: 0:03
-    slower: 0:03
-    hr_up: 5
-    hr_down: 5
-  name_prefix: ''
+    jog: 5:30-5:10
+    strides: 3:35-3:25
+  margins: # Will be added around targets with no specified range.
+    faster: 0:03 # 3 seconds faster than reference pace.
+    slower: 0:03 # 3 seconds slower than reference pace.
+    hr_up: 5 # 5% higher than reference heart rate.
+    hr_down: 5 # 5% lower than reference heart rate.
+  # Prefix to add to horkout names (Advanced Marathoning plan, 18 weeks, up to 89km per week)
+  name_prefix: 'AM18W89K '
 
+# Used for testing purposes. Shows ways to indicate target paces and heart rates.
 W0TS0T Test paces:
 - interval: 1000m @ 04:40
 - interval: 1000m @ 4:40
