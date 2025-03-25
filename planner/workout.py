@@ -21,9 +21,10 @@ TARGET_TYPES = {
 }
 
 class Workout:
-    def __init__(self, sport_type, name):
+    def __init__(self, sport_type, name, description=None):
         self.sport_type = sport_type
         self.workout_name = name
+        self.description = description
         self.workout_steps = []
 
     def add_step(self, step):
@@ -42,6 +43,7 @@ class Workout:
                 "sportTypeKey": self.sport_type,
             },
             "workoutName": self.workout_name,
+            "description": self.description,
             "workoutSegments": [
                 {
                     "segmentOrder": 1,

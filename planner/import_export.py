@@ -137,6 +137,17 @@ config = {}
 
 def import_workouts(plan_file, name_filter=None):
 
+    # Load the file to get workout descriptions (added as comments in the YAML file)
+    descriptions = {}
+    with open(plan_file, 'r') as yfile:
+        line_pattern = re.compile(r'^([^:]+):\s*#\s*(.*)\s*$')
+        for line in yfile:
+            m = line_pattern.match(line)
+            if m:
+                key = m.group(1)
+                comment = m.group(2)
+                descriptions[key] = comment
+
     with open(plan_file, 'r') as file:
         workouts = []
         import_json = yaml.safe_load(file)
@@ -151,7 +162,7 @@ def import_workouts(plan_file, name_filter=None):
             if name_filter and not re.search(name_filter, name):
                 continue
 
-            w = Workout("running", config.get('name_prefix', '') + name)
+            w = Workout("running", config.get('name_prefix', '') + name, descriptions.get(name, None))
             for step in steps:
                 for k, v in step.items():
                   if not k.startswith('repeat'):
