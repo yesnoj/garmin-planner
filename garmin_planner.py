@@ -58,6 +58,7 @@ def parse_args(argv):
     schedule.set_defaults(func=cmd_schedule_workouts)
     schedule.add_argument('--race-day', required=True, help='the date of the race. Should correspond to the last workout of the training plan.')
     schedule.add_argument('--training-plan', required=True, help='the training plan ID. Corresponds to the common prefix of all workouts in the plan.')
+    schedule.add_argument('--reverse-order', action='store_true', default=False, help='Week numbers are in reverse order (17, 16, 15,..) instead of (1, 2, 3,...')
 
     unschedule = subparsers.add_parser('unschedule', help='unschedule workouts from calendar.')
     unschedule.set_defaults(func=cmd_unschedule_workouts)
