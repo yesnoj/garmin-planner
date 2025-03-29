@@ -1,0 +1,534 @@
+config:
+  heart_rates:
+    max_hr: 170
+    rest_hr: 45
+    long_run_hr: 75-84% max_hr
+    lt_hr: 82-91% max_hr
+    recovery_hr: 70-76% max_hr
+    vo2max_hr: 93-95% max_hr
+    fixed: 120
+    range: 120-130
+  paces:
+    marathon: 42.2km in 03:00:00
+    5k_race_pace: 5km in 18:30
+    10k_race_pace: 10km in 39:30
+    long_run: 80-85% marathon
+    long_run_end: 85-90% marathon
+    gen_aerobic: 80% marathon
+    jog: 5:30-5:10
+    strides: 3:35-3:25
+  margins:
+    faster: 0:03
+    slower: 0:03
+    hr_up: 5
+    hr_down: 5
+  name_prefix: 'AM18W115K '
+################################################################################
+# Week 1
+W17S01 LT: # 9 miles (14 km) with 4 miles (6 km) at LT pace
+- interval: 4km @ gen_aerobic
+- interval: 6km @hr lt_hr
+- interval: 4km @ gen_aerobic
+
+W17S02 Med-long run: # 11 miles (18 km)
+- interval: 18km @ long_run
+
+W17S03 Recovery: # 5 miles (8 km)
+- interval: 8km @hr recovery_hr
+
+W17S04 Gen-aerobic: # 9 miles (14 km)
+- interval: 14km @ gen_aerobic
+
+W17S05 Recovery: # 5 miles (8 km)
+- interval: 8km @hr recovery_hr
+
+W17S06 Med-long run: # 15 miles (24 km)
+- interval: 14km @ long_run
+- interval: 10km @ long_run_end
+
+# Week 2
+W16S01 Gen-aerobic + speed: # 8 miles (13 km) with 6 x 10 sec hill sprints + 8 x 100 m strides
+- interval: 5km @ gen_aerobic
+- repeat 6:
+  - interval: 10s -- Hill sprints
+  - recovery: lap-button -- Recovery downhill
+- interval: 3km @ gen_aerobic
+- repeat 8:
+  - interval: 100m @ strides
+  - recovery: lap-button
+- interval: 5km @ gen_aerobic
+
+W16S02 Med-long run: # 12 miles (19 km)
+- interval: 10km @ long_run
+- interval: 9km @ long_run_end
+
+W16S03 Recovery: # 5 miles (8 km)
+- interval: 8km @hr recovery_hr
+
+W16S04 Gen-aerobic: # 9 miles (14 km)
+- interval: 14km @ gen_aerobic
+
+W16S05 Recovery: # 5 miles (8 km)
+- interval: 8km @hr recovery_hr
+
+W16S06 Marathon-pace run: # 16 miles (26 km) with 8 miles (13 km) at marathon pace
+- interval: 13km @ long_run
+- interval: 13km @ marathon
+
+# Week 3
+W15S01 Med-long run: # 11 miles (18 km)
+- interval: 10km @ long_run
+- interval: 8km @ long_run_end
+
+W15S02 Med-long run: # 13 miles (21 km)
+- interval: 12km @ long_run
+- interval: 9km @ long_run_end
+
+W15S03 Recovery: # 5 miles (8 km)
+- interval: 8km @hr recovery_hr
+
+W15S04 LT: # 9 miles (14 km) with 4 miles (6 km) at LT pace
+- interval: 4km @ gen_aerobic
+- interval: 6km @hr lt_hr
+- interval: 4km @ gen_aerobic
+
+W15S05 Recovery: # 5 miles (8 km)
+- interval: 8km @hr recovery_hr
+
+W15S06 Med-long run: # 15 miles (24 km)
+- interval: 14km @ long_run
+- interval: 10km @ long_run_end
+
+# Week 4
+W14S01 Gen-aerobic + speed: # 9 miles (14 km) with 6 x 10 sec hill sprints + 8 x 100 m strides
+- interval: 5km @ gen_aerobic
+- repeat 6:
+  - interval: 10s -- Hill sprints
+  - recovery: lap-button -- Recovery downhill
+- interval: 4km @ gen_aerobic
+- repeat 8:
+  - interval: 100m @ strides
+  - recovery: lap-button
+- interval: 5km @ gen_aerobic
+
+W14S02 Med-long run: # 14 miles (23 km)
+- interval: 12km @ long_run
+- interval: 11km @ long_run_end
+
+W14S03 Recovery: # 5 miles (8 km)
+- interval: 8km @hr recovery_hr
+
+W14S04 Med-long run: # 11 miles (18 km)
+- interval: 10km @ long_run
+- interval: 8km @ long_run_end
+
+W14S05 Recovery: # 5 miles (8 km)
+- interval: 8km @hr recovery_hr
+
+W14S06 Long run: # 18 miles (29 km)
+- interval: 14km @ long_run
+- interval: 15km @ long_run_end
+
+# Week 5
+W13S01 LT: # 9 miles (14 km) with 5 miles (8 km) at LT pace
+- interval: 3km @ gen_aerobic
+- interval: 8km @hr lt_hr
+- interval: 3km @ gen_aerobic
+
+W13S02 Med-long run: # 14 miles (23 km)
+- interval: 12km @ long_run
+- interval: 11km @ long_run_end
+
+W13S03 Recovery: # 5 miles (8 km)
+- interval: 8km @hr recovery_hr
+
+W13S04 Med-long run: # 12 miles (19 km)
+- interval: 10km @ long_run
+- interval: 9km @ long_run_end
+
+W13S05 Recovery: # 5 miles (8 km)
+- interval: 8km @hr recovery_hr
+
+W13S06 Marathon-pace run: # 18 miles (29 km) with 10 miles (16 km) at marathon pace
+- interval: 13km @ long_run
+- interval: 16km @ marathon
+
+# Week 6
+W12S01 Gen-aerobic + speed: # 8 miles (13 km) with 10 x 100 m strides
+- interval: 6km @ gen_aerobic
+- repeat 10:
+  - interval: 100m @ strides
+  - recovery: lap-button
+- interval: 7km @ gen_aerobic
+
+W12S02 Med-long run: # 12 miles (19 km)
+- interval: 10km @ long_run
+- interval: 9km @ long_run_end
+
+W12S03 Recovery: # 5 miles (8 km)
+- interval: 8km @hr recovery_hr
+
+W12S04 Gen-aerobic: # 10 miles (16 km)
+- interval: 16km @ gen_aerobic
+
+W12S05 Recovery: # 5 miles (8 km)
+- interval: 8km @hr recovery_hr
+
+W12S06 Med-long run: # 15 miles (24 km)
+- interval: 14km @ long_run
+- interval: 10km @ long_run_end
+
+# Week 7
+W11S01 LT: # 10 miles (16 km) with 5 miles (8 km) at LT pace
+- interval: 4km @ gen_aerobic
+- interval: 8km @hr lt_hr
+- interval: 4km @ gen_aerobic
+
+W11S02 Med-long run: # 14 miles (23 km)
+- interval: 12km @ long_run
+- interval: 11km @ long_run_end
+
+W11S03 Recovery: # 5 miles (8 km)
+- interval: 8km @hr recovery_hr
+
+W11S04 Med-long run: # 11 miles (18 km)
+- interval: 10km @ long_run
+- interval: 8km @ long_run_end
+
+W11S05 Gen-aerobic + speed: # 7 miles (11 km) with 10 x 100 m strides
+- interval: 6km @ gen_aerobic
+- repeat 10:
+    - interval: 100m @ strides
+    - recovery: lap-button
+- interval: 5km @ gen_aerobic
+
+W11S06 Long run: # 21 miles (34 km)
+- interval: 17km @ long_run
+- interval: 17km @ long_run_end
+
+# Week 8
+W10S01 Recovery AM: # AM 6 miles (10 km)
+- interval: 10km @hr recovery_hr
+
+W10S01 Recovery PM: # 4 miles (6 km)
+- interval: 6km @hr recovery_hr
+
+W10S02 Med-long run: # 14 miles (23 km)
+- interval: 12km @ long_run
+- interval: 11km @ long_run_end
+
+W10S03 Recovery: # 5 miles (8 km)
+- interval: 8km @hr recovery_hr
+
+W10S04 LT: # 11 miles (18 km) with 6 miles (10 km) at LT pace
+- interval: 4km @ gen_aerobic
+- interval: 10km @hr lt_hr
+- interval: 4km @ gen_aerobic
+
+W10S05 Recovery: # 6 miles (10 km)
+- interval: 10km @hr recovery_hr
+
+W10S06 Long run: # 20 miles (32 km)
+- interval: 16km @ long_run
+- interval: 16km @ long_run_end
+
+# Week 9
+W09S01 Recovery AM: # 6 miles (10 km)
+- interval: 10km @hr recovery_hr
+
+W09S01 Recovery PM: # 4 miles (6 km)
+- interval: 6km @hr recovery_hr
+
+W09S02 Med-long run: # 15 miles (24 km)
+- interval: 12km @ long_run
+- interval: 12km @ long_run_end
+
+W09S03 Recovery: # 6 miles (10 km)
+- interval: 10km @hr recovery_hr
+
+W09S04 Med-long run: # 13 miles (21 km)
+- interval: 11km @ long_run
+- interval: 10km @ long_run_end
+
+W09S05 Recovery + speed: # 7 miles (11 km) with 6 x 100 m strides
+- interval: 7km @hr recovery_hr
+- repeat 6:
+  - interval: 100m @ strides
+  - recovery: lap-button
+- interval: 4km @hr recovery_hr
+
+W09S06 Marathon-pace run: # 16 miles (26 km) with 12 miles (19 km) at marathon pace
+- interval: 7km @ long_run
+- interval: 19km @ marathon
+
+# Week 10
+W08S01 Gen-aerobic: # 9 miles (14 km)
+- interval: 14km @ gen_aerobic
+
+W08S02 V̇O₂max: # 9 miles (14 km) with 6 x 800 m at 5K race pace; jog 50-90% interval time
+- warmup: 5km @ gen_aerobic
+- repeat 6:
+  - interval: 800m @ 5k_race_pace
+  - recovery: 120s @ jog
+- cooldown: 5km @ gen_aerobic
+
+W08S03 Recovery: # 6 miles (10 km)
+- interval: 10km @hr recovery_hr
+
+W08S04 Med-long run: # 11 miles (18 km)
+- interval: 10km @ long_run
+- interval: 8km @ long_run_end
+
+W08S05 Gen-aerobic + speed: # 8 miles (13 km) with 8 x 10 sec hill sprints + 8 x 100 m strides
+- interval: 4km @ gen_aerobic
+- repeat 8:
+  - interval: 10s -- Hill sprints
+  - recovery: lap-button -- Recovery downhill
+- interval: 4km @ gen_aerobic
+- repeat 8:
+  - interval: 100m @ strides
+  - recovery: lap-button
+- interval: 5km @ gen_aerobic
+
+W08S06 Med-long run: # 15 miles (24 km)
+- interval: 14km @ long_run
+- interval: 10km @ long_run_end
+
+# Week 11
+W07S01 Recovery AM: # 6 miles (10 km)
+- interval: 10km @hr recovery_hr
+
+W07S01 Recovery PM: # PM 4 miles (6 km)
+- interval: 6km @hr recovery_hr
+
+W07S02 Med-long run: # 15 miles (24 km)
+- interval: 14km @ long_run
+- interval: 10km @ long_run_end
+
+W07S03 Recovery: # 6 miles (10 km)
+- interval: 10km @hr recovery_hr
+
+W07S04 LT: # 12 miles (19 km) with 7 miles (11 km) at LT pace
+- interval: 4km @ gen_aerobic
+- interval: 11km @hr lt_hr
+- interval: 4km @ gen_aerobic
+
+W07S05 Recovery: # 5 miles (8 km)
+- interval: 8km @hr recovery_hr
+
+W07S06 Long run: # 22 miles (35 km)
+- interval: 17km @ long_run
+- interval: 18km @ long_run_end
+
+# Week 12
+W06S01 V̇O₂max: # 9 miles (14 km) with 5 x 600 m at 5K race pace; jog 50-90% interval time
+- warmup: 6km @ gen_aerobic
+- repeat 5:
+  - interval: 600m @ 5k_race_pace
+  - recovery: 90s @ jog
+- cooldown: 6km @ gen_aerobic
+
+W06S02 Med-long run: # 14 miles (23 km)
+- interval: 13km @ long_run
+- interval: 10km @ long_run_end
+
+W06S03 Recovery + speed AM: # 6 miles (10 km) with 6 x 100 m strides
+- interval: 5km @hr recovery_hr
+- repeat 6:
+  - interval: 100m @ strides
+  - recovery: lap-button
+- interval: 5km @hr recovery_hr
+
+W06S03 Recovery PM: # 4 miles (6 km)
+- interval: 6km @hr recovery_hr
+
+W06S04 Recovery: # 5 miles (8 km)
+- interval: 8km @hr recovery_hr
+
+W06S05 8K-15K tune-up race: # (total 9-13 miles [14-21 km])
+- interval: 5km @ gen_aerobic
+- interval: 10km @ 10k_race_pace
+- interval: 4km @ gen_aerobic
+
+W06S06 Long run: # 18 miles (29 km)
+- interval: 14km @ long_run
+- interval: 15km @ long_run_end
+
+# Week 13
+W05S01 V̇O₂max: # 10 miles (16 km) with 6 x 1,000 m at 5K race pace; jog 50-90% interval time
+- warmup: 5km @ gen_aerobic
+- repeat 6:
+  - interval: 1000m @ 5k_race_pace
+  - recovery: 120s @ jog
+- cooldown: 5km @ gen_aerobic
+
+W05S02 Med-long run: # 15 miles (24 km)
+- interval: 12km @ long_run
+- interval: 12km @ long_run_end
+
+W05S03 Recovery AM: # 6 miles (10 km)
+- interval: 10km @hr recovery_hr
+
+W05S03 Recovery PM: # 4 miles (6 km)
+- interval: 6km @hr recovery_hr
+
+W05S04 Med-long run: # 12 miles (19 km)
+- interval: 10km @ long_run
+- interval: 9km @ long_run_end
+
+W05S05 Recovery: # 5 miles (8 km)
+- interval: 8km @hr recovery_hr
+
+W05S06 Marathon-pace run: # 18 miles (29 km) with 14 miles (23 km) at marathon pace
+- interval: 6km @ long_run
+- interval: 23km @ marathon
+
+# Week 14
+W04S01 V̇O₂max: # 9 miles (14 km) with 5 x 600 m at 5K race pace; jog 50-90% interval time
+- warmup: 6km @ gen_aerobic
+- repeat 5:
+  - interval: 600m @ 5k_race_pace
+  - recovery: 90s @ jog
+- cooldown: 5km @ gen_aerobic
+
+W04S02 Med-long run: # 14 miles (23 km)
+- interval: 12km @ long_run
+- interval: 11km @ long_run_end
+
+W04S03 Recovery + speed: # 6 miles (10 km) with 6 x 100 m strides
+- interval: 5km @hr recovery_hr
+- repeat 6:
+  - interval: 100m @ strides
+  - recovery: lap-button
+- interval: 5km @hr recovery_hr
+
+W04S04 Recovery: # 5 miles (8 km)
+- interval: 8km @hr recovery_hr
+
+W04S05 8K-15K tune-up race: # (total 9-13 miles [14-21 km])
+- interval: 4km @ gen_aerobic
+- interval: 10km @ 10k_race_pace
+- interval: 5km @ gen_aerobic
+
+W04S06 Long run: # 17 miles (27 km)
+- interval: 13km @ long_run
+- interval: 14km @ long_run_end
+
+# Week 15
+W03S01 Recovery AM: # 6 miles (10 km)
+- interval: 10km @hr recovery_hr
+
+W03S01 Recovery PM: # PM 4 miles (6 km)
+- interval: 6km @hr recovery_hr
+
+W03S02 V̇O₂max: # 11 miles (18 km) with 5 x 1,200 m at 5K race pace; jog 50-90% interval time
+- warmup: 7km @ gen_aerobic
+- repeat 5:
+  - interval: 1200m @ 5k_race_pace
+  - recovery: 240s @ jog
+- cooldown: 5km @ gen_aerobic
+
+W03S03 Med-long run: # 14 miles (23 km)
+- interval: 11km @ long_run
+- interval: 12km @ long_run_end
+
+W03S04 Gen-aerobic + speed: # 8 miles (13 km) with 8 x 100 m strides
+- interval: 7km @ gen_aerobic
+- repeat 8:
+    - interval: 100m @ strides
+    - recovery: lap-button
+- interval: 6km @ gen_aerobic
+
+W03S05 Recovery: # 5 miles (8 km)
+- interval: 8km @hr recovery_hr
+
+W03S06 Long run: # 20 miles (32 km)
+- interval: 16km @ long_run
+- interval: 16km @ long_run_end
+
+# Week 16
+W02S01 Recovery + speed: # 7 miles (11 km) with 8 x 100 m strides
+- interval: 6km @hr recovery_hr
+- repeat 8:
+    - interval: 100m @ strides
+    - recovery: lap-button
+- interval: 5km @hr recovery_hr
+
+W02S02 Med-long run: # 12 miles (19 km)
+- interval: 10km @ long_run
+- interval: 9km @ long_run_end
+
+W02S03 Recovery + speed: # 5 miles (8 km) with 6 x 100 m strides
+- interval: 4km @hr recovery_hr
+- repeat 6:
+  - interval: 100m @ strides
+  - recovery: lap-button
+- interval: 4km @hr recovery_hr
+
+W02S04 Recovery: # 5 miles (8 km)
+- interval: 8km @hr recovery_hr
+
+W02S05 8K-10K tune-up race: # (total 9-11 miles [14-18 km])
+- interval: 4km @ gen_aerobic
+- interval: 10km @ 10k_race_pace
+- interval: 3km @ gen_aerobic
+
+W02S06 Long run: # 17 miles (27 km)
+- interval: 13km @ long_run
+- interval: 14km @ long_run_end
+
+# Week 17
+W01S01 Recovery + speed: # 7 miles (11 km) with 8 x 100 m strides
+- interval: 5km @hr recovery_hr
+- repeat 8:
+  - interval: 100m @ strides
+  - recovery: lap-button
+- interval: 6km @hr recovery_hr
+
+W01S02 Recovery: # 4 miles (6 km)
+- interval: 6km @hr recovery_hr
+
+W01S03 V̇O₂max: # 8 miles (13 km) with 4 x 1,200 m at 5K race pace; jog 50-90% interval time
+- warmup: 4km @ gen_aerobic
+- repeat 4:
+  - interval: 1200m @ 5k_race_pace
+  - recovery: 240s @ jog
+- cooldown: 4km @ gen_aerobic
+
+W01S04 Recovery: # 5 miles (8 km)
+- interval: 8km @hr recovery_hr
+
+W01S05 Recovery + speed: # 6 miles (10 km) with 8 x 100 m strides
+- interval: 5km @hr recovery_hr
+- repeat 8:
+  - interval: 100m @ strides
+  - recovery: lap-button
+- interval: 5km @hr recovery_hr
+
+W01S06 Med-long run: # 13 miles (21 km)
+- interval: 11km @ long_run
+- interval: 10km @ long_run_end
+
+# Week 18
+W00S01 Recovery: # 7 miles (11 km)
+- interval: 11km @hr recovery_hr
+
+W00S02 Dress rehearsal: # 7 miles (11 km) with 2 miles (3 km) at marathon pace
+- interval: 8km @ long_run
+- interval: 3km @ marathon
+
+W00S03 Recovery: # 5 miles (8 km)
+- interval: 8km @hr recovery_hr
+
+W00S04 Recovery + speed: # 5 miles (8 km) with 6 x 100 m strides
+- interval: 4km @hr recovery_hr
+- repeat 6:
+  - interval: 100m @ strides
+  - recovery: lap-button
+- interval: 4km @hr recovery_hr
+
+W00S05 Recovery: # 4 miles (6 km)
+- interval: 6km @hr recovery_hr
+
+W00S06 Goal marathon:
+- interval: 42.2km @ marathon
