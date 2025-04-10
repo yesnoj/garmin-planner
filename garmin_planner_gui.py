@@ -135,12 +135,6 @@ class GarminPlannerGUI(tk.Tk):
         ttk.Label(tree_buttons_frame, text="Piani di allenamento disponibili:").pack(side=tk.LEFT, padx=5)
         ttk.Button(tree_buttons_frame, text="Aggiorna lista", command=self.load_training_plans).pack(side=tk.RIGHT, padx=5)
 
-        self.training_plans_tree = ttk.Treeview(import_frame, columns=("plan", "weeks", "type"), show="headings")
-        self.training_plans_tree.heading("plan", text="Piano")
-        self.training_plans_tree.heading("weeks", text="Settimane")
-        self.training_plans_tree.heading("type", text="Tipo")
-        self.training_plans_tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-
         # Display available training plans
         self.training_plans_tree = ttk.Treeview(import_frame, columns=("plan", "weeks", "type"), show="headings")
         self.training_plans_tree.heading("plan", text="Piano")
@@ -464,7 +458,9 @@ class GarminPlannerGUI(tk.Tk):
                         rel_path = os.path.relpath(os.path.join(root, file), plans_dir)
                         parts = rel_path.split(os.sep)
                         
+                        # Supporta sia la struttura gerarchica che quella semplice
                         if len(parts) >= 3:
+                            # Struttura gerarchica originale: tipo/settimane/variante/file.yaml
                             plan_type = parts[0]  # e.g., half_marathon
                             weeks = parts[1]      # e.g., 8_weeks
                             variant = parts[2]    # e.g., paris
@@ -481,6 +477,29 @@ class GarminPlannerGUI(tk.Tk):
                             # Add to treeview
                             self.training_plans_tree.insert("", "end", 
                                                          values=(plan_name, weeks.replace("_", " "), 
+                                                                 os.path.join(root, file)))
+                        elif len(parts) == 2:
+                            # Struttura semplice: cartella/file.yaml
+                            folder = parts[0]     # e.g., frank
+                            filename = parts[1]   # e.g., my_plan.yaml
+                            
+                            # Extract name without extension
+                            plan_name = os.path.splitext(filename)[0]
+                            
+                            # Add to treeview with folder name as the plan type
+                            self.training_plans_tree.insert("", "end", 
+                                                         values=(f"{plan_name} ({folder})", 
+                                                                 "N/A", 
+                                                                 os.path.join(root, file)))
+                        elif len(parts) == 1:
+                            # File direttamente nella cartella training_plans
+                            filename = parts[0]
+                            plan_name = os.path.splitext(filename)[0]
+                            
+                            # Add to treeview
+                            self.training_plans_tree.insert("", "end", 
+                                                         values=(plan_name, 
+                                                                 "N/A", 
                                                                  os.path.join(root, file)))
             
             if not self.training_plans_tree.get_children():
