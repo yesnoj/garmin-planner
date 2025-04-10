@@ -24,7 +24,7 @@ class WorkoutEditorApp(tk.Tk):
         self.current_workout = None
         
         # Dati del piano
-        self.config = {
+        self.configuration = {
             "paces": {},
             "heart_rates": {},
             "margins": {"faster": "0:03", "slower": "0:03", "hr_up": 5, "hr_down": 5},
@@ -71,7 +71,7 @@ class WorkoutEditorApp(tk.Tk):
         help_menu.add_command(label="Informazioni", command=self.show_about)
         menubar.add_cascade(label="Aiuto", menu=help_menu)
         
-        self.config(menu=menubar)
+        self.configuration(menu=menubar)
     
     def create_main_frame(self):
         # Frame principale suddiviso in due parti
@@ -291,10 +291,10 @@ class WorkoutEditorApp(tk.Tk):
     
     def edit_config(self):
         """Apre l'editor della configurazione."""
-        config_editor = ConfigEditor(self, self.config)
+        config_editor = ConfigEditor(self, self.configuration)
         self.wait_window(config_editor)
         if config_editor.result:
-            self.config = config_editor.result
+            self.configuration = config_editor.result
             self.modified = True
     
     def add_workout(self):
@@ -376,7 +376,7 @@ class WorkoutEditorApp(tk.Tk):
             return
             
         # Apri l'editor di step
-        step_editor = StepEditor(self, self.config)
+        step_editor = StepEditor(self, self.configuration)
         self.wait_window(step_editor)
         
         if step_editor.result:
@@ -435,7 +435,7 @@ class WorkoutEditorApp(tk.Tk):
                     step_type = k
                 break
         
-        step_editor = StepEditor(self, self.config, step_type, current_value)
+        step_editor = StepEditor(self, self.configuration, step_type, current_value)
         self.wait_window(step_editor)
         
         if step_editor.result:
@@ -524,7 +524,7 @@ class WorkoutEditorApp(tk.Tk):
         self.current_workout = None
         
         # Resetta i dati
-        self.config = {
+        self.configuration = {
             "paces": {},
             "heart_rates": {},
             "margins": {"faster": "0:03", "slower": "0:03", "hr_up": 5, "hr_down": 5},
@@ -562,7 +562,7 @@ class WorkoutEditorApp(tk.Tk):
                 data = yaml.safe_load(file)
             
             # Estrai la configurazione
-            self.config = data.pop('config', {
+            self.configuration = data.pop('config', {
                 "paces": {},
                 "heart_rates": {},
                 "margins": {"faster": "0:03", "slower": "0:03", "hr_up": 5, "hr_down": 5},
@@ -598,7 +598,7 @@ class WorkoutEditorApp(tk.Tk):
             
         try:
             # Prepara i dati da salvare
-            data = {'config': self.config}
+            data = {'config': self.configuration}
             data.update(self.workouts)
             
             # Salva nel file YAML
@@ -688,7 +688,7 @@ class ConfigEditor(tk.Toplevel):
         self.grab_set()  # Impedisce di interagire con la finestra principale
         
         # Copia della configurazione
-        self.config = {k: (v.copy() if isinstance(v, dict) else v) for k, v in config.items()}
+        self.configuration = {k: (v.copy() if isinstance(v, dict) else v) for k, v in config.items()}
         self.result = None
         
         # Crea il notebook per le diverse sezioni
@@ -746,7 +746,7 @@ class ConfigEditor(tk.Toplevel):
         self.paces_tree.configure(yscrollcommand=scrollbar.set)
         
         # Carica i ritmi esistenti
-        for name, value in self.config.get("paces", {}).items():
+        for name, value in self.configuration.get("paces", {}).items():
             self.paces_tree.insert("", "end", values=(name, value))
         
         # Pulsanti per gestire i ritmi
@@ -788,7 +788,7 @@ class ConfigEditor(tk.Toplevel):
         self.hr_tree.configure(yscrollcommand=scrollbar.set)
         
         # Carica le frequenze cardiache esistenti
-        for name, value in self.config.get("heart_rates", {}).items():
+        for name, value in self.configuration.get("heart_rates", {}).items():
             self.hr_tree.insert("", "end", values=(name, value))
         
         # Pulsanti per gestire le frequenze cardiache
@@ -810,20 +810,20 @@ class ConfigEditor(tk.Toplevel):
         
         # Margini per ritmi
         ttk.Label(margins_frame, text="Margine più veloce (mm:ss):").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-        self.faster_var = tk.StringVar(value=self.config.get("margins", {}).get("faster", "0:03"))
+        self.faster_var = tk.StringVar(value=self.configuration.get("margins", {}).get("faster", "0:03"))
         ttk.Entry(margins_frame, textvariable=self.faster_var, width=10).grid(row=0, column=1, padx=5, pady=5)
         
         ttk.Label(margins_frame, text="Margine più lento (mm:ss):").grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
-        self.slower_var = tk.StringVar(value=self.config.get("margins", {}).get("slower", "0:03"))
+        self.slower_var = tk.StringVar(value=self.configuration.get("margins", {}).get("slower", "0:03"))
         ttk.Entry(margins_frame, textvariable=self.slower_var, width=10).grid(row=1, column=1, padx=5, pady=5)
         
         # Margini per frequenze cardiache
         ttk.Label(margins_frame, text="Margine FC superiore (%):").grid(row=0, column=2, padx=5, pady=5, sticky=tk.W)
-        self.hr_up_var = tk.IntVar(value=self.config.get("margins", {}).get("hr_up", 5))
+        self.hr_up_var = tk.IntVar(value=self.configuration.get("margins", {}).get("hr_up", 5))
         ttk.Entry(margins_frame, textvariable=self.hr_up_var, width=10).grid(row=0, column=3, padx=5, pady=5)
         
         ttk.Label(margins_frame, text="Margine FC inferiore (%):").grid(row=1, column=2, padx=5, pady=5, sticky=tk.W)
-        self.hr_down_var = tk.IntVar(value=self.config.get("margins", {}).get("hr_down", 5))
+        self.hr_down_var = tk.IntVar(value=self.configuration.get("margins", {}).get("hr_down", 5))
         ttk.Entry(margins_frame, textvariable=self.hr_down_var, width=10).grid(row=1, column=3, padx=5, pady=5)
         
         # Prefisso nome
@@ -831,7 +831,7 @@ class ConfigEditor(tk.Toplevel):
         prefix_frame.pack(fill=tk.X, padx=10, pady=10)
         
         ttk.Label(prefix_frame, text="Prefisso da aggiungere ai nomi degli allenamenti:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-        self.name_prefix_var = tk.StringVar(value=self.config.get("name_prefix", ""))
+        self.name_prefix_var = tk.StringVar(value=self.configuration.get("name_prefix", ""))
         ttk.Entry(prefix_frame, textvariable=self.name_prefix_var, width=30).grid(row=0, column=1, padx=5, pady=5)
     
     def add_pace(self):
@@ -947,18 +947,18 @@ class ConfigEditor(tk.Toplevel):
     def confirm(self):
         """Conferma le modifiche e chiude la finestra."""
         # Aggiorna la configurazione con i valori delle tabelle
-        self.config["paces"] = {}
+        self.configuration["paces"] = {}
         for item_id in self.paces_tree.get_children():
             values = self.paces_tree.item(item_id)['values']
-            self.config["paces"][values[0]] = values[1]
+            self.configuration["paces"][values[0]] = values[1]
         
-        self.config["heart_rates"] = {}
+        self.configuration["heart_rates"] = {}
         for item_id in self.hr_tree.get_children():
             values = self.hr_tree.item(item_id)['values']
-            self.config["heart_rates"][values[0]] = values[1]
+            self.configuration["heart_rates"][values[0]] = values[1]
         
         # Aggiorna i margini
-        self.config["margins"] = {
+        self.configuration["margins"] = {
             "faster": self.faster_var.get(),
             "slower": self.slower_var.get(),
             "hr_up": self.hr_up_var.get(),
@@ -966,10 +966,10 @@ class ConfigEditor(tk.Toplevel):
         }
         
         # Aggiorna il prefisso nome
-        self.config["name_prefix"] = self.name_prefix_var.get()
+        self.configuration["name_prefix"] = self.name_prefix_var.get()
         
         # Imposta il risultato e chiude
-        self.result = self.config
+        self.result = self.configuration
         self.destroy()
     
     def cancel(self):
@@ -990,7 +990,7 @@ class StepEditor(tk.Toplevel):
         self.result = None
         
         # Riferimento alla configurazione
-        self.config = config
+        self.configuration = config
         
         # Frame principale
         main_frame = ttk.Frame(self)
@@ -1198,7 +1198,7 @@ class StepEditor(tk.Toplevel):
             ttk.Label(self.target_details_frame, text="Ritmo:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
             
             # Combobox con i ritmi predefiniti
-            pace_values = [""] + list(self.config.get("paces", {}).keys())
+            pace_values = [""] + list(self.configuration.get("paces", {}).keys())
             pace_combo = ttk.Combobox(self.target_details_frame, values=pace_values, width=15)
             pace_combo.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
             pace_combo.bind("<<ComboboxSelected>>", lambda e: self.target_value_var.set(pace_combo.get()))
@@ -1213,7 +1213,7 @@ class StepEditor(tk.Toplevel):
             ttk.Label(self.target_details_frame, text="Frequenza Cardiaca:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
             
             # Combobox con le frequenze cardiache predefinite
-            hr_values = [""] + list(self.config.get("heart_rates", {}).keys())
+            hr_values = [""] + list(self.configuration.get("heart_rates", {}).keys())
             hr_combo = ttk.Combobox(self.target_details_frame, values=hr_values, width=15)
             hr_combo.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
             hr_combo.bind("<<ComboboxSelected>>", lambda e: self.target_value_var.set(hr_combo.get()))
