@@ -30,6 +30,8 @@ def parse_args(argv):
 
     garmin_login = subparsers.add_parser('login', help='refresh or create Oauth credentials for your Garmin account')
     garmin_login.set_defaults(func=cmd_login)
+    garmin_login.add_argument('--email', required=False, help='Email address for Garmin Connect')
+    garmin_login.add_argument('--password', required=False, help='Password for Garmin Connect')
 
 
     import_wo = subparsers.add_parser('import', help='import workouts')
