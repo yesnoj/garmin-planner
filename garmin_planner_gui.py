@@ -129,6 +129,18 @@ class GarminPlannerGUI(tk.Tk):
         
         ttk.Button(import_frame, text="Importa", command=self.perform_import).pack(pady=10)
         
+        tree_buttons_frame = ttk.Frame(import_frame)
+        tree_buttons_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        ttk.Label(tree_buttons_frame, text="Piani di allenamento disponibili:").pack(side=tk.LEFT, padx=5)
+        ttk.Button(tree_buttons_frame, text="Aggiorna lista", command=self.load_training_plans).pack(side=tk.RIGHT, padx=5)
+
+        self.training_plans_tree = ttk.Treeview(import_frame, columns=("plan", "weeks", "type"), show="headings")
+        self.training_plans_tree.heading("plan", text="Piano")
+        self.training_plans_tree.heading("weeks", text="Settimane")
+        self.training_plans_tree.heading("type", text="Tipo")
+        self.training_plans_tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
         # Display available training plans
         self.training_plans_tree = ttk.Treeview(import_frame, columns=("plan", "weeks", "type"), show="headings")
         self.training_plans_tree.heading("plan", text="Piano")
