@@ -11,7 +11,7 @@ def cmd_list_scheduled(args):
     print(workouts)
 
 def get_scheduled(args):
-    start_date = datetime.datetime.today()
+    start_date = datetime.datetime.today().date()
     end_date = None
     if args.start_date:
         start_date = datetime.datetime.strptime(args.start_date, '%Y-%m-%d').date()
@@ -41,6 +41,10 @@ def get_scheduled(args):
     matching_workouts = []
     search_year = start_date.year
     search_month = start_date.month
+    
+    # Dizionario per tenere traccia degli allenamenti per data (per evitare duplicati)
+    workouts_by_date = {}
+    
     while True:
         response = client.get_calendar(search_year, search_month)
         found_workouts = 0
@@ -51,21 +55,30 @@ def get_scheduled(args):
                 workout_id = item.get('workoutId', None)
                 schedule_id = item.get('id', None)
                 schedule_date = item.get('date', None)
+                
                 if args.name_filter:
                     if not re.search(args.name_filter, workout_name):
                         logging.debug(f'workout name does not match [{schedule_date}, {schedule_id}]: {workout_name} ({workout_id})')
                         continue
+                        
                 date_cmp = datetime.datetime.strptime(schedule_date, '%Y-%m-%d').date()
+                
                 if date_cmp < start_date or (end_date and date_cmp > end_date):
                     logging.debug(f'date out bounds for workout[{schedule_date}, {schedule_id}]: {workout_name} ({workout_id})')
                 else:
-                    logging.debug(f'found scheduled workout[{schedule_date}, {schedule_id}]: {workout_name} ({workout_id})')
-                    matching_workouts.append(item)
+                    # Verifica se abbiamo già un allenamento per questa data
+                    if schedule_date in workouts_by_date:
+                        logging.debug(f'Ignorato duplicato allenamento[{schedule_date}, {schedule_id}]: {workout_name} ({workout_id})')
+                    else:
+                        logging.debug(f'found scheduled workout[{schedule_date}, {schedule_id}]: {workout_name} ({workout_id})')
+                        workouts_by_date[schedule_date] = item
+                        matching_workouts.append(item)
+                        found_workouts += 1
 
-        # if no workouts were fount in the latest iteration
+        # if no workouts were found in the latest iteration
         if not end_date and found_workouts == 0:
             break
-        # continue looking for workouts the followin month
+        # continue looking for workouts the following month
         search_month += 1
         if search_month > 12:
             search_year += 1

@@ -12,10 +12,28 @@ config:
     slower: 0:03
     hr_up: 5
     hr_down: 5
-  name_prefix: ''
+  name_prefix: '21K@3h00_frank '
+
 W01S01 Intervals:
 - warmup: lap-button
 - repeat 7:
   - interval: 800m in 3:30
   - recovery: 90s -- Jogging
 - cooldown: 15min @ Zona3
+
+W01S02 Jogging:
+- interval: 60min @ Zona1
+- other: 10min -- abdominals/sheathing
+- other: 10min -- stretches
+
+W02S01 Intervals2:
+- warmup: lap-button
+- repeat 7:
+  - interval: 800m in 3:30
+  - recovery: 90s -- Jogging
+- cooldown: 15min @ Zona3
+
+W02S02 Jogging2:
+- interval: 60min @ Zona1
+- other: 10min -- abdominals/sheathing
+- other: 10min -- stretches

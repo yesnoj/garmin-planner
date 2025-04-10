@@ -2,8 +2,11 @@
 import sys
 import argparse
 import logging
+import os
 
-from planner.fartlek import cmd_fartlek
+# Disabilita verifica SSL per risolvere problemi di connessione
+os.environ['PYTHONHTTPSVERIFY'] = '0'
+
 from planner.import_export import cmd_import_workouts
 from planner.import_export import cmd_export_workouts
 from planner.import_export import cmd_delete_workouts
@@ -50,6 +53,7 @@ def parse_args(argv):
     export_wos.add_argument('--clean', required=False, action='store_true', default=False,
                         help='remove null items and useless data')
     export_wos.add_argument('--name-filter', required=False, help='name (or part of the name) of workout to export. Accepts regular expressions.')
+    export_wos.add_argument('--workout-ids', required=False, help='comma separated list of workouts to export')
 
     delete_wo = subparsers.add_parser('delete', help='delete workouts')
     delete_wo.set_defaults(func=cmd_delete_workouts)
@@ -60,7 +64,7 @@ def parse_args(argv):
     schedule.set_defaults(func=cmd_schedule_workouts)
     schedule.add_argument('--race-day', required=True, help='the date of the race. Should correspond to the last workout of the training plan.')
     schedule.add_argument('--training-plan', required=True, help='the training plan ID. Corresponds to the common prefix of all workouts in the plan.')
-    schedule.add_argument('--reverse-order', action='store_true', default=False, help='Week numbers are in reverse order (17, 16, 15,..) instead of (1, 2, 3,...')
+    schedule.add_argument('--workout-days', required=False, help='comma-separated list of day indices (0=Monday, 6=Sunday) for each session in a week')
 
     unschedule = subparsers.add_parser('unschedule', help='unschedule workouts from calendar.')
     unschedule.set_defaults(func=cmd_unschedule_workouts)
@@ -74,11 +78,6 @@ def parse_args(argv):
     list_scheduled.add_argument('--date-range', required=False, help='the date range. Can be: today, tomorrow, current_week, current_month.')
     list_scheduled.add_argument('--name-filter', required=False, help='name (or part of the name) of workout to export. Accepts regular expressions.')
 
-    fartlek = subparsers.add_parser('fartlek', help='create a random fartlek workout')
-    fartlek.set_defaults(func=cmd_fartlek)
-    fartlek.add_argument('--duration', required=True, help='workout duration in mm:ss')
-    fartlek.add_argument('--target-pace', required=True, help='target pace in mm:ss')
-    fartlek.add_argument('--schedule', required=False, help='schedule this workout (today, tomorrow, YYY-MM-DD)')
 
     return parser.parse_args(argv)
 
