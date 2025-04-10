@@ -8,6 +8,8 @@ import re
 import yaml
 import threading
 import logging
+import workout_editor
+
 from datetime import datetime, timedelta
 
 # Setup logging
@@ -57,6 +59,16 @@ class GarminPlannerGUI(tk.Tk):
         # Status bar
         self.status_bar = ttk.Label(self, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
+
+        self.create_login_tab()
+        self.create_import_tab()
+        self.create_export_tab()
+        self.create_schedule_tab()
+        self.create_fartlek_tab()
+        self.create_log_tab()
+
+        workout_editor.add_workout_editor_tab(self.notebook, self)
+
 
     def create_settings_frame(self):
         settings_frame = ttk.LabelFrame(self, text="Impostazioni comuni")

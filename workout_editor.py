@@ -4,1266 +4,1482 @@ from tkinter import ttk, filedialog, messagebox, simpledialog
 import yaml
 import os
 import re
-import json
-import sys
-from functools import partial
+import logging
+from copy import deepcopy
 
-print("Script avviato")  # Messaggio di debug
-print("Inizializzazione delle classi...")
+# Setup logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger("WorkoutEditorGUI")
 
-class WorkoutEditorApp(tk.Tk):
-    def __init__(self):
-        super().__init__()
+class WorkoutEditor(tk.Toplevel):
+    def __init__(self, parent, file_path=None):
+        super().__init__(parent)
         
-        self.title("Editor di Allenamenti per Garmin Planner")
-        self.geometry("1000x700")
+        self.parent = parent
+        self.file_path = file_path
         
-        # Variabili generali
-        self.current_file = None
-        self.modified = False
-        self.current_workout = None
+        self.title("Workout Editor")
+        self.geometry("1000x800")
         
-        # Dati del piano
-        self.configuration = {
-            "paces": {},
-            "heart_rates": {},
-            "margins": {"faster": "0:03", "slower": "0:03", "hr_up": 5, "hr_down": 5},
-            "name_prefix": ""
+        # Set up variables
+        self.workout_data = {
+            'config': {
+                'heart_rates': {},
+                'paces': {},
+                'margins': {
+                    'faster': '0:03',
+                    'slower': '0:03',
+                    'hr_up': 5,
+                    'hr_down': 5
+                },
+                'name_prefix': ''
+            }
         }
-        self.workouts = {}
         
-        # Crea il menu
+        # Create the UI
         self.create_menu()
+        self.create_layout()
         
-        # Crea i pannelli principali
-        self.create_main_frame()
-        
-        # Inizializza l'interfaccia
-        self.update_workouts_list()
-        
+        # If a file path was provided, load the file
+        if file_path and os.path.exists(file_path):
+            self.load_file(file_path)
+
     def create_menu(self):
-        menubar = tk.Menu(self)
+        """Create menu bar"""
+        self.menu_bar = tk.Menu(self)
         
-        # Menu File
-        file_menu = tk.Menu(menubar, tearoff=0)
-        file_menu.add_command(label="Nuovo Piano", command=self.new_plan)
-        file_menu.add_command(label="Apri...", command=self.open_file)
-        file_menu.add_command(label="Salva", command=self.save_file)
-        file_menu.add_command(label="Salva con nome...", command=self.save_as_file)
+        file_menu = tk.Menu(self.menu_bar, tearoff=0)
+        file_menu.add_command(label="New", command=self.new_workout_file)
+        file_menu.add_command(label="Open", command=self.open_file)
+        file_menu.add_command(label="Save", command=self.save_file)
+        file_menu.add_command(label="Save As", command=self.save_file_as)
         file_menu.add_separator()
-        file_menu.add_command(label="Esci", command=self.quit_app)
-        menubar.add_cascade(label="File", menu=file_menu)
+        file_menu.add_command(label="Close", command=self.destroy)
         
-        # Menu Configurazione
-        config_menu = tk.Menu(menubar, tearoff=0)
-        config_menu.add_command(label="Modifica Configurazione", command=self.edit_config)
-        menubar.add_cascade(label="Configurazione", menu=config_menu)
+        edit_menu = tk.Menu(self.menu_bar, tearoff=0)
+        edit_menu.add_command(label="Add Pace", command=lambda: self.add_config_item('paces'))
+        edit_menu.add_command(label="Add Heart Rate", command=lambda: self.add_config_item('heart_rates'))
+        edit_menu.add_command(label="Edit Margins", command=self.edit_margins)
+        edit_menu.add_command(label="Set Name Prefix", command=self.set_name_prefix)
         
-        # Menu Allenamenti
-        workout_menu = tk.Menu(menubar, tearoff=0)
-        workout_menu.add_command(label="Nuovo Allenamento", command=self.add_workout)
-        workout_menu.add_command(label="Elimina Allenamento", command=self.delete_workout)
-        menubar.add_cascade(label="Allenamenti", menu=workout_menu)
+        workout_menu = tk.Menu(self.menu_bar, tearoff=0)
+        workout_menu.add_command(label="Add Workout", command=self.add_workout)
+        workout_menu.add_command(label="Clone Selected Workout", command=self.clone_workout)
+        workout_menu.add_command(label="Delete Selected Workout", command=self.delete_workout)
         
-        # Menu Aiuto
-        help_menu = tk.Menu(menubar, tearoff=0)
-        help_menu.add_command(label="Guida", command=self.show_help)
-        help_menu.add_command(label="Informazioni", command=self.show_about)
-        menubar.add_cascade(label="Aiuto", menu=help_menu)
+        self.menu_bar.add_cascade(label="File", menu=file_menu)
+        self.menu_bar.add_cascade(label="Edit", menu=edit_menu)
+        self.menu_bar.add_cascade(label="Workout", menu=workout_menu)
         
-        self.configuration(menu=menubar)
-    
-    def create_main_frame(self):
-        # Frame principale suddiviso in due parti
+        self.config(menu=self.menu_bar)
+
+    def create_layout(self):
+        """Create the main layout"""
+        # Main frame to hold everything
         main_frame = ttk.Frame(self)
         main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # Frame sinistro per la lista degli allenamenti
-        left_frame = ttk.LabelFrame(main_frame, text="Allenamenti")
-        left_frame.pack(side=tk.LEFT, fill=tk.Y, padx=5, pady=5)
+        # Top frame for configuration
+        self.config_frame = ttk.LabelFrame(main_frame, text="Configuration")
+        self.config_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        # Lista degli allenamenti
-        self.workouts_listbox = tk.Listbox(left_frame, width=25, height=30)
-        self.workouts_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
-        self.workouts_listbox.bind('<<ListboxSelect>>', self.on_workout_selected)
+        # Create notebook for config tabs
+        config_notebook = ttk.Notebook(self.config_frame)
+        config_notebook.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # Scrollbar per la lista
-        workouts_scrollbar = ttk.Scrollbar(left_frame, orient=tk.VERTICAL, command=self.workouts_listbox.yview)
+        # Paces tab
+        paces_frame = ttk.Frame(config_notebook)
+        config_notebook.add(paces_frame, text="Paces")
+        
+        # Heart rates tab
+        hr_frame = ttk.Frame(config_notebook)
+        config_notebook.add(hr_frame, text="Heart Rates")
+        
+        # Margins tab
+        margins_frame = ttk.Frame(config_notebook)
+        config_notebook.add(margins_frame, text="Margins")
+        
+        # Paces treeview
+        self.paces_tree = ttk.Treeview(paces_frame, columns=("name", "value"), show="headings")
+        self.paces_tree.heading("name", text="Name")
+        self.paces_tree.heading("value", text="Value")
+        self.paces_tree.column("name", width=150)
+        self.paces_tree.column("value", width=300)
+        self.paces_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        paces_buttons_frame = ttk.Frame(paces_frame)
+        paces_buttons_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        ttk.Button(paces_buttons_frame, text="Add", command=lambda: self.add_config_item('paces')).pack(side=tk.LEFT, padx=5)
+        ttk.Button(paces_buttons_frame, text="Edit", command=lambda: self.edit_config_item('paces')).pack(side=tk.LEFT, padx=5)
+        ttk.Button(paces_buttons_frame, text="Delete", command=lambda: self.delete_config_item('paces')).pack(side=tk.LEFT, padx=5)
+        
+        # Heart rates treeview
+        self.hr_tree = ttk.Treeview(hr_frame, columns=("name", "value"), show="headings")
+        self.hr_tree.heading("name", text="Name")
+        self.hr_tree.heading("value", text="Value")
+        self.hr_tree.column("name", width=150)
+        self.hr_tree.column("value", width=300)
+        self.hr_tree.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        hr_buttons_frame = ttk.Frame(hr_frame)
+        hr_buttons_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        ttk.Button(hr_buttons_frame, text="Add", command=lambda: self.add_config_item('heart_rates')).pack(side=tk.LEFT, padx=5)
+        ttk.Button(hr_buttons_frame, text="Edit", command=lambda: self.edit_config_item('heart_rates')).pack(side=tk.LEFT, padx=5)
+        ttk.Button(hr_buttons_frame, text="Delete", command=lambda: self.delete_config_item('heart_rates')).pack(side=tk.LEFT, padx=5)
+        
+        # Margins frame
+        margins_grid = ttk.Frame(margins_frame)
+        margins_grid.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        ttk.Label(margins_grid, text="Faster:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        self.faster_var = tk.StringVar(value="0:03")
+        ttk.Entry(margins_grid, textvariable=self.faster_var, width=10).grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
+        
+        ttk.Label(margins_grid, text="Slower:").grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
+        self.slower_var = tk.StringVar(value="0:03")
+        ttk.Entry(margins_grid, textvariable=self.slower_var, width=10).grid(row=1, column=1, padx=5, pady=5, sticky=tk.W)
+        
+        ttk.Label(margins_grid, text="HR Up (%):").grid(row=0, column=2, padx=5, pady=5, sticky=tk.W)
+        self.hr_up_var = tk.IntVar(value=5)
+        ttk.Entry(margins_grid, textvariable=self.hr_up_var, width=10).grid(row=0, column=3, padx=5, pady=5, sticky=tk.W)
+        
+        ttk.Label(margins_grid, text="HR Down (%):").grid(row=1, column=2, padx=5, pady=5, sticky=tk.W)
+        self.hr_down_var = tk.IntVar(value=5)
+        ttk.Entry(margins_grid, textvariable=self.hr_down_var, width=10).grid(row=1, column=3, padx=5, pady=5, sticky=tk.W)
+        
+        ttk.Label(margins_grid, text="Name Prefix:").grid(row=2, column=0, padx=5, pady=5, sticky=tk.W)
+        self.name_prefix_var = tk.StringVar(value="")
+        ttk.Entry(margins_grid, textvariable=self.name_prefix_var, width=40).grid(row=2, column=1, columnspan=3, padx=5, pady=5, sticky=tk.W)
+        
+        ttk.Button(margins_grid, text="Apply Changes", command=self.apply_margins).grid(row=3, column=0, columnspan=4, padx=5, pady=5)
+        
+        # Middle frame for workouts list
+        workouts_frame = ttk.LabelFrame(main_frame, text="Workouts")
+        workouts_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Create a frame for the workout list and search
+        workout_list_frame = ttk.Frame(workouts_frame)
+        workout_list_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Search box
+        search_frame = ttk.Frame(workout_list_frame)
+        search_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        ttk.Label(search_frame, text="Search:").pack(side=tk.LEFT, padx=5)
+        self.search_var = tk.StringVar()
+        self.search_var.trace("w", self.filter_workouts)
+        ttk.Entry(search_frame, textvariable=self.search_var, width=40).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
+        
+        # Workouts treeview
+        self.workouts_tree = ttk.Treeview(workout_list_frame, columns=("name", "description"), show="headings")
+        self.workouts_tree.heading("name", text="Name")
+        self.workouts_tree.heading("description", text="Description")
+        self.workouts_tree.column("name", width=200)
+        self.workouts_tree.column("description", width=400)
+        self.workouts_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        workouts_scrollbar = ttk.Scrollbar(workout_list_frame, orient="vertical", command=self.workouts_tree.yview)
         workouts_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.workouts_listbox.configure(yscrollcommand=workouts_scrollbar.set)
+        self.workouts_tree.configure(yscrollcommand=workouts_scrollbar.set)
         
-        # Pulsanti per gestire gli allenamenti
-        workout_buttons_frame = ttk.Frame(left_frame)
-        workout_buttons_frame.pack(fill=tk.X, padx=5, pady=5)
+        # Buttons for workouts
+        workouts_buttons_frame = ttk.Frame(workouts_frame)
+        workouts_buttons_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Button(workout_buttons_frame, text="Aggiungi", command=self.add_workout).pack(side=tk.LEFT, padx=2)
-        ttk.Button(workout_buttons_frame, text="Elimina", command=self.delete_workout).pack(side=tk.LEFT, padx=2)
-        ttk.Button(workout_buttons_frame, text="Duplica", command=self.duplicate_workout).pack(side=tk.LEFT, padx=2)
+        ttk.Button(workouts_buttons_frame, text="Add Workout", command=self.add_workout).pack(side=tk.LEFT, padx=5)
+        ttk.Button(workouts_buttons_frame, text="Clone Workout", command=self.clone_workout).pack(side=tk.LEFT, padx=5)
+        ttk.Button(workouts_buttons_frame, text="Delete Workout", command=self.delete_workout).pack(side=tk.LEFT, padx=5)
+        ttk.Button(workouts_buttons_frame, text="Edit Workout", command=self.edit_workout).pack(side=tk.LEFT, padx=5)
         
-        # Frame destro per l'editor dell'allenamento
-        right_frame = ttk.LabelFrame(main_frame, text="Editor Allenamento")
-        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        # Bottom frame for workout details (steps)
+        self.workout_details_frame = ttk.LabelFrame(main_frame, text="Workout Details")
+        self.workout_details_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # Editor nome allenamento
-        name_frame = ttk.Frame(right_frame)
-        name_frame.pack(fill=tk.X, padx=5, pady=5)
+        # YAML preview at the bottom
+        self.yaml_frame = ttk.LabelFrame(main_frame, text="YAML Preview")
+        self.yaml_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        ttk.Label(name_frame, text="Nome:").pack(side=tk.LEFT, padx=5)
-        self.workout_name_var = tk.StringVar()
-        ttk.Entry(name_frame, textvariable=self.workout_name_var, width=30).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
-        self.workout_name_var.trace_add("write", self.on_workout_name_changed)
+        self.yaml_text = tk.Text(self.yaml_frame, wrap=tk.WORD, height=10)
+        self.yaml_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
-        # Tabella degli step dell'allenamento
-        steps_frame = ttk.Frame(right_frame)
-        steps_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        # Bottom buttons
+        buttons_frame = ttk.Frame(main_frame)
+        buttons_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        # Definisci le colonne della tabella
-        columns = ("step_type", "duration", "target", "description")
-        self.steps_tree = ttk.Treeview(steps_frame, columns=columns, show="headings", selectmode="browse")
+        ttk.Button(buttons_frame, text="Update Preview", command=self.update_yaml_preview).pack(side=tk.LEFT, padx=5)
+        ttk.Button(buttons_frame, text="Save", command=self.save_file).pack(side=tk.LEFT, padx=5)
+        ttk.Button(buttons_frame, text="Close", command=self.destroy).pack(side=tk.RIGHT, padx=5)
         
-        # Definisci le intestazioni delle colonne
-        self.steps_tree.heading("step_type", text="Tipo")
-        self.steps_tree.heading("duration", text="Durata/Distanza")
-        self.steps_tree.heading("target", text="Target")
-        self.steps_tree.heading("description", text="Descrizione")
+        # Bind events
+        self.workouts_tree.bind("<Double-1>", lambda e: self.edit_workout())
+        self.workouts_tree.bind("<<TreeviewSelect>>", self.on_workout_selected)
         
-        # Definisci la larghezza delle colonne
-        self.steps_tree.column("step_type", width=100)
-        self.steps_tree.column("duration", width=150)
-        self.steps_tree.column("target", width=150)
-        self.steps_tree.column("description", width=200)
+        # Initialize the UI with data
+        self.update_ui_from_data()
+
+    def update_ui_from_data(self):
+        """Update the UI with the current data"""
+        # Clear existing items
+        self.paces_tree.delete(*self.paces_tree.get_children())
+        self.hr_tree.delete(*self.hr_tree.get_children())
+        self.workouts_tree.delete(*self.workouts_tree.get_children())
         
-        # Scrollbar per la tabella
-        steps_scrollbar = ttk.Scrollbar(steps_frame, orient=tk.VERTICAL, command=self.steps_tree.yview)
-        steps_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.steps_tree.configure(yscrollcommand=steps_scrollbar.set)
-        self.steps_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # Fill paces tree
+        for name, value in self.workout_data.get('config', {}).get('paces', {}).items():
+            self.paces_tree.insert('', 'end', values=(name, value))
+            
+        # Fill heart rates tree
+        for name, value in self.workout_data.get('config', {}).get('heart_rates', {}).items():
+            self.hr_tree.insert('', 'end', values=(name, value))
+            
+        # Update margins variables
+        margins = self.workout_data.get('config', {}).get('margins', {})
+        self.faster_var.set(margins.get('faster', '0:03'))
+        self.slower_var.set(margins.get('slower', '0:03'))
+        self.hr_up_var.set(margins.get('hr_up', 5))
+        self.hr_down_var.set(margins.get('hr_down', 5))
         
-        # Bind per la doppia-click sulla tabella
-        self.steps_tree.bind("<Double-1>", self.edit_step)
+        # Update name prefix
+        self.name_prefix_var.set(self.workout_data.get('config', {}).get('name_prefix', ''))
         
-        # Pulsanti per gestire gli step
-        steps_buttons_frame = ttk.Frame(right_frame)
-        steps_buttons_frame.pack(fill=tk.X, padx=5, pady=5)
+        # Fill workouts tree
+        for name, workout in self.workout_data.items():
+            if name != 'config':
+                # Extract description from comments (if any)
+                description = ""
+                if isinstance(workout, str) and "#" in workout:
+                    description = workout.split("#", 1)[1].strip()
+                self.workouts_tree.insert('', 'end', values=(name, description))
         
-        ttk.Button(steps_buttons_frame, text="Aggiungi Step", command=self.add_step).pack(side=tk.LEFT, padx=2)
-        ttk.Button(steps_buttons_frame, text="Modifica Step", command=lambda: self.edit_step(None)).pack(side=tk.LEFT, padx=2)
-        ttk.Button(steps_buttons_frame, text="Elimina Step", command=self.delete_step).pack(side=tk.LEFT, padx=2)
-        ttk.Button(steps_buttons_frame, text="Sposta Su", command=lambda: self.move_step(-1)).pack(side=tk.LEFT, padx=2)
-        ttk.Button(steps_buttons_frame, text="Sposta Giù", command=lambda: self.move_step(1)).pack(side=tk.LEFT, padx=2)
+        # Update YAML preview
+        self.update_yaml_preview()
+
+    def apply_margins(self):
+        """Apply the margin values from the UI to the data"""
+        margins = self.workout_data.get('config', {}).get('margins', {})
+        margins['faster'] = self.faster_var.get()
+        margins['slower'] = self.slower_var.get()
+        margins['hr_up'] = self.hr_up_var.get()
+        margins['hr_down'] = self.hr_down_var.get()
         
-        # Pulsante per salvare l'allenamento
-        save_frame = ttk.Frame(right_frame)
-        save_frame.pack(fill=tk.X, padx=5, pady=5)
+        # Update name prefix
+        self.workout_data['config']['name_prefix'] = self.name_prefix_var.get()
         
-        ttk.Button(save_frame, text="Salva Allenamento", command=self.save_current_workout).pack(side=tk.RIGHT, padx=5)
-    
-    def update_workouts_list(self):
-        """Aggiorna la lista degli allenamenti."""
-        self.workouts_listbox.delete(0, tk.END)
-        for name in sorted(self.workouts.keys()):
-            self.workouts_listbox.insert(tk.END, name)
-    
+        # Update YAML preview
+        self.update_yaml_preview()
+
+    def filter_workouts(self, *args):
+        """Filter the workout list based on search text"""
+        search_text = self.search_var.get().lower()
+        
+        # Clear the treeview
+        self.workouts_tree.delete(*self.workouts_tree.get_children())
+        
+        # Add workouts that match the filter
+        for name, workout in self.workout_data.items():
+            if name != 'config' and search_text in name.lower():
+                # Extract description from comments (if any)
+                description = ""
+                if isinstance(workout, str) and "#" in workout:
+                    description = workout.split("#", 1)[1].strip()
+                self.workouts_tree.insert('', 'end', values=(name, description))
+
     def on_workout_selected(self, event):
-        """Gestisce la selezione di un allenamento dalla lista."""
-        if not self.workouts_listbox.curselection():
-            return
+        """Handle workout selection"""
+        pass  # Will be implemented to show the workout steps
+
+    def add_config_item(self, config_type):
+        """Add a new pace or heart rate to the configuration"""
+        # Create a dialog to get name and value
+        dialog = ConfigItemDialog(self, "Add " + config_type.replace('_', ' ').title())
         
-        # Controlla se ci sono modifiche non salvate
-        if self.current_workout and self.modified:
-            if not messagebox.askyesno("Modifiche non salvate", 
-                                      "Ci sono modifiche non salvate. Vuoi continuare?"):
-                # Riseleziona l'allenamento corrente
-                index = list(self.workouts.keys()).index(self.current_workout)
-                self.workouts_listbox.selection_clear(0, tk.END)
-                self.workouts_listbox.selection_set(index)
-                return
-        
-        # Ottieni il nome dell'allenamento selezionato
-        index = self.workouts_listbox.curselection()[0]
-        workout_name = self.workouts_listbox.get(index)
-        
-        # Carica l'allenamento
-        self.load_workout(workout_name)
-    
-    def load_workout(self, workout_name):
-        """Carica un allenamento nell'editor."""
-        self.current_workout = workout_name
-        self.modified = False
-        
-        # Imposta il nome dell'allenamento
-        self.workout_name_var.set(workout_name)
-        
-        # Carica gli step dell'allenamento
-        self.steps_tree.delete(*self.steps_tree.get_children())
-        
-        steps = self.workouts.get(workout_name, [])
-        for i, step in enumerate(steps):
-            for key, value in step.items():
-                if key.startswith('repeat'):
-                    # Gestisci ripetizioni
-                    iterations = key.split()[1]
-                    self.steps_tree.insert("", "end", values=(f"repeat {iterations}", "", "", ""))
-                    
-                    # Aggiungi gli step interni alla ripetizione
-                    for sub_step in value:
-                        for sub_key, sub_value in sub_step.items():
-                            self.steps_tree.insert("", "end", values=(f"  {sub_key}", *self.format_step_values(sub_value)))
-                else:
-                    # Gestisci step normali
-                    self.steps_tree.insert("", "end", values=(key, *self.format_step_values(value)))
-    
-    def format_step_values(self, step_value):
-        """Formatta i valori di uno step per la visualizzazione nella tabella."""
-        if not step_value or isinstance(step_value, (list, dict)):
-            return ["", "", ""]
-        
-        # Cerca di estrarre target e descrizione
-        step_str = str(step_value)
-        target = ""
-        description = ""
-        
-        # Cerca target di tipo pace o heartrate
-        if " @ " in step_str:
-            parts = step_str.split(" @ ")
-            duration = parts[0]
-            target = parts[1]
+        if dialog.result:
+            name, value = dialog.result
             
-            # Cerca descrizione
-            if " -- " in target:
-                target_parts = target.split(" -- ")
-                target = target_parts[0]
-                description = target_parts[1]
-        elif " @hr " in step_str:
-            parts = step_str.split(" @hr ")
-            duration = parts[0]
-            target = f"HR: {parts[1]}"
+            # Add to data structure
+            if config_type not in self.workout_data['config']:
+                self.workout_data['config'][config_type] = {}
             
-            # Cerca descrizione
-            if " -- " in target:
-                target_parts = target.split(" -- ")
-                target = target_parts[0]
-                description = target_parts[1]
-        elif " in " in step_str:
-            parts = step_str.split(" in ")
-            duration = parts[0]
-            target = f"Pace: {parts[1]}"
+            self.workout_data['config'][config_type][name] = value
             
-            # Cerca descrizione
-            if " -- " in target:
-                target_parts = target.split(" -- ")
-                target = target_parts[0]
-                description = target_parts[1]
-        else:
-            duration = step_str
-            
-            # Cerca descrizione
-            if " -- " in duration:
-                duration_parts = duration.split(" -- ")
-                duration = duration_parts[0]
-                description = duration_parts[1]
+            # Update UI
+            self.update_ui_from_data()
+
+    def edit_config_item(self, config_type):
+        """Edit a selected pace or heart rate"""
+        # Get the selected item
+        tree = self.paces_tree if config_type == 'paces' else self.hr_tree
+        selection = tree.selection()
         
-        return [duration, target, description]
-    
-    def on_workout_name_changed(self, *args):
-        """Gestisce il cambio del nome dell'allenamento."""
-        if not self.current_workout:
+        if not selection:
+            messagebox.showwarning("No Selection", f"Please select a {config_type} item to edit.")
             return
             
-        new_name = self.workout_name_var.get()
-        if new_name != self.current_workout:
-            # Controlla se il nuovo nome esiste già
-            if new_name in self.workouts and new_name != self.current_workout:
-                messagebox.showerror("Errore", f"Esiste già un allenamento con il nome '{new_name}'")
-                self.workout_name_var.set(self.current_workout)
-                return
+        item = tree.item(selection[0])
+        name, value = item['values']
+        
+        # Create a dialog with the current values
+        dialog = ConfigItemDialog(self, "Edit " + config_type.replace('_', ' ').title(), 
+                                 name, value)
+        
+        if dialog.result:
+            new_name, new_value = dialog.result
+            
+            # Update data structure
+            # Remove old key if name changed
+            if new_name != name:
+                del self.workout_data['config'][config_type][name]
                 
-            # Rinomina l'allenamento
-            self.workouts[new_name] = self.workouts.pop(self.current_workout)
-            self.current_workout = new_name
-            self.modified = True
-            self.update_workouts_list()
+            # Add new value
+            self.workout_data['config'][config_type][new_name] = new_value
             
-            # Seleziona il nuovo nome nella lista
-            index = list(self.workouts.keys()).index(new_name)
-            self.workouts_listbox.selection_clear(0, tk.END)
-            self.workouts_listbox.selection_set(index)
-    
-    def edit_config(self):
-        """Apre l'editor della configurazione."""
-        config_editor = ConfigEditor(self, self.configuration)
-        self.wait_window(config_editor)
-        if config_editor.result:
-            self.configuration = config_editor.result
-            self.modified = True
-    
+            # Update UI
+            self.update_ui_from_data()
+
+    def delete_config_item(self, config_type):
+        """Delete a selected pace or heart rate"""
+        # Get the selected item
+        tree = self.paces_tree if config_type == 'paces' else self.hr_tree
+        selection = tree.selection()
+        
+        if not selection:
+            messagebox.showwarning("No Selection", f"Please select a {config_type} item to delete.")
+            return
+            
+        item = tree.item(selection[0])
+        name = item['values'][0]
+        
+        # Confirm deletion
+        if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete {name}?"):
+            # Delete from data structure
+            del self.workout_data['config'][config_type][name]
+            
+            # Update UI
+            self.update_ui_from_data()
+
+    def edit_margins(self):
+        """Edit the margins in the config"""
+        # Switch to the margins tab
+        self.config_frame.select(2)  # Index 2 is the margins tab
+
+    def set_name_prefix(self):
+        """Set the name prefix for workouts"""
+        # Create a simple dialog
+        prefix = simpledialog.askstring("Set Name Prefix", 
+                                      "Enter the name prefix for workouts:",
+                                      initialvalue=self.workout_data.get('config', {}).get('name_prefix', ''))
+        
+        if prefix is not None:  # None means cancel was pressed
+            self.workout_data['config']['name_prefix'] = prefix
+            self.name_prefix_var.set(prefix)
+            self.update_yaml_preview()
+
     def add_workout(self):
-        """Aggiunge un nuovo allenamento."""
-        name = simpledialog.askstring("Nuovo Allenamento", "Nome dell'allenamento:")
+        """Add a new workout"""
+        # Create a dialog to get the workout name
+        name = simpledialog.askstring("New Workout", "Enter workout name (format: W##S## Description):")
+        
         if not name:
             return
             
-        # Controlla se il nome esiste già
-        if name in self.workouts:
-            messagebox.showerror("Errore", f"Esiste già un allenamento con il nome '{name}'")
+        # Validate the format (W01S01 Workout Name)
+        if not re.match(r'^W\d{2}S\d{2}\s+.+', name):
+            messagebox.showerror("Invalid Format", "Workout name must be in the format 'W##S## Description'")
             return
             
-        # Crea un nuovo allenamento vuoto
-        self.workouts[name] = []
-        self.update_workouts_list()
+        # Check if workout already exists
+        if name in self.workout_data:
+            messagebox.showerror("Duplicate", f"A workout named '{name}' already exists.")
+            return
+            
+        # Create a new empty workout
+        self.workout_data[name] = []
         
-        # Seleziona il nuovo allenamento
-        index = list(self.workouts.keys()).index(name)
-        self.workouts_listbox.selection_clear(0, tk.END)
-        self.workouts_listbox.selection_set(index)
-        self.workouts_listbox.see(index)
+        # Update UI
+        self.update_ui_from_data()
         
-        # Carica l'allenamento
-        self.load_workout(name)
-    
-    def delete_workout(self):
-        """Elimina un allenamento."""
-        if not self.current_workout:
-            messagebox.showerror("Errore", "Nessun allenamento selezionato")
+        # Edit the new workout
+        self.edit_workout(name)
+
+    def clone_workout(self):
+        """Clone the selected workout"""
+        selection = self.workouts_tree.selection()
+        
+        if not selection:
+            messagebox.showwarning("No Selection", "Please select a workout to clone.")
             return
             
-        if messagebox.askyesno("Elimina Allenamento", f"Sei sicuro di voler eliminare l'allenamento '{self.current_workout}'?"):
-            del self.workouts[self.current_workout]
-            self.current_workout = None
-            self.modified = True
-            self.update_workouts_list()
-            
-            # Pulisci l'editor
-            self.workout_name_var.set("")
-            self.steps_tree.delete(*self.steps_tree.get_children())
-    
-    def duplicate_workout(self):
-        """Duplica un allenamento."""
-        if not self.current_workout:
-            messagebox.showerror("Errore", "Nessun allenamento selezionato")
-            return
-            
-        # Chiedi il nome del nuovo allenamento
-        new_name = simpledialog.askstring("Duplica Allenamento", 
-                                          "Nome del nuovo allenamento:", 
-                                          initialvalue=f"{self.current_workout} (copia)")
+        item = self.workouts_tree.item(selection[0])
+        original_name = item['values'][0]
+        
+        # Ask for the new name
+        new_name = simpledialog.askstring("Clone Workout", 
+                                         "Enter new workout name (format: W##S## Description):",
+                                         initialvalue=original_name)
+        
         if not new_name:
             return
             
-        # Controlla se il nome esiste già
-        if new_name in self.workouts:
-            messagebox.showerror("Errore", f"Esiste già un allenamento con il nome '{new_name}'")
+        # Validate the format
+        if not re.match(r'^W\d{2}S\d{2}\s+.+', new_name):
+            messagebox.showerror("Invalid Format", "Workout name must be in the format 'W##S## Description'")
             return
             
-        # Duplica l'allenamento
-        self.workouts[new_name] = self.workouts[self.current_workout].copy()
-        self.modified = True
-        self.update_workouts_list()
-        
-        # Seleziona il nuovo allenamento
-        index = list(self.workouts.keys()).index(new_name)
-        self.workouts_listbox.selection_clear(0, tk.END)
-        self.workouts_listbox.selection_set(index)
-        self.workouts_listbox.see(index)
-        
-        # Carica l'allenamento
-        self.load_workout(new_name)
-    
-    def add_step(self):
-        """Aggiunge un nuovo step all'allenamento."""
-        if not self.current_workout:
-            messagebox.showerror("Errore", "Nessun allenamento selezionato")
+        # Check if workout already exists
+        if new_name in self.workout_data:
+            messagebox.showerror("Duplicate", f"A workout named '{new_name}' already exists.")
             return
             
-        # Apri l'editor di step
-        step_editor = StepEditor(self, self.configuration)
-        self.wait_window(step_editor)
+        # Clone the workout
+        self.workout_data[new_name] = deepcopy(self.workout_data[original_name])
         
-        if step_editor.result:
-            step_type, step_value = step_editor.result
-            
-            # Aggiungi lo step all'allenamento
-            if step_type.startswith("repeat"):
-                # Per le ripetizioni, crea una struttura speciale
-                iterations = int(step_type.split()[1])
-                self.workouts[self.current_workout].append({f"repeat {iterations}": []})
-            else:
-                # Per gli step normali
-                self.workouts[self.current_workout].append({step_type: step_value})
-            
-            self.modified = True
-            
-            # Ricarica l'allenamento
-            self.load_workout(self.current_workout)
-    
-    def edit_step(self, event):
-        """Modifica uno step esistente."""
-        if not self.current_workout:
-            messagebox.showerror("Errore", "Nessun allenamento selezionato")
-            return
-            
-        # Ottieni lo step selezionato
-        selection = self.steps_tree.selection()
+        # Update UI
+        self.update_ui_from_data()
+
+    def delete_workout(self):
+        """Delete the selected workout"""
+        selection = self.workouts_tree.selection()
+        
         if not selection:
-            messagebox.showerror("Errore", "Nessuno step selezionato")
-            return
-        
-        # Ottieni i dati dello step
-        item = self.steps_tree.item(selection[0])
-        values = item['values']
-        step_type = values[0]
-        
-        # Non è possibile modificare direttamente le ripetizioni
-        if step_type.startswith("repeat") and not step_type.startswith("  "):
-            messagebox.showerror("Errore", "Non è possibile modificare direttamente le ripetizioni. Aggiungi o modifica gli step all'interno.")
-            return
-        
-        # Ottieni l'indice dello step nel workout
-        index = self.steps_tree.index(selection[0])
-        
-        # Per gli step all'interno di una ripetizione
-        if step_type.startswith("  "):
-            messagebox.showerror("Errore", "La modifica degli step all'interno delle ripetizioni non è ancora supportata")
-            return
-        
-        # Apri l'editor di step con i dati attuali
-        current_value = None
-        for i, step in enumerate(self.workouts[self.current_workout]):
-            if i == index:
-                for k, v in step.items():
-                    current_value = v
-                    step_type = k
-                break
-        
-        step_editor = StepEditor(self, self.configuration, step_type, current_value)
-        self.wait_window(step_editor)
-        
-        if step_editor.result:
-            new_step_type, new_step_value = step_editor.result
-            
-            # Aggiorna lo step
-            self.workouts[self.current_workout][index] = {new_step_type: new_step_value}
-            self.modified = True
-            
-            # Ricarica l'allenamento
-            self.load_workout(self.current_workout)
-    
-    def delete_step(self):
-        """Elimina uno step dall'allenamento."""
-        if not self.current_workout:
-            messagebox.showerror("Errore", "Nessun allenamento selezionato")
+            messagebox.showwarning("No Selection", "Please select a workout to delete.")
             return
             
-        # Ottieni lo step selezionato
-        selection = self.steps_tree.selection()
-        if not selection:
-            messagebox.showerror("Errore", "Nessuno step selezionato")
-            return
+        item = self.workouts_tree.item(selection[0])
+        name = item['values'][0]
         
-        # Ottieni l'indice dello step
-        index = self.steps_tree.index(selection[0])
-        
-        # Elimina lo step
-        self.workouts[self.current_workout].pop(index)
-        self.modified = True
-        
-        # Ricarica l'allenamento
-        self.load_workout(self.current_workout)
-    
-    def move_step(self, direction):
-        """Sposta uno step su o giù."""
-        if not self.current_workout:
-            messagebox.showerror("Errore", "Nessun allenamento selezionato")
-            return
+        # Confirm deletion
+        if messagebox.askyesno("Confirm Delete", f"Are you sure you want to delete {name}?"):
+            # Delete from data structure
+            del self.workout_data[name]
             
-        # Ottieni lo step selezionato
-        selection = self.steps_tree.selection()
-        if not selection:
-            messagebox.showerror("Errore", "Nessuno step selezionato")
-            return
-        
-        # Ottieni l'indice dello step
-        index = self.steps_tree.index(selection[0])
-        
-        # Controlla se lo spostamento è possibile
-        if direction < 0 and index == 0:
-            return
-        if direction > 0 and index == len(self.workouts[self.current_workout]) - 1:
-            return
-        
-        # Sposta lo step
-        steps = self.workouts[self.current_workout]
-        steps[index], steps[index + direction] = steps[index + direction], steps[index]
-        self.modified = True
-        
-        # Ricarica l'allenamento
-        self.load_workout(self.current_workout)
-        
-        # Seleziona lo step spostato
-        self.steps_tree.selection_set(self.steps_tree.get_children()[index + direction])
-    
-    def save_current_workout(self):
-        """Salva l'allenamento corrente."""
-        if not self.current_workout:
-            messagebox.showerror("Errore", "Nessun allenamento selezionato")
-            return
+            # Update UI
+            self.update_ui_from_data()
+
+    def edit_workout(self, workout_name=None):
+        """Edit the selected workout"""
+        if not workout_name:
+            selection = self.workouts_tree.selection()
             
-        self.modified = False
-        messagebox.showinfo("Allenamento Salvato", f"L'allenamento '{self.current_workout}' è stato salvato")
-    
-    def new_plan(self):
-        """Crea un nuovo piano di allenamento."""
-        if self.modified:
-            if not messagebox.askyesno("Modifiche non salvate", 
-                                      "Ci sono modifiche non salvate. Vuoi continuare?"):
+            if not selection:
+                messagebox.showwarning("No Selection", "Please select a workout to edit.")
                 return
+                
+            item = self.workouts_tree.item(selection[0])
+            workout_name = item['values'][0]
         
-        # Resetta lo stato
-        self.current_file = None
-        self.modified = False
-        self.current_workout = None
+        # Open the workout editor dialog
+        editor = WorkoutStepsEditor(self, workout_name, self.workout_data)
         
-        # Resetta i dati
-        self.configuration = {
-            "paces": {},
-            "heart_rates": {},
-            "margins": {"faster": "0:03", "slower": "0:03", "hr_up": 5, "hr_down": 5},
-            "name_prefix": ""
-        }
-        self.workouts = {}
-        
-        # Aggiorna l'interfaccia
-        self.update_workouts_list()
-        self.workout_name_var.set("")
-        self.steps_tree.delete(*self.steps_tree.get_children())
-        
-        # Aggiorna il titolo
-        self.title("Editor di Allenamenti per Garmin Planner - Nuovo Piano")
-    
+        # Update UI after editing
+        self.update_ui_from_data()
+
+    def new_workout_file(self):
+        """Create a new workout file"""
+        # Confirm if there are unsaved changes
+        if messagebox.askyesno("New File", "Create a new workout file? Unsaved changes will be lost."):
+            # Reset the data structure
+            self.workout_data = {
+                'config': {
+                    'heart_rates': {},
+                    'paces': {},
+                    'margins': {
+                        'faster': '0:03',
+                        'slower': '0:03',
+                        'hr_up': 5,
+                        'hr_down': 5
+                    },
+                    'name_prefix': ''
+                }
+            }
+            
+            # Reset the file path
+            self.file_path = None
+            
+            # Update UI
+            self.update_ui_from_data()
+
     def open_file(self):
-        """Apre un file YAML esistente."""
-        if self.modified:
-            if not messagebox.askyesno("Modifiche non salvate", 
-                                      "Ci sono modifiche non salvate. Vuoi continuare?"):
-                return
-        
-        # Chiedi il file da aprire
-        filepath = filedialog.askopenfilename(
-            title="Apri Piano di Allenamento",
-            filetypes=[("YAML", "*.yaml *.yml"), ("Tutti i file", "*.*")]
+        """Open a workout file"""
+        file_path = filedialog.askopenfilename(
+            title="Open Workout File",
+            filetypes=[("YAML files", "*.yaml *.yml"), ("All files", "*.*")]
         )
         
-        if not filepath:
-            return
-            
+        if file_path:
+            self.load_file(file_path)
+
+    def load_file(self, file_path):
+        """Load a workout file"""
         try:
-            # Carica il file YAML
-            with open(filepath, 'r') as file:
-                data = yaml.safe_load(file)
-            
-            # Estrai la configurazione
-            self.configuration = data.pop('config', {
-                "paces": {},
-                "heart_rates": {},
-                "margins": {"faster": "0:03", "slower": "0:03", "hr_up": 5, "hr_down": 5},
-                "name_prefix": ""
-            })
-            
-            # Il resto sono gli allenamenti
-            self.workouts = data
-            
-            # Aggiorna lo stato
-            self.current_file = filepath
-            self.modified = False
-            self.current_workout = None
-            
-            # Aggiorna l'interfaccia
-            self.update_workouts_list()
-            self.workout_name_var.set("")
-            self.steps_tree.delete(*self.steps_tree.get_children())
-            
-            # Aggiorna il titolo
-            filename = os.path.basename(filepath)
-            self.title(f"Editor di Allenamenti per Garmin Planner - {filename}")
-            
-            messagebox.showinfo("File Aperto", f"Il file '{filename}' è stato aperto con successo")
-            
+            with open(file_path, 'r') as file:
+                self.workout_data = yaml.safe_load(file)
+                
+                # Ensure the config section exists
+                if 'config' not in self.workout_data:
+                    self.workout_data['config'] = {
+                        'heart_rates': {},
+                        'paces': {},
+                        'margins': {
+                            'faster': '0:03',
+                            'slower': '0:03',
+                            'hr_up': 5,
+                            'hr_down': 5
+                        },
+                        'name_prefix': ''
+                    }
+                
+                # Ensure all config subsections exist
+                for section in ['heart_rates', 'paces', 'margins']:
+                    if section not in self.workout_data['config']:
+                        self.workout_data['config'][section] = {}
+                
+                # Update UI
+                self.update_ui_from_data()
+                
+                # Store the file path
+                self.file_path = file_path
+                
+                # Update the window title
+                self.title(f"Workout Editor - {os.path.basename(file_path)}")
+                
+                logger.info(f"Loaded workout file: {file_path}")
+                
         except Exception as e:
-            messagebox.showerror("Errore", f"Impossibile aprire il file: {str(e)}")
-    
+            messagebox.showerror("Error", f"Failed to load file: {str(e)}")
+            logger.error(f"Failed to load file: {str(e)}")
+
     def save_file(self):
-        """Salva il piano di allenamento nel file corrente."""
-        if not self.current_file:
-            return self.save_as_file()
-            
-        try:
-            # Prepara i dati da salvare
-            data = {'config': self.configuration}
-            data.update(self.workouts)
-            
-            # Salva nel file YAML
-            with open(self.current_file, 'w') as file:
-                yaml.dump(data, file, default_flow_style=False, sort_keys=False)
-            
-            # Aggiorna lo stato
-            self.modified = False
-            
-            # Aggiorna il titolo
-            filename = os.path.basename(self.current_file)
-            self.title(f"Editor di Allenamenti per Garmin Planner - {filename}")
-            
-            messagebox.showinfo("File Salvato", f"Il file '{filename}' è stato salvato con successo")
-            return True
-            
-        except Exception as e:
-            messagebox.showerror("Errore", f"Impossibile salvare il file: {str(e)}")
-            return False
-    
-    def save_as_file(self):
-        """Salva il piano di allenamento in un nuovo file."""
-        # Chiedi il file in cui salvare
-        filepath = filedialog.asksaveasfilename(
-            title="Salva Piano di Allenamento",
-            filetypes=[("YAML", "*.yaml"), ("Tutti i file", "*.*")],
+        """Save the workout file"""
+        if not self.file_path:
+            self.save_file_as()
+        else:
+            self.write_file(self.file_path)
+
+    def save_file_as(self):
+        """Save the workout file with a new name"""
+        file_path = filedialog.asksaveasfilename(
+            title="Save Workout File",
+            filetypes=[("YAML files", "*.yaml"), ("All files", "*.*")],
             defaultextension=".yaml"
         )
         
-        if not filepath:
-            return False
+        if file_path:
+            self.write_file(file_path)
+            self.file_path = file_path
+            self.title(f"Workout Editor - {os.path.basename(file_path)}")
+
+    def write_file(self, file_path):
+        """Write the workout data to a file"""
+        try:
+            with open(file_path, 'w') as file:
+                yaml.dump(self.workout_data, file, default_flow_style=False, sort_keys=False)
             
-        # Aggiorna il file corrente
-        self.current_file = filepath
-        
-        # Salva il file
-        return self.save_file()
-    
-    def quit_app(self):
-        """Chiude l'applicazione."""
-        if self.modified:
-            if not messagebox.askyesno("Modifiche non salvate", 
-                                      "Ci sono modifiche non salvate. Vuoi uscire comunque?"):
-                return
-                
-        self.destroy()
-    
-    def show_help(self):
-        """Mostra la guida dell'applicazione."""
-        help_text = """
-        Editor di Allenamenti per Garmin Planner
-        
-        Questa applicazione consente di creare e modificare piani di allenamento da utilizzare con Garmin Planner.
-        
-        Funzionalità principali:
-        - Creare e modificare piani di allenamento
-        - Definire ritmi, zone di frequenza cardiaca e margini
-        - Creare allenamenti con step di diversi tipi
-        - Salvare e caricare piani di allenamento in formato YAML
-        
-        Per ulteriori informazioni consulta il README di Garmin Planner.
-        """
-        messagebox.showinfo("Guida", help_text)
-    
-    def show_about(self):
-        """Mostra informazioni sull'applicazione."""
-        about_text = """
-        Editor di Allenamenti per Garmin Planner
-        
-        Versione 1.0
-        
-        Creato per facilitare la creazione e modifica dei piani di allenamento per Garmin Planner.
-        
-        Basato sul progetto garmin-planner.
-        """
-        messagebox.showinfo("Informazioni", about_text)
+            logger.info(f"Saved workout file: {file_path}")
+            messagebox.showinfo("Success", f"File saved: {file_path}")
+            
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save file: {str(e)}")
+            logger.error(f"Failed to save file: {str(e)}")
+
+    def update_yaml_preview(self):
+        """Update the YAML preview text widget"""
+        try:
+            # Convert data to YAML
+            yaml_text = yaml.dump(self.workout_data, default_flow_style=False, sort_keys=False)
+            
+            # Update the text widget
+            self.yaml_text.delete(1.0, tk.END)
+            self.yaml_text.insert(tk.END, yaml_text)
+            
+        except Exception as e:
+            self.yaml_text.delete(1.0, tk.END)
+            self.yaml_text.insert(tk.END, f"Error generating YAML: {str(e)}")
 
 
-class ConfigEditor(tk.Toplevel):
-    """Finestra per la modifica della configurazione."""
-    def __init__(self, parent, config):
+class ConfigItemDialog(tk.Toplevel):
+    """Dialog for adding or editing configuration items (paces, heart rates)"""
+    def __init__(self, parent, title, name="", value=""):
         super().__init__(parent)
-        self.title("Configurazione Piano")
+        
+        self.result = None
+        
+        self.title(title)
+        self.geometry("400x200")
+        self.resizable(False, False)
+        self.transient(parent)
+        self.grab_set()
+        
+        # Create widgets
+        frame = ttk.Frame(self, padding=10)
+        frame.pack(fill=tk.BOTH, expand=True)
+        
+        ttk.Label(frame, text="Name:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        self.name_var = tk.StringVar(value=name)
+        ttk.Entry(frame, textvariable=self.name_var, width=30).grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
+        
+        ttk.Label(frame, text="Value:").grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
+        self.value_var = tk.StringVar(value=value)
+        ttk.Entry(frame, textvariable=self.value_var, width=30).grid(row=1, column=1, padx=5, pady=5, sticky=tk.W)
+        
+        # Help text
+        help_text = ("Examples:\n"
+                   "- Pace: '5:30-5:10' or '10km in 45:00' or '80-85% marathon'\n"
+                   "- Heart Rate: '70-76% max_hr' or '150-160' or '160'")
+        ttk.Label(frame, text=help_text, wraplength=380).grid(row=2, column=0, columnspan=2, padx=5, pady=5, sticky=tk.W)
+        
+        # Buttons
+        button_frame = ttk.Frame(frame)
+        button_frame.grid(row=3, column=0, columnspan=2, pady=10)
+        
+        ttk.Button(button_frame, text="OK", command=self.ok).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Cancel", command=self.cancel).pack(side=tk.LEFT, padx=5)
+        
+        # Center the dialog
+        self.center_window()
+        
+        # Start the dialog
+        self.wait_window()
+        
+    def center_window(self):
+        """Center the dialog on the parent window"""
+        self.update_idletasks()
+        width = self.winfo_width()
+        height = self.winfo_height()
+        x = (self.master.winfo_rootx() + (self.master.winfo_width() // 2)) - (width // 2)
+        y = (self.master.winfo_rooty() + (self.master.winfo_height() // 2)) - (height // 2)
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        
+    def ok(self):
+        """Handle OK button click"""
+        name = self.name_var.get().strip()
+        value = self.value_var.get().strip()
+        
+        if not name:
+            messagebox.showerror("Error", "Name cannot be empty", parent=self)
+            return
+            
+        if not value:
+            messagebox.showerror("Error", "Value cannot be empty", parent=self)
+            return
+            
+        self.result = (name, value)
+        self.destroy()
+        
+    def cancel(self):
+        """Handle Cancel button click"""
+        self.destroy()
+
+
+class WorkoutStepsEditor(tk.Toplevel):
+    """Dialog for editing workout steps"""
+    def __init__(self, parent, workout_name, workout_data):
+        super().__init__(parent)
+        
+        self.parent = parent
+        self.workout_name = workout_name
+        self.workout_data = workout_data
+        self.workout_steps = deepcopy(workout_data[workout_name]) if workout_name in workout_data else []
+        
+        self.title(f"Edit Workout: {workout_name}")
         self.geometry("800x600")
         self.resizable(True, True)
-        self.transient(parent)  # Rende la finestra modale
-        self.grab_set()  # Impedisce di interagire con la finestra principale
+        self.transient(parent)
+        self.grab_set()
         
-        # Copia della configurazione
-        self.configuration = {k: (v.copy() if isinstance(v, dict) else v) for k, v in config.items()}
-        self.result = None
+        # Create widgets
+        self.create_ui()
         
-        # Crea il notebook per le diverse sezioni
-        notebook = ttk.Notebook(self)
-        notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        # Center the dialog
+        self.update_idletasks()
+        width = self.winfo_width()
+        height = self.winfo_height()
+        x = (self.parent.winfo_rootx() + (self.parent.winfo_width() // 2)) - (width // 2)
+        y = (self.parent.winfo_rooty() + (self.parent.winfo_height() // 2)) - (height // 2)
+        self.geometry(f"{width}x{height}+{x}+{y}")
         
-        # Scheda per i ritmi (paces)
-        paces_frame = ttk.Frame(notebook)
-        notebook.add(paces_frame, text="Ritmi")
-        self.create_paces_tab(paces_frame)
+        # Wait for the dialog to close
+        self.wait_window()
         
-        # Scheda per le frequenze cardiache
-        hr_frame = ttk.Frame(notebook)
-        notebook.add(hr_frame, text="Frequenze Cardiache")
-        self.create_hr_tab(hr_frame)
+    def create_ui(self):
+        """Create the user interface"""
+        main_frame = ttk.Frame(self, padding=10)
+        main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # Scheda per i margini e altre impostazioni
-        settings_frame = ttk.Frame(notebook)
-        notebook.add(settings_frame, text="Impostazioni")
-        self.create_settings_tab(settings_frame)
+        # Description frame
+        desc_frame = ttk.Frame(main_frame)
+        desc_frame.pack(fill=tk.X, expand=False, pady=5)
         
-        # Pulsanti di conferma e annullamento
-        button_frame = ttk.Frame(self)
-        button_frame.pack(fill=tk.X, padx=10, pady=10)
+        ttk.Label(desc_frame, text="Workout Description:").pack(side=tk.LEFT, padx=5)
+        self.description_var = tk.StringVar()
+        ttk.Entry(desc_frame, textvariable=self.description_var, width=50).pack(side=tk.LEFT, padx=5, fill=tk.X, expand=True)
         
-        ttk.Button(button_frame, text="Annulla", command=self.cancel).pack(side=tk.RIGHT, padx=5)
-        ttk.Button(button_frame, text="OK", command=self.confirm).pack(side=tk.RIGHT, padx=5)
-    
-    def create_paces_tab(self, parent):
-        """Crea la scheda per i ritmi."""
-        # Istruzioni
-        ttk.Label(parent, text="Definisci i ritmi da utilizzare negli allenamenti. Puoi specificare:", 
-                font=("", 10, "bold")).pack(anchor=tk.W, padx=10, pady=5)
-        ttk.Label(parent, text="- Un singolo ritmo (es. 4:30)").pack(anchor=tk.W, padx=10)
-        ttk.Label(parent, text="- Un intervallo di ritmi (es. 4:30-4:40)").pack(anchor=tk.W, padx=10)
-        ttk.Label(parent, text="- Un ritmo basato su distanza/tempo (es. 10km in 45:00)").pack(anchor=tk.W, padx=10)
-        ttk.Label(parent, text="- Una percentuale di un altro ritmo (es. 80% marathon)").pack(anchor=tk.W, padx=10, pady=5)
+        # Extract description from comment if it exists
+        if isinstance(self.workout_data.get(self.workout_name, None), str) and '#' in self.workout_data[self.workout_name]:
+            self.description_var.set(self.workout_data[self.workout_name].split('#', 1)[1].strip())
         
-        # Frame per la tabella e i pulsanti
-        table_frame = ttk.Frame(parent)
-        table_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        # Create frame for steps list
+        steps_frame = ttk.LabelFrame(main_frame, text="Workout Steps")
+        steps_frame.pack(fill=tk.BOTH, expand=True, pady=5)
         
-        # Tabella dei ritmi
-        columns = ("name", "value")
-        self.paces_tree = ttk.Treeview(table_frame, columns=columns, show="headings", selectmode="browse")
-        self.paces_tree.heading("name", text="Nome")
-        self.paces_tree.heading("value", text="Valore")
-        self.paces_tree.column("name", width=150)
-        self.paces_tree.column("value", width=250)
-        self.paces_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # Create treeview for steps
+        self.steps_tree = ttk.Treeview(steps_frame, columns=("type", "details", "description"), show="headings")
+        self.steps_tree.heading("type", text="Type")
+        self.steps_tree.heading("details", text="Details")
+        self.steps_tree.heading("description", text="Description")
+        self.steps_tree.column("type", width=100)
+        self.steps_tree.column("details", width=300)
+        self.steps_tree.column("description", width=300)
         
-        # Scrollbar per la tabella
-        scrollbar = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.paces_tree.yview)
+        # Add scrollbar
+        scrollbar = ttk.Scrollbar(steps_frame, orient="vertical", command=self.steps_tree.yview)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.paces_tree.configure(yscrollcommand=scrollbar.set)
+        self.steps_tree.configure(yscrollcommand=scrollbar.set)
+        self.steps_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         
-        # Carica i ritmi esistenti
-        for name, value in self.configuration.get("paces", {}).items():
-            self.paces_tree.insert("", "end", values=(name, value))
+        # Buttons for managing steps
+        buttons_frame = ttk.Frame(main_frame)
+        buttons_frame.pack(fill=tk.X, pady=5)
         
-        # Pulsanti per gestire i ritmi
-        button_frame = ttk.Frame(parent)
-        button_frame.pack(fill=tk.X, padx=10, pady=5)
+        ttk.Button(buttons_frame, text="Add Step", command=self.add_step).pack(side=tk.LEFT, padx=5)
+        ttk.Button(buttons_frame, text="Add Repeat", command=self.add_repeat).pack(side=tk.LEFT, padx=5)
+        ttk.Button(buttons_frame, text="Edit Step", command=self.edit_step).pack(side=tk.LEFT, padx=5)
+        ttk.Button(buttons_frame, text="Delete Step", command=self.delete_step).pack(side=tk.LEFT, padx=5)
+        ttk.Button(buttons_frame, text="Move Up", command=lambda: self.move_step(-1)).pack(side=tk.LEFT, padx=5)
+        ttk.Button(buttons_frame, text="Move Down", command=lambda: self.move_step(1)).pack(side=tk.LEFT, padx=5)
         
-        ttk.Button(button_frame, text="Aggiungi", command=self.add_pace).pack(side=tk.LEFT, padx=2)
-        ttk.Button(button_frame, text="Modifica", command=self.edit_pace).pack(side=tk.LEFT, padx=2)
-        ttk.Button(button_frame, text="Elimina", command=self.delete_pace).pack(side=tk.LEFT, padx=2)
+        # Save/Cancel buttons
+        action_buttons = ttk.Frame(main_frame)
+        action_buttons.pack(fill=tk.X, pady=10)
         
-        # Bind per l'editing con doppio click
-        self.paces_tree.bind("<Double-1>", lambda e: self.edit_pace())
-    
-    def create_hr_tab(self, parent):
-        """Crea la scheda per le frequenze cardiache."""
-        # Istruzioni
-        ttk.Label(parent, text="Definisci le zone di frequenza cardiaca da utilizzare negli allenamenti. Puoi specificare:", 
-                font=("", 10, "bold")).pack(anchor=tk.W, padx=10, pady=5)
-        ttk.Label(parent, text="- Un valore singolo (es. 150)").pack(anchor=tk.W, padx=10)
-        ttk.Label(parent, text="- Un intervallo (es. 140-150)").pack(anchor=tk.W, padx=10)
-        ttk.Label(parent, text="- Una percentuale di un'altra frequenza (es. 80-90% max_hr)").pack(anchor=tk.W, padx=10, pady=5)
+        ttk.Button(action_buttons, text="Save Changes", command=self.save_changes).pack(side=tk.LEFT, padx=5)
+        ttk.Button(action_buttons, text="Cancel", command=self.destroy).pack(side=tk.RIGHT, padx=5)
         
-        # Frame per la tabella e i pulsanti
-        table_frame = ttk.Frame(parent)
-        table_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        # Bind double click to edit
+        self.steps_tree.bind("<Double-1>", lambda e: self.edit_step())
         
-        # Tabella delle frequenze cardiache
-        columns = ("name", "value")
-        self.hr_tree = ttk.Treeview(table_frame, columns=columns, show="headings", selectmode="browse")
-        self.hr_tree.heading("name", text="Nome")
-        self.hr_tree.heading("value", text="Valore")
-        self.hr_tree.column("name", width=150)
-        self.hr_tree.column("value", width=250)
-        self.hr_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        # Load steps into treeview
+        self.load_steps()
         
-        # Scrollbar per la tabella
-        scrollbar = ttk.Scrollbar(table_frame, orient=tk.VERTICAL, command=self.hr_tree.yview)
-        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-        self.hr_tree.configure(yscrollcommand=scrollbar.set)
+    def load_steps(self):
+        """Load the workout steps into the treeview"""
+        # Clear existing items
+        self.steps_tree.delete(*self.steps_tree.get_children())
         
-        # Carica le frequenze cardiache esistenti
-        for name, value in self.configuration.get("heart_rates", {}).items():
-            self.hr_tree.insert("", "end", values=(name, value))
+        # Add steps to treeview
+        self.add_steps_to_tree(self.workout_steps)
         
-        # Pulsanti per gestire le frequenze cardiache
-        button_frame = ttk.Frame(parent)
-        button_frame.pack(fill=tk.X, padx=10, pady=5)
+    def add_steps_to_tree(self, steps, parent=""):
+        """Add steps to the treeview recursively"""
+        for i, step in enumerate(steps):
+            # For each key in the step (there should be only one)
+            for step_type, step_data in step.items():
+                if step_type == 'repeat':
+                    # Get the number of repetitions
+                    iterations = step_data
+                    # Create a repeat node
+                    step_id = self.steps_tree.insert(parent, 'end', 
+                                                 values=("repeat", f"{iterations} times", ""),
+                                                 tags=("repeat",))
+                    
+                    # Process its children if any
+                    if len(step) > 1:  # There are child steps
+                        for child_key, child_steps in step.items():
+                            if child_key != 'repeat':
+                                self.add_steps_to_tree(child_steps, step_id)
+                else:
+                    # Regular step
+                    description = ""
+                    details = ""
+                    
+                    # Parse the step details
+                    if isinstance(step_data, str):
+                        details_parts = step_data.split("--", 1)
+                        details = details_parts[0].strip()
+                        if len(details_parts) > 1:
+                            description = details_parts[1].strip()
+                    elif isinstance(step_data, list):
+                        # This could be a nested repeat or something else
+                        details = "Complex step"
+                        
+                    # Insert into tree
+                    self.steps_tree.insert(parent, 'end', 
+                                        values=(step_type, details, description),
+                                        tags=(step_type,))
         
-        ttk.Button(button_frame, text="Aggiungi", command=self.add_hr).pack(side=tk.LEFT, padx=2)
-        ttk.Button(button_frame, text="Modifica", command=self.edit_hr).pack(side=tk.LEFT, padx=2)
-        ttk.Button(button_frame, text="Elimina", command=self.delete_hr).pack(side=tk.LEFT, padx=2)
+    def add_step(self):
+        """Add a new step to the workout"""
+        dialog = StepDialog(self)
         
-        # Bind per l'editing con doppio click
-        self.hr_tree.bind("<Double-1>", lambda e: self.edit_hr())
-    
-    def create_settings_tab(self, parent):
-        """Crea la scheda per margini e altre impostazioni."""
-        # Frame per i margini
-        margins_frame = ttk.LabelFrame(parent, text="Margini")
-        margins_frame.pack(fill=tk.X, padx=10, pady=10)
-        
-        # Margini per ritmi
-        ttk.Label(margins_frame, text="Margine più veloce (mm:ss):").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-        self.faster_var = tk.StringVar(value=self.configuration.get("margins", {}).get("faster", "0:03"))
-        ttk.Entry(margins_frame, textvariable=self.faster_var, width=10).grid(row=0, column=1, padx=5, pady=5)
-        
-        ttk.Label(margins_frame, text="Margine più lento (mm:ss):").grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
-        self.slower_var = tk.StringVar(value=self.configuration.get("margins", {}).get("slower", "0:03"))
-        ttk.Entry(margins_frame, textvariable=self.slower_var, width=10).grid(row=1, column=1, padx=5, pady=5)
-        
-        # Margini per frequenze cardiache
-        ttk.Label(margins_frame, text="Margine FC superiore (%):").grid(row=0, column=2, padx=5, pady=5, sticky=tk.W)
-        self.hr_up_var = tk.IntVar(value=self.configuration.get("margins", {}).get("hr_up", 5))
-        ttk.Entry(margins_frame, textvariable=self.hr_up_var, width=10).grid(row=0, column=3, padx=5, pady=5)
-        
-        ttk.Label(margins_frame, text="Margine FC inferiore (%):").grid(row=1, column=2, padx=5, pady=5, sticky=tk.W)
-        self.hr_down_var = tk.IntVar(value=self.configuration.get("margins", {}).get("hr_down", 5))
-        ttk.Entry(margins_frame, textvariable=self.hr_down_var, width=10).grid(row=1, column=3, padx=5, pady=5)
-        
-        # Prefisso nome
-        prefix_frame = ttk.LabelFrame(parent, text="Prefisso Nome")
-        prefix_frame.pack(fill=tk.X, padx=10, pady=10)
-        
-        ttk.Label(prefix_frame, text="Prefisso da aggiungere ai nomi degli allenamenti:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-        self.name_prefix_var = tk.StringVar(value=self.configuration.get("name_prefix", ""))
-        ttk.Entry(prefix_frame, textvariable=self.name_prefix_var, width=30).grid(row=0, column=1, padx=5, pady=5)
-    
-    def add_pace(self):
-        """Aggiunge un nuovo ritmo."""
-        # Chiedi nome e valore
-        name = simpledialog.askstring("Nuovo Ritmo", "Nome del ritmo:")
-        if not name:
-            return
+        if dialog.result:
+            step_type, step_details, step_description = dialog.result
             
-        value = simpledialog.askstring("Nuovo Ritmo", "Valore del ritmo (es. 4:30, 4:30-4:40, 10km in 45:00):")
-        if not value:
-            return
+            # Create the step
+            step = {step_type: step_details}
             
-        # Aggiungi alla tabella
-        self.paces_tree.insert("", "end", values=(name, value))
-    
-    def edit_pace(self):
-        """Modifica un ritmo esistente."""
-        # Ottieni il ritmo selezionato
-        selection = self.paces_tree.selection()
+            # Add description if provided
+            if step_description:
+                step[step_type] += f" -- {step_description}"
+                
+            # Add to steps list
+            self.workout_steps.append(step)
+            
+            # Reload the steps
+            self.load_steps()
+            
+    def add_repeat(self):
+        """Add a repeat section"""
+        dialog = RepeatDialog(self)
+        
+        if dialog.result:
+            iterations, steps = dialog.result
+            
+            # Create the repeat step
+            repeat_step = {'repeat': iterations}
+            
+            # Add the repeated steps
+            if steps:
+                repeat_step.update(steps)
+                
+            # Add to steps list
+            self.workout_steps.append(repeat_step)
+            
+            # Reload the steps
+            self.load_steps()
+            
+    def edit_step(self):
+        """Edit the selected step"""
+        selection = self.steps_tree.selection()
+        
         if not selection:
-            messagebox.showerror("Errore", "Nessun ritmo selezionato")
+            messagebox.showwarning("No Selection", "Please select a step to edit.")
             return
             
-        # Ottieni nome e valore attuali
-        item = self.paces_tree.item(selection[0])
-        values = item['values']
-        name = values[0]
-        value = values[1]
+        item = self.steps_tree.item(selection[0])
+        step_type, details, description = item['values']
         
-        # Chiedi nuovo valore
-        new_value = simpledialog.askstring("Modifica Ritmo", f"Nuovo valore per '{name}':", initialvalue=value)
-        if not new_value:
-            return
+        # Check if it's a repeat
+        if step_type == 'repeat':
+            # Extract iterations
+            iterations = int(details.split()[0])
             
-        # Aggiorna la tabella
-        self.paces_tree.item(selection[0], values=(name, new_value))
-    
-    def delete_pace(self):
-        """Elimina un ritmo."""
-        # Ottieni il ritmo selezionato
-        selection = self.paces_tree.selection()
+            # Get child steps
+            child_steps = []
+            for child_id in self.steps_tree.get_children(selection[0]):
+                child_item = self.steps_tree.item(child_id)
+                child_type, child_details, child_description = child_item['values']
+                child_step = {child_type: child_details}
+                if child_description:
+                    child_step[child_type] += f" -- {child_description}"
+                child_steps.append(child_step)
+                
+            # Open repeat dialog
+            dialog = RepeatDialog(self, iterations, child_steps)
+            
+            if dialog.result:
+                new_iterations, new_steps = dialog.result
+                
+                # Find the step in the workout_steps list
+                step_index = self.find_step_index(selection[0])
+                
+                if step_index is not None:
+                    # Update the repeat step
+                    self.workout_steps[step_index] = {'repeat': new_iterations}
+                    
+                    # Add the repeated steps
+                    if new_steps:
+                        self.workout_steps[step_index].update(new_steps)
+                        
+                    # Reload the steps
+                    self.load_steps()
+                    
+        else:
+            # Regular step
+            step_data = details
+            if description:
+                step_data += f" -- {description}"
+                
+            # Open step dialog
+            dialog = StepDialog(self, step_type, step_data)
+            
+            if dialog.result:
+                new_type, new_details, new_description = dialog.result
+                
+                # Find the step in the workout_steps list
+                step_index = self.find_step_index(selection[0])
+                
+                if step_index is not None:
+                    # Create the updated step
+                    new_step = {new_type: new_details}
+                    
+                    # Add description if provided
+                    if new_description:
+                        new_step[new_type] += f" -- {new_description}"
+                        
+                    # Update the step
+                    self.workout_steps[step_index] = new_step
+                    
+                    # Reload the steps
+                    self.load_steps()
+                    
+    def find_step_index(self, item_id):
+        """Find the index of a step in the workout_steps list based on the treeview item"""
+        # This is a simplified approach and may not work for complex nested structures
+        # For a real implementation, you'd need a more sophisticated algorithm
+        # to traverse both the treeview and the workout_steps list in parallel
+        
+        # Get the path of indices in the treeview
+        path = []
+        parent_id = item_id
+        
+        while parent_id:
+            parent_parent = self.steps_tree.parent(parent_id)
+            if parent_parent:
+                # Count position among siblings
+                siblings = self.steps_tree.get_children(parent_parent)
+                position = siblings.index(parent_id)
+                path.insert(0, position)
+            else:
+                # Root level item
+                siblings = self.steps_tree.get_children()
+                position = siblings.index(parent_id)
+                path.insert(0, position)
+                break
+            parent_id = parent_parent
+            
+        # Get the item at the path in workout_steps
+        if len(path) == 1:
+            # Simple case - item at root level
+            return path[0]
+        else:
+            # More complex case with nesting
+            # This simplified version just returns None for nested items
+            return None
+            
+    def delete_step(self):
+        """Delete the selected step"""
+        selection = self.steps_tree.selection()
+        
         if not selection:
-            messagebox.showerror("Errore", "Nessun ritmo selezionato")
+            messagebox.showwarning("No Selection", "Please select a step to delete.")
             return
             
-        # Ottieni il nome del ritmo
-        item = self.paces_tree.item(selection[0])
-        name = item['values'][0]
+        # Confirm deletion
+        if messagebox.askyesno("Confirm Delete", "Are you sure you want to delete this step?"):
+            # Find the step in the workout_steps list
+            step_index = self.find_step_index(selection[0])
+            
+            if step_index is not None:
+                # Delete the step
+                del self.workout_steps[step_index]
+                
+                # Reload the steps
+                self.load_steps()
+                
+    def move_step(self, direction):
+        """Move the selected step up or down"""
+        selection = self.steps_tree.selection()
         
-        # Chiedi conferma
-        if not messagebox.askyesno("Elimina Ritmo", f"Sei sicuro di voler eliminare il ritmo '{name}'?"):
-            return
-            
-        # Elimina dalla tabella
-        self.paces_tree.delete(selection[0])
-    
-    def add_hr(self):
-        """Aggiunge una nuova frequenza cardiaca."""
-        # Chiedi nome e valore
-        name = simpledialog.askstring("Nuova Frequenza Cardiaca", "Nome della frequenza cardiaca:")
-        if not name:
-            return
-            
-        value = simpledialog.askstring("Nuova Frequenza Cardiaca", "Valore della frequenza cardiaca (es. 150, 140-150, 80-90% max_hr):")
-        if not value:
-            return
-            
-        # Aggiungi alla tabella
-        self.hr_tree.insert("", "end", values=(name, value))
-    
-    def edit_hr(self):
-        """Modifica una frequenza cardiaca esistente."""
-        # Ottieni la frequenza cardiaca selezionata
-        selection = self.hr_tree.selection()
         if not selection:
-            messagebox.showerror("Errore", "Nessuna frequenza cardiaca selezionata")
+            messagebox.showwarning("No Selection", "Please select a step to move.")
             return
             
-        # Ottieni nome e valore attuali
-        item = self.hr_tree.item(selection[0])
-        values = item['values']
-        name = values[0]
-        value = values[1]
+        # Find the step in the workout_steps list
+        step_index = self.find_step_index(selection[0])
         
-        # Chiedi nuovo valore
-        new_value = simpledialog.askstring("Modifica Frequenza Cardiaca", f"Nuovo valore per '{name}':", initialvalue=value)
-        if not new_value:
-            return
+        if step_index is not None:
+            # Calculate the new index
+            new_index = step_index + direction
             
-        # Aggiorna la tabella
-        self.hr_tree.item(selection[0], values=(name, new_value))
-    
-    def delete_hr(self):
-        """Elimina una frequenza cardiaca."""
-        # Ottieni la frequenza cardiaca selezionata
-        selection = self.hr_tree.selection()
-        if not selection:
-            messagebox.showerror("Errore", "Nessuna frequenza cardiaca selezionata")
-            return
+            # Check if the new index is valid
+            if 0 <= new_index < len(self.workout_steps):
+                # Swap the steps
+                self.workout_steps[step_index], self.workout_steps[new_index] = \
+                    self.workout_steps[new_index], self.workout_steps[step_index]
+                
+                # Reload the steps
+                self.load_steps()
+                
+                # Select the moved item
+                children = self.steps_tree.get_children()
+                if 0 <= new_index < len(children):
+                    self.steps_tree.selection_set(children[new_index])
+                    
+    def save_changes(self):
+        """Save changes to the workout"""
+        # Create a comment for the workout description
+        description = self.description_var.get().strip()
+        if description:
+            # Add the description as a comment
+            self.workout_data[self.workout_name] = self.workout_steps
             
-        # Ottieni il nome della frequenza cardiaca
-        item = self.hr_tree.item(selection[0])
-        name = item['values'][0]
-        
-        # Chiedi conferma
-        if not messagebox.askyesno("Elimina Frequenza Cardiaca", f"Sei sicuro di voler eliminare la frequenza cardiaca '{name}'?"):
-            return
+            # Add a comment to the workout key
+            yaml_str = yaml.dump({self.workout_name: self.workout_steps}, default_flow_style=False)
+            first_line = yaml_str.split('\n', 1)[0]
+            commented_first_line = f"{first_line} # {description}"
             
-        # Elimina dalla tabella
-        self.hr_tree.delete(selection[0])
-    
-    def confirm(self):
-        """Conferma le modifiche e chiude la finestra."""
-        # Aggiorna la configurazione con i valori delle tabelle
-        self.configuration["paces"] = {}
-        for item_id in self.paces_tree.get_children():
-            values = self.paces_tree.item(item_id)['values']
-            self.configuration["paces"][values[0]] = values[1]
+            # Split the remaining lines
+            remaining_lines = yaml_str.split('\n', 1)[1] if '\n' in yaml_str else ""
+            
+            # Reconstruct with comment
+            yaml_str = f"{commented_first_line}\n{remaining_lines}" if remaining_lines else commented_first_line
+            
+            # Parse the YAML string back to an object
+            parsed = yaml.safe_load(yaml_str)
+            
+            # Update the workout data
+            for k, v in parsed.items():
+                self.workout_data[k] = v
+        else:
+            self.workout_data[self.workout_name] = self.workout_steps
         
-        self.configuration["heart_rates"] = {}
-        for item_id in self.hr_tree.get_children():
-            values = self.hr_tree.item(item_id)['values']
-            self.configuration["heart_rates"][values[0]] = values[1]
-        
-        # Aggiorna i margini
-        self.configuration["margins"] = {
-            "faster": self.faster_var.get(),
-            "slower": self.slower_var.get(),
-            "hr_up": self.hr_up_var.get(),
-            "hr_down": self.hr_down_var.get()
-        }
-        
-        # Aggiorna il prefisso nome
-        self.configuration["name_prefix"] = self.name_prefix_var.get()
-        
-        # Imposta il risultato e chiude
-        self.result = self.configuration
-        self.destroy()
-    
-    def cancel(self):
-        """Annulla le modifiche e chiude la finestra."""
+        # Close the dialog
         self.destroy()
 
-class StepEditor(tk.Toplevel):
-    """Finestra per la modifica di uno step."""
-    def __init__(self, parent, config, step_type=None, step_value=None):
+
+class StepDialog(tk.Toplevel):
+    """Dialog for adding or editing a workout step"""
+    def __init__(self, parent, step_type="", step_data=""):
         super().__init__(parent)
-        self.title("Editor Step")
-        self.geometry("600x400")
-        self.resizable(True, True)
-        self.transient(parent)  # Rende la finestra modale
-        self.grab_set()  # Impedisce di interagire con la finestra principale
         
-        # Risultato
         self.result = None
         
-        # Riferimento alla configurazione
-        self.configuration = config
+        self.title("Edit Step" if step_type else "Add Step")
+        self.geometry("500x400")
+        self.resizable(False, False)
+        self.transient(parent)
+        self.grab_set()
         
-        # Frame principale
-        main_frame = ttk.Frame(self)
-        main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        # Parse step data
+        details = step_data
+        description = ""
         
-        # Selezione del tipo di step
-        ttk.Label(main_frame, text="Tipo di step:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        if " -- " in step_data:
+            details, description = step_data.split(" -- ", 1)
         
-        self.step_type_var = tk.StringVar(value=step_type or "interval")
-        step_types = ["interval", "warmup", "cooldown", "recovery", "rest", "other", "repeat 2", "repeat 3", "repeat 4", "repeat 5", "repeat 6", "repeat 7", "repeat 8", "repeat 9", "repeat 10"]
-        step_type_combo = ttk.Combobox(main_frame, textvariable=self.step_type_var, values=step_types, state="readonly")
-        step_type_combo.grid(row=0, column=1, padx=5, pady=5, sticky=(tk.W, tk.E))
-        step_type_combo.bind("<<ComboboxSelected>>", self.on_step_type_changed)
+        # Create widgets
+        frame = ttk.Frame(self, padding=10)
+        frame.pack(fill=tk.BOTH, expand=True)
         
-        # Dati specifici per i vari tipi di step
-        self.step_frame = ttk.LabelFrame(main_frame, text="Dettagli Step")
-        self.step_frame.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky=(tk.W, tk.E, tk.N, tk.S))
-        main_frame.columnconfigure(1, weight=1)
-        main_frame.rowconfigure(1, weight=1)
+        # Step type selection
+        ttk.Label(frame, text="Step Type:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        self.step_type_var = tk.StringVar(value=step_type)
+        step_types = ["warmup", "interval", "recovery", "cooldown", "rest", "other"]
+        step_type_combo = ttk.Combobox(frame, textvariable=self.step_type_var, values=step_types, width=20)
+        step_type_combo.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
         
-        # Variabili per i dettagli dello step
-        self.duration_type_var = tk.StringVar(value="time")
-        self.duration_value_var = tk.StringVar()
-        self.target_type_var = tk.StringVar(value="no_target")
+        # Step details
+        ttk.Label(frame, text="Step Details:").grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
+        self.details_var = tk.StringVar(value=details)
+        ttk.Entry(frame, textvariable=self.details_var, width=40).grid(row=1, column=1, padx=5, pady=5, sticky=tk.W)
+        
+        # Step description
+        ttk.Label(frame, text="Description:").grid(row=2, column=0, padx=5, pady=5, sticky=tk.W)
+        self.description_var = tk.StringVar(value=description)
+        ttk.Entry(frame, textvariable=self.description_var, width=40).grid(row=2, column=1, padx=5, pady=5, sticky=tk.W)
+        
+        # Help text for step details
+        help_text = ("Step Details Examples:\n"
+                   "- Duration: '10min', '1h', '30s'\n"
+                   "- Distance: '400m', '5km'\n"
+                   "- Pace: '@ 4:30', '@ marathon'\n"
+                   "- Button: 'lap-button'\n"
+                   "- Combined: '5km @ marathon', '400m @ 4:30', '10min @hr lt_hr'")
+                   
+        help_label = ttk.Label(frame, text=help_text, wraplength=480, justify=tk.LEFT)
+        help_label.grid(row=3, column=0, columnspan=2, padx=5, pady=5, sticky=tk.W)
+        
+        # Builder section
+        builder_frame = ttk.LabelFrame(frame, text="Step Builder")
+        builder_frame.grid(row=4, column=0, columnspan=2, padx=5, pady=5, sticky=tk.W+tk.E)
+        
+        # End condition
+        ttk.Label(builder_frame, text="End Condition:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        self.end_condition_var = tk.StringVar(value="lap-button")
+        end_conditions = ["lap-button", "time", "distance"]
+        ttk.Combobox(builder_frame, textvariable=self.end_condition_var, values=end_conditions, width=15).grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
+        
+        # End value
+        ttk.Label(builder_frame, text="Value:").grid(row=0, column=2, padx=5, pady=5, sticky=tk.W)
+        self.end_value_var = tk.StringVar()
+        ttk.Entry(builder_frame, textvariable=self.end_value_var, width=10).grid(row=0, column=3, padx=5, pady=5, sticky=tk.W)
+        
+        # Target type
+        ttk.Label(builder_frame, text="Target:").grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
+        self.target_type_var = tk.StringVar(value="none")
+        target_types = ["none", "pace", "heart rate"]
+        ttk.Combobox(builder_frame, textvariable=self.target_type_var, values=target_types, width=15).grid(row=1, column=1, padx=5, pady=5, sticky=tk.W)
+        
+        # Target value
+        ttk.Label(builder_frame, text="Value:").grid(row=1, column=2, padx=5, pady=5, sticky=tk.W)
         self.target_value_var = tk.StringVar()
-        self.description_var = tk.StringVar()
+        ttk.Entry(builder_frame, textvariable=self.target_value_var, width=20).grid(row=1, column=3, padx=5, pady=5, sticky=tk.W)
         
-        # Inizializza con i valori esistenti
-        if step_value:
-            self.parse_step_value(step_value)
+        # Apply button
+        ttk.Button(builder_frame, text="Generate Step Details", command=self.generate_step).grid(row=2, column=0, columnspan=4, padx=5, pady=5)
         
-        # Crea i widget per i dettagli dello step
-        self.create_step_details()
+        # Buttons
+        button_frame = ttk.Frame(frame)
+        button_frame.grid(row=5, column=0, columnspan=2, pady=10)
         
-        # Pulsanti di conferma e annullamento
-        button_frame = ttk.Frame(self)
-        button_frame.pack(fill=tk.X, padx=10, pady=10)
+        ttk.Button(button_frame, text="OK", command=self.ok).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Cancel", command=self.cancel).pack(side=tk.LEFT, padx=5)
         
-        ttk.Button(button_frame, text="Annulla", command=self.cancel).pack(side=tk.RIGHT, padx=5)
-        ttk.Button(button_frame, text="OK", command=self.confirm).pack(side=tk.RIGHT, padx=5)
-    
-    def on_step_type_changed(self, event):
-        """Gestisce il cambio del tipo di step."""
-        # Ricrea i dettagli dello step
-        self.create_step_details()
-    
-    def parse_step_value(self, step_value):
-        """Analizza il valore di uno step e imposta le variabili."""
-        if not step_value:
+        # Center the dialog
+        self.center_window()
+        
+        # Start the dialog
+        self.wait_window()
+        
+    def center_window(self):
+        """Center the dialog on the parent window"""
+        self.update_idletasks()
+        width = self.winfo_width()
+        height = self.winfo_height()
+        x = (self.master.winfo_rootx() + (self.master.winfo_width() // 2)) - (width // 2)
+        y = (self.master.winfo_rooty() + (self.master.winfo_height() // 2)) - (height // 2)
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        
+    def generate_step(self):
+        """Generate step details from the builder fields"""
+        end_condition = self.end_condition_var.get()
+        end_value = self.end_value_var.get()
+        target_type = self.target_type_var.get()
+        target_value = self.target_value_var.get()
+        
+        step_details = ""
+        
+        # Add end condition
+        if end_condition == "lap-button":
+            step_details = "lap-button"
+        elif end_condition == "time":
+            if not end_value:
+                messagebox.showerror("Error", "Please enter a time value", parent=self)
+                return
+            step_details = end_value
+        elif end_condition == "distance":
+            if not end_value:
+                messagebox.showerror("Error", "Please enter a distance value", parent=self)
+                return
+            step_details = end_value
+            
+        # Add target
+        if target_type == "pace" and target_value:
+            step_details += f" @ {target_value}"
+        elif target_type == "heart rate" and target_value:
+            step_details += f" @hr {target_value}"
+            
+        # Update the details field
+        self.details_var.set(step_details)
+        
+    def ok(self):
+        """Handle OK button click"""
+        step_type = self.step_type_var.get().strip()
+        details = self.details_var.get().strip()
+        description = self.description_var.get().strip()
+        
+        if not step_type:
+            messagebox.showerror("Error", "Step type cannot be empty", parent=self)
             return
             
-        # Converte in stringa
-        step_str = str(step_value)
-        
-        # Cerca target di tipo pace o heartrate
-        if " @ " in step_str:
-            parts = step_str.split(" @ ")
-            duration = parts[0]
-            target = parts[1]
-            self.target_type_var.set("pace")
-            self.target_value_var.set(target)
-            
-            # Cerca descrizione
-            if " -- " in target:
-                target_parts = target.split(" -- ")
-                self.target_value_var.set(target_parts[0])
-                self.description_var.set(target_parts[1])
-                
-        elif " @hr " in step_str:
-            parts = step_str.split(" @hr ")
-            duration = parts[0]
-            target = parts[1]
-            self.target_type_var.set("hr")
-            self.target_value_var.set(target)
-            
-            # Cerca descrizione
-            if " -- " in target:
-                target_parts = target.split(" -- ")
-                self.target_value_var.set(target_parts[0])
-                self.description_var.set(target_parts[1])
-                
-        elif " in " in step_str:
-            parts = step_str.split(" in ")
-            duration = parts[0]
-            target = parts[1]
-            self.target_type_var.set("time")
-            self.target_value_var.set(target)
-            
-            # Cerca descrizione
-            if " -- " in target:
-                target_parts = target.split(" -- ")
-                self.target_value_var.set(target_parts[0])
-                self.description_var.set(target_parts[1])
-                
-        else:
-            duration = step_str
-            self.target_type_var.set("no_target")
-            
-            # Cerca descrizione
-            if " -- " in duration:
-                duration_parts = duration.split(" -- ")
-                duration = duration_parts[0]
-                self.description_var.set(duration_parts[1])
-        
-        # Determina il tipo di durata (tempo, distanza, lap button)
-        if duration.endswith("min") or duration.endswith("s") or duration.endswith("h") or ":" in duration:
-            self.duration_type_var.set("time")
-        elif duration.endswith("km") or duration.endswith("m"):
-            self.duration_type_var.set("distance")
-        elif duration == "lap-button":
-            self.duration_type_var.set("lap_button")
-        
-        # Imposta il valore della durata
-        self.duration_value_var.set(duration)
-    
-    def create_step_details(self):
-        """Crea i widget per i dettagli dello step."""
-        # Pulisci il frame
-        for widget in self.step_frame.winfo_children():
-            widget.destroy()
-        
-        # Se è una ripetizione, non mostrare i dettagli
-        if self.step_type_var.get().startswith("repeat"):
-            ttk.Label(self.step_frame, text="Le ripetizioni non hanno dettagli aggiuntivi.").pack(padx=10, pady=10)
-            ttk.Label(self.step_frame, text="Aggiungi gli step all'interno della ripetizione dopo averla creata.").pack(padx=10)
+        if not details:
+            messagebox.showerror("Error", "Step details cannot be empty", parent=self)
             return
-        
-        # Frame per la durata
-        duration_frame = ttk.LabelFrame(self.step_frame, text="Durata/Distanza")
-        duration_frame.pack(fill=tk.X, padx=10, pady=10)
-        
-        # Tipo di durata
-        ttk.Label(duration_frame, text="Tipo:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-        duration_types = [("Tempo", "time"), ("Distanza", "distance"), ("Pulsante Lap", "lap_button")]
-        for i, (text, value) in enumerate(duration_types):
-            ttk.Radiobutton(duration_frame, text=text, variable=self.duration_type_var, value=value, 
-                           command=self.update_duration_widgets).grid(row=0, column=i+1, padx=5, pady=5)
-        
-        # Frame per i dettagli della durata
-        self.duration_details_frame = ttk.Frame(duration_frame)
-        self.duration_details_frame.grid(row=1, column=0, columnspan=4, padx=5, pady=5, sticky=(tk.W, tk.E))
-        
-        # Frame per il target
-        target_frame = ttk.LabelFrame(self.step_frame, text="Target")
-        target_frame.pack(fill=tk.X, padx=10, pady=10)
-        
-        # Tipo di target
-        ttk.Label(target_frame, text="Tipo di Target:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-        target_types = [("Nessun Target", "no_target"), ("Ritmo", "pace"), ("Frequenza Cardiaca", "hr"), ("Tempo", "time")]
-        for i, (text, value) in enumerate(target_types):
-            ttk.Radiobutton(target_frame, text=text, variable=self.target_type_var, value=value, 
-                           command=self.update_target_widgets).grid(row=0, column=i+1, padx=5, pady=5)
-        
-        # Frame per i dettagli del target
-        self.target_details_frame = ttk.Frame(target_frame)
-        self.target_details_frame.grid(row=1, column=0, columnspan=5, padx=5, pady=5, sticky=(tk.W, tk.E))
-        
-        # Descrizione
-        description_frame = ttk.LabelFrame(self.step_frame, text="Descrizione")
-        description_frame.pack(fill=tk.X, padx=10, pady=10)
-        
-        ttk.Entry(description_frame, textvariable=self.description_var, width=50).pack(fill=tk.X, padx=5, pady=5, expand=True)
-        
-        # Inizializza i widget della durata e del target
-        self.update_duration_widgets()
-        self.update_target_widgets()
-    
-    def update_duration_widgets(self):
-        """Aggiorna i widget della durata in base al tipo selezionato."""
-        # Pulisci il frame
-        for widget in self.duration_details_frame.winfo_children():
-            widget.destroy()
-        
-        # Se è lap button, non mostrare altri widget
-        if self.duration_type_var.get() == "lap_button":
-            self.duration_value_var.set("lap-button")
-            return
-        
-        # Se è tempo, mostra le opzioni per il tempo
-        if self.duration_type_var.get() == "time":
-            ttk.Label(self.duration_details_frame, text="Durata:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-            ttk.Entry(self.duration_details_frame, textvariable=self.duration_value_var, width=15).grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
-            ttk.Label(self.duration_details_frame, text="(es. 30min, 1h, 45s, 1:30)").grid(row=0, column=2, padx=5, pady=5, sticky=tk.W)
-        
-        # Se è distanza, mostra le opzioni per la distanza
-        elif self.duration_type_var.get() == "distance":
-            ttk.Label(self.duration_details_frame, text="Distanza:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-            ttk.Entry(self.duration_details_frame, textvariable=self.duration_value_var, width=15).grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
-            ttk.Label(self.duration_details_frame, text="(es. 5km, 800m)").grid(row=0, column=2, padx=5, pady=5, sticky=tk.W)
-    
-    
-    def update_target_widgets(self):
-        """Aggiorna i widget del target in base al tipo selezionato."""
-        # Pulisci il frame
-        for widget in self.target_details_frame.winfo_children():
-            widget.destroy()
-        
-        # Se è nessun target, non mostrare altri widget
-        if self.target_type_var.get() == "no_target":
-            self.target_value_var.set("")
-            return
-        
-        # Se è ritmo, mostra le opzioni per il ritmo
-        if self.target_type_var.get() == "pace":
-            ttk.Label(self.target_details_frame, text="Ritmo:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
             
-            # Combobox con i ritmi predefiniti
-            pace_values = [""] + list(self.configuration.get("paces", {}).keys())
-            pace_combo = ttk.Combobox(self.target_details_frame, values=pace_values, width=15)
-            pace_combo.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
-            pace_combo.bind("<<ComboboxSelected>>", lambda e: self.target_value_var.set(pace_combo.get()))
-            
-            # Entry per inserimento manuale
-            ttk.Label(self.target_details_frame, text="o inserisci:").grid(row=0, column=2, padx=5, pady=5, sticky=tk.W)
-            ttk.Entry(self.target_details_frame, textvariable=self.target_value_var, width=15).grid(row=0, column=3, padx=5, pady=5, sticky=tk.W)
-            ttk.Label(self.target_details_frame, text="(es. 4:30, 4:30-4:40, 80% marathon)").grid(row=0, column=4, padx=5, pady=5, sticky=tk.W)
-        
-        # Se è frequenza cardiaca, mostra le opzioni per la frequenza cardiaca
-        elif self.target_type_var.get() == "hr":
-            ttk.Label(self.target_details_frame, text="Frequenza Cardiaca:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-            
-            # Combobox con le frequenze cardiache predefinite
-            hr_values = [""] + list(self.configuration.get("heart_rates", {}).keys())
-            hr_combo = ttk.Combobox(self.target_details_frame, values=hr_values, width=15)
-            hr_combo.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
-            hr_combo.bind("<<ComboboxSelected>>", lambda e: self.target_value_var.set(hr_combo.get()))
-            
-            # Entry per inserimento manuale
-            ttk.Label(self.target_details_frame, text="o inserisci:").grid(row=0, column=2, padx=5, pady=5, sticky=tk.W)
-            ttk.Entry(self.target_details_frame, textvariable=self.target_value_var, width=15).grid(row=0, column=3, padx=5, pady=5, sticky=tk.W)
-            ttk.Label(self.target_details_frame, text="(es. 150, 140-150, zone_2)").grid(row=0, column=4, padx=5, pady=5, sticky=tk.W)
-        
-        # Se è tempo, mostra le opzioni per il tempo
-        elif self.target_type_var.get() == "time":
-            ttk.Label(self.target_details_frame, text="Tempo:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-            ttk.Entry(self.target_details_frame, textvariable=self.target_value_var, width=15).grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
-            ttk.Label(self.target_details_frame, text="(es. 4:30, 45:00)").grid(row=0, column=2, padx=5, pady=5, sticky=tk.W)
-    
-    def build_step_value(self):
-        """Costruisce il valore dello step in base alle selezioni dell'utente."""
-        # Se è una ripetizione, ritorna None (il valore sarà gestito esternamente)
-        if self.step_type_var.get().startswith("repeat"):
-            return None
-        
-        # Costruisci la stringa del valore
-        value = self.duration_value_var.get()
-        
-        # Aggiungi il target se presente
-        if self.target_type_var.get() == "pace" and self.target_value_var.get():
-            value += f" @ {self.target_value_var.get()}"
-        elif self.target_type_var.get() == "hr" and self.target_value_var.get():
-            value += f" @hr {self.target_value_var.get()}"
-        elif self.target_type_var.get() == "time" and self.target_value_var.get():
-            value += f" in {self.target_value_var.get()}"
-        
-        # Aggiungi la descrizione se presente
-        if self.description_var.get():
-            value += f" -- {self.description_var.get()}"
-        
-        return value
-    
-    def confirm(self):
-        """Conferma le modifiche e chiude la finestra."""
-        # Ottieni il tipo di step
-        step_type = self.step_type_var.get()
-        
-        # Costruisci il valore dello step
-        step_value = self.build_step_value()
-        
-        # Imposta il risultato e chiude
-        self.result = (step_type, step_value)
+        self.result = (step_type, details, description)
         self.destroy()
-    
+        
     def cancel(self):
-        """Annulla le modifiche e chiude la finestra."""
+        """Handle Cancel button click"""
         self.destroy()
+
+
+class RepeatDialog(tk.Toplevel):
+    """Dialog for adding or editing a repeat section"""
+    def __init__(self, parent, iterations=0, steps=None):
+        super().__init__(parent)
+        
+        self.result = None
+        self.steps = steps or []
+        
+        self.title("Edit Repeat" if iterations else "Add Repeat")
+        self.geometry("600x500")
+        self.resizable(True, True)
+        self.transient(parent)
+        self.grab_set()
+        
+        # Create widgets
+        frame = ttk.Frame(self, padding=10)
+        frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Number of iterations
+        ttk.Label(frame, text="Number of Iterations:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        self.iterations_var = tk.IntVar(value=iterations or 1)
+        ttk.Spinbox(frame, from_=1, to=100, textvariable=self.iterations_var, width=5).grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
+        
+        # Steps frame
+        steps_frame = ttk.LabelFrame(frame, text="Repeated Steps")
+        steps_frame.grid(row=1, column=0, columnspan=2, padx=5, pady=5, sticky=tk.W+tk.E+tk.N+tk.S)
+        steps_frame.columnconfigure(0, weight=1)
+        steps_frame.rowconfigure(0, weight=1)
+        
+        # Steps treeview
+        self.steps_tree = ttk.Treeview(steps_frame, columns=("type", "details", "description"), show="headings")
+        self.steps_tree.heading("type", text="Type")
+        self.steps_tree.heading("details", text="Details")
+        self.steps_tree.heading("description", text="Description")
+        self.steps_tree.column("type", width=100)
+        self.steps_tree.column("details", width=200)
+        self.steps_tree.column("description", width=200)
+        
+        # Add scrollbar
+        scrollbar = ttk.Scrollbar(steps_frame, orient="vertical", command=self.steps_tree.yview)
+        scrollbar.grid(row=0, column=1, sticky=tk.N+tk.S)
+        self.steps_tree.configure(yscrollcommand=scrollbar.set)
+        self.steps_tree.grid(row=0, column=0, sticky=tk.W+tk.E+tk.N+tk.S)
+        
+        # Buttons for steps
+        steps_buttons = ttk.Frame(steps_frame)
+        steps_buttons.grid(row=1, column=0, columnspan=2, pady=5)
+        
+        ttk.Button(steps_buttons, text="Add Step", command=self.add_step).pack(side=tk.LEFT, padx=5)
+        ttk.Button(steps_buttons, text="Edit Step", command=self.edit_step).pack(side=tk.LEFT, padx=5)
+        ttk.Button(steps_buttons, text="Delete Step", command=self.delete_step).pack(side=tk.LEFT, padx=5)
+        ttk.Button(steps_buttons, text="Move Up", command=lambda: self.move_step(-1)).pack(side=tk.LEFT, padx=5)
+        ttk.Button(steps_buttons, text="Move Down", command=lambda: self.move_step(1)).pack(side=tk.LEFT, padx=5)
+        
+        # OK/Cancel buttons
+        button_frame = ttk.Frame(frame)
+        button_frame.grid(row=2, column=0, columnspan=2, pady=10)
+        
+        ttk.Button(button_frame, text="OK", command=self.ok).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Cancel", command=self.cancel).pack(side=tk.LEFT, padx=5)
+        
+        # Configure grid
+        frame.columnconfigure(1, weight=1)
+        frame.rowconfigure(1, weight=1)
+        
+        # Populate steps
+        self.load_steps()
+        
+        # Center the dialog
+        self.update_idletasks()
+        width = self.winfo_width()
+        height = self.winfo_height()
+        x = (self.master.winfo_rootx() + (self.master.winfo_width() // 2)) - (width // 2)
+        y = (self.master.winfo_rooty() + (self.master.winfo_height() // 2)) - (height // 2)
+        self.geometry(f"{width}x{height}+{x}+{y}")
+        
+        # Bind double click to edit
+        self.steps_tree.bind("<Double-1>", lambda e: self.edit_step())
+        
+        # Start the dialog
+        self.wait_window()
+        
+    def load_steps(self):
+        """Load the steps into the treeview"""
+        # Clear existing items
+        self.steps_tree.delete(*self.steps_tree.get_children())
+        
+        # Add steps to treeview
+        for i, step in enumerate(self.steps):
+            for step_type, step_data in step.items():
+                description = ""
+                details = step_data
+                
+                if isinstance(step_data, str) and " -- " in step_data:
+                    details, description = step_data.split(" -- ", 1)
+                
+                self.steps_tree.insert('', 'end', values=(step_type, details, description))
+        
+    def add_step(self):
+        """Add a new step to the repeat"""
+        dialog = StepDialog(self)
+        
+        if dialog.result:
+            step_type, step_details, step_description = dialog.result
+            
+            # Create the step
+            step = {step_type: step_details}
+            
+            # Add description if provided
+            if step_description:
+                step[step_type] += f" -- {step_description}"
+                
+            # Add to steps list
+            self.steps.append(step)
+            
+            # Reload the steps
+            self.load_steps()
+            
+    def edit_step(self):
+        """Edit the selected step"""
+        selection = self.steps_tree.selection()
+        
+        if not selection:
+            messagebox.showwarning("No Selection", "Please select a step to edit.")
+            return
+            
+        item = self.steps_tree.item(selection[0])
+        step_type, details, description = item['values']
+        
+        # Prepare step data
+        step_data = details
+        if description:
+            step_data += f" -- {description}"
+            
+        # Open step dialog
+        dialog = StepDialog(self, step_type, step_data)
+        
+        if dialog.result:
+            new_type, new_details, new_description = dialog.result
+            
+            # Get the index of the selected step
+            index = self.steps_tree.index(selection[0])
+            
+            # Create the updated step
+            new_step = {new_type: new_details}
+            
+            # Add description if provided
+            if new_description:
+                new_step[new_type] += f" -- {new_description}"
+                
+            # Update the step
+            self.steps[index] = new_step
+            
+            # Reload the steps
+            self.load_steps()
+            
+    def delete_step(self):
+        """Delete the selected step"""
+        selection = self.steps_tree.selection()
+        
+        if not selection:
+            messagebox.showwarning("No Selection", "Please select a step to delete.")
+            return
+            
+        # Confirm deletion
+        if messagebox.askyesno("Confirm Delete", "Are you sure you want to delete this step?"):
+            # Get the index of the selected step
+            index = self.steps_tree.index(selection[0])
+            
+            # Delete the step
+            del self.steps[index]
+            
+            # Reload the steps
+            self.load_steps()
+            
+    def move_step(self, direction):
+        """Move the selected step up or down"""
+        selection = self.steps_tree.selection()
+        
+        if not selection:
+            messagebox.showwarning("No Selection", "Please select a step to move.")
+            return
+            
+        # Get the index of the selected step
+        index = self.steps_tree.index(selection[0])
+        
+        # Calculate the new index
+        new_index = index + direction
+        
+        # Check if the new index is valid
+        if 0 <= new_index < len(self.steps):
+            # Swap the steps
+            self.steps[index], self.steps[new_index] = self.steps[new_index], self.steps[index]
+            
+            # Reload the steps
+            self.load_steps()
+            
+            # Select the moved item
+            children = self.steps_tree.get_children()
+            if 0 <= new_index < len(children):
+                self.steps_tree.selection_set(children[new_index])
+            
+    def ok(self):
+        """Handle OK button click"""
+        iterations = self.iterations_var.get()
+        
+        if iterations <= 0:
+            messagebox.showerror("Error", "Number of iterations must be positive", parent=self)
+            return
+            
+        self.result = (iterations, self.steps)
+        self.destroy()
+        
+    def cancel(self):
+        """Handle Cancel button click"""
+        self.destroy()
+
+# Function to integrate this editor into the main Garmin Planner GUI
+def add_workout_editor_tab(notebook, parent):
+    """Add a tab to open the workout editor from the main GUI"""
+    editor_frame = ttk.Frame(notebook)
+    notebook.add(editor_frame, text="Workout Editor")
+    
+    ttk.Label(editor_frame, text="Workout Plan Editor", font=("", 12, "bold")).pack(pady=10)
+    
+    ttk.Label(editor_frame, text="Create and edit workout plans in YAML format").pack(pady=5)
+    
+    # Buttons frame
+    buttons_frame = ttk.Frame(editor_frame)
+    buttons_frame.pack(pady=20)
+    
+    ttk.Button(buttons_frame, text="New Workout Plan", 
+             command=lambda: open_workout_editor(parent)).pack(pady=5, fill=tk.X)
+    
+    ttk.Button(buttons_frame, text="Open Existing Plan", 
+             command=lambda: open_workout_editor(parent, select_file=True)).pack(pady=5, fill=tk.X)
+    
+    # Tips and instructions
+    tips_frame = ttk.LabelFrame(editor_frame, text="Tips")
+    tips_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+    
+    tips_text = (
+        "- Create workout plans with a visual editor\n"
+        "- Define paces and heart rates for your training plan\n"
+        "- Create structured workouts with intervals, repeats, etc.\n"
+        "- Save as YAML format compatible with Garmin Planner\n\n"
+        "Workout naming convention:\n"
+        "W##S## Description (e.g., 'W01S01 Easy Run')\n"
+        "Where W## is the week number and S## is the session number."
+    )
+    
+    ttk.Label(tips_frame, text=tips_text, justify=tk.LEFT, wraplength=500).pack(padx=10, pady=10)
+    
+    return editor_frame
+
+def open_workout_editor(parent, select_file=False):
+    """Open the workout editor with an optional file selection"""
+    file_path = None
+    
+    if select_file:
+        file_path = filedialog.askopenfilename(
+            title="Open Workout Plan",
+            filetypes=[("YAML files", "*.yaml *.yml"), ("All files", "*.*")],
+            initialdir=os.path.join(os.path.dirname(os.path.abspath(__file__)), "training_plans")
+        )
+        
+        if not file_path:  # User cancelled
+            return
+    
+    # Create and show the workout editor
+    editor = WorkoutEditor(parent, file_path)
+    
+if __name__ == "__main__":
+    # Stand-alone testing
+    root = tk.Tk()
+    root.title("Workout Editor Test")
+    
+    # Create a button to open the editor
+    ttk.Button(root, text="Open Workout Editor", 
+             command=lambda: WorkoutEditor(root)).pack(padx=20, pady=20)
+    
+    root.mainloop()

@@ -1,0 +1,18 @@
+config:
+  heart_rates: {}
+  paces:
+    Zona0: 7:05-6.55
+    Zona1: 6:35-6:25
+    Zona2: 6:25-6:15
+    Zona3: 6:05-5:55
+    Zona4: 5:25-5:35
+    Zona5: 4:45-4:55
+  margins:
+    faster: 0:03
+    slower: 0:03
+    hr_up: 5
+    hr_down: 5
+  name_prefix: ''
+W01S01 30' @6:20 + 4 allunghi:
+- warmup: 30min @ Zona1 -- Corsa
+- cooldown: lap-button
