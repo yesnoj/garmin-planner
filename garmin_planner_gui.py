@@ -53,21 +53,15 @@ class GarminPlannerGUI(tk.Tk):
         self.create_fartlek_tab()
         self.create_log_tab()
         
+        # Aggiungi il tab dell'editor di workout
+        workout_editor.add_workout_editor_tab(self.notebook, self)
+        
         # Common settings frame
         self.create_settings_frame()
         
         # Status bar
         self.status_bar = ttk.Label(self, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
-
-        self.create_login_tab()
-        self.create_import_tab()
-        self.create_export_tab()
-        self.create_schedule_tab()
-        self.create_fartlek_tab()
-        self.create_log_tab()
-
-        workout_editor.add_workout_editor_tab(self.notebook, self)
 
 
     def create_settings_frame(self):
