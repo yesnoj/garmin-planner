@@ -8,6 +8,7 @@ import re
 import yaml
 import threading
 import logging
+import json
 import workout_editor
 
 from datetime import datetime, timedelta
@@ -23,22 +24,39 @@ logging.basicConfig(
 logger = logging.getLogger("GarminPlannerGUI")
 
 # Paths
-DEFAULT_OAUTH_FOLDER = os.path.expanduser("~/.garth")
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+DEFAULT_OAUTH_FOLDER = os.path.join(SCRIPT_DIR, "oauth")
+CONFIG_FILE = os.path.join(SCRIPT_DIR, "config.json")
+CACHE_DIR = os.path.join(SCRIPT_DIR, "cache")
+WORKOUTS_CACHE_FILE = os.path.join(CACHE_DIR, "workouts_cache.json")
 
 class GarminPlannerGUI(tk.Tk):
     def __init__(self):
         super().__init__()
+
+        if not os.path.exists(CACHE_DIR):
+            os.makedirs(CACHE_DIR, exist_ok=True)
         
         self.title("Garmin Planner")
         self.geometry("800x600")
         
         # Variables
-        self.oauth_folder = tk.StringVar(value=DEFAULT_OAUTH_FOLDER)
+        # Carica l'ultima cartella OAuth usata dal file di configurazione, se esiste
+        try:
+            if os.path.exists(CONFIG_FILE):
+                with open(CONFIG_FILE, 'r') as f:
+                    config = json.load(f)
+                    self.oauth_folder = tk.StringVar(value=config.get('oauth_folder', DEFAULT_OAUTH_FOLDER))
+            else:
+                self.oauth_folder = tk.StringVar(value=DEFAULT_OAUTH_FOLDER)
+        except Exception as e:
+            logger.error(f"Errore nel caricamento della configurazione: {str(e)}")
+            self.oauth_folder = tk.StringVar(value=DEFAULT_OAUTH_FOLDER)
+            
         self.log_level = tk.StringVar(value="INFO")
         self.log_output = []
         
-        # Status bar variable - SPOSTA QUESTA DICHIARAZIONE QUI
+        # Status bar variable
         self.status_var = tk.StringVar(value="Pronto")
         
         # Create the notebook (tabs)
@@ -53,9 +71,6 @@ class GarminPlannerGUI(tk.Tk):
         self.create_fartlek_tab()
         self.create_log_tab()
         
-        # Aggiungi il tab dell'editor di workout
-        workout_editor.add_workout_editor_tab(self.notebook, self)
-        
         # Common settings frame
         self.create_settings_frame()
         
@@ -63,6 +78,53 @@ class GarminPlannerGUI(tk.Tk):
         self.status_bar = ttk.Label(self, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
+        # Aggiungi il nuovo tab per l'editor di workout
+        workout_editor.add_workout_editor_tab(self.notebook, self)
+
+
+    def load_workouts_from_cache(self):
+        """Carica la lista degli allenamenti dalla cache locale"""
+        try:
+            if os.path.exists(WORKOUTS_CACHE_FILE):
+                with open(WORKOUTS_CACHE_FILE, 'r') as f:
+                    workouts = json.load(f)
+                    
+                    # Clear existing items
+                    for item in self.workouts_tree.get_children():
+                        self.workouts_tree.delete(item)
+                    
+                    # Add workouts to the tree view
+                    for workout in workouts:
+                        workout_id = workout.get('workoutId', 'N/A')
+                        workout_name = workout.get('workoutName', 'Senza nome')
+                        self.workouts_tree.insert("", "end", values=(workout_id, workout_name))
+                    
+                    self.log(f"Caricati {len(workouts)} allenamenti dalla cache")
+            else:
+                self.log("Nessuna cache di allenamenti trovata. Usa 'Aggiorna lista' per scaricare gli allenamenti.")
+        except Exception as e:
+            self.log(f"Errore nel caricamento della cache: {str(e)}")
+
+    def save_workouts_to_cache(self, workouts):
+        """Salva la lista degli allenamenti nella cache locale"""
+        try:
+            with open(WORKOUTS_CACHE_FILE, 'w') as f:
+                json.dump(workouts, f, indent=2)
+            self.log(f"Salvati {len(workouts)} allenamenti nella cache")
+        except Exception as e:
+            self.log(f"Errore nel salvataggio della cache: {str(e)}")
+
+
+    def save_config(self):
+        """Salva la configurazione attuale"""
+        try:
+            config = {
+                'oauth_folder': self.oauth_folder.get()
+            }
+            with open(CONFIG_FILE, 'w') as f:
+                json.dump(config, f)
+        except Exception as e:
+            logger.error(f"Errore nel salvataggio della configurazione: {str(e)}")
 
     def create_settings_frame(self):
         settings_frame = ttk.LabelFrame(self, text="Impostazioni comuni")
@@ -83,6 +145,7 @@ class GarminPlannerGUI(tk.Tk):
         folder = filedialog.askdirectory(initialdir=self.oauth_folder.get())
         if folder:
             self.oauth_folder.set(folder)
+            self.save_config()  # Salva la configurazione quando viene cambiata la cartella
 
     def create_login_tab(self):
         login_frame = ttk.Frame(self.notebook)
@@ -129,13 +192,15 @@ class GarminPlannerGUI(tk.Tk):
         
         ttk.Button(import_frame, text="Importa", command=self.perform_import).pack(pady=10)
         
+        # Display available training plans
+        # Aggiungi un frame per i pulsanti sopra il treeview
         tree_buttons_frame = ttk.Frame(import_frame)
         tree_buttons_frame.pack(fill=tk.X, padx=10, pady=5)
 
         ttk.Label(tree_buttons_frame, text="Piani di allenamento disponibili:").pack(side=tk.LEFT, padx=5)
         ttk.Button(tree_buttons_frame, text="Aggiorna lista", command=self.load_training_plans).pack(side=tk.RIGHT, padx=5)
-
-        # Display available training plans
+        
+        # Poi crea il training_plans_tree come già presente nel codice originale
         self.training_plans_tree = ttk.Treeview(import_frame, columns=("plan", "weeks", "type"), show="headings")
         self.training_plans_tree.heading("plan", text="Piano")
         self.training_plans_tree.heading("weeks", text="Settimane")
@@ -180,8 +245,14 @@ class GarminPlannerGUI(tk.Tk):
         ttk.Label(options_frame, text="Formato:").grid(row=0, column=0, padx=5, pady=5)
         ttk.Combobox(options_frame, textvariable=self.export_format, values=["YAML", "JSON"]).grid(row=0, column=1, padx=5, pady=5)
         ttk.Checkbutton(options_frame, text="Pulisci dati", variable=self.export_clean).grid(row=0, column=2, padx=5, pady=5, sticky=tk.W)
+
+
         
-        ttk.Button(export_frame, text="Esporta", command=self.perform_export).pack(pady=10)
+        export_buttons_frame = ttk.Frame(export_frame)
+        export_buttons_frame.pack(fill=tk.X, padx=10, pady=5)
+
+        ttk.Button(export_buttons_frame, text="Esporta Tutti", command=self.perform_export).pack(side=tk.LEFT, padx=5)
+        ttk.Button(export_buttons_frame, text="Esporta Selezionati", command=self.export_selected_workouts).pack(side=tk.LEFT, padx=5)
         
         # List of current workouts
         ttk.Label(export_frame, text="Allenamenti disponibili su Garmin Connect").pack(pady=5)
@@ -193,7 +264,85 @@ class GarminPlannerGUI(tk.Tk):
         self.workouts_tree.column("name", width=500)
         self.workouts_tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
+        self.load_workouts_from_cache()
+
         ttk.Button(export_frame, text="Aggiorna lista", command=self.refresh_workouts).pack(pady=5)
+
+
+    def export_selected_workouts(self):
+        """Export only selected workouts to a file"""
+        # Check if any workouts are selected
+        selected_items = self.workouts_tree.selection()
+        if not selected_items:
+            messagebox.showwarning("Nessuna selezione", "Seleziona almeno un allenamento da esportare")
+            return
+        
+        # Get selected workout IDs
+        selected_ids = []
+        for item in selected_items:
+            workout_id = self.workouts_tree.item(item, "values")[0]
+            selected_ids.append(workout_id)
+        
+        # Richiedi il percorso del file se non è già specificato
+        if not self.export_file.get():
+            filename = filedialog.asksaveasfilename(
+                title="Salva allenamenti selezionati",
+                filetypes=[("YAML files", "*.yaml"), ("JSON files", "*.json"), ("All files", "*.*")],
+                defaultextension=".yaml"
+            )
+            if not filename:
+                return  # Utente ha annullato
+            self.export_file.set(filename)
+        
+        # Esporta ciascun allenamento selezionato
+        self.log(f"Esportazione di {len(selected_ids)} allenamenti selezionati...")
+        
+        # Creiamo un file temporaneo con gli ID degli allenamenti da esportare
+        temp_file = os.path.join(SCRIPT_DIR, "selected_workouts.txt")
+        with open(temp_file, 'w') as f:
+            for workout_id in selected_ids:
+                f.write(f"{workout_id}\n")
+        
+        # Avvia il processo di esportazione
+        try:
+            # Assicurati che la cartella OAuth esista
+            oauth_folder = self.oauth_folder.get()
+            if not os.path.exists(oauth_folder):
+                os.makedirs(oauth_folder, exist_ok=True)
+                self.log(f"Creata cartella OAuth: {oauth_folder}")
+                
+            # Costruisci il comando
+            cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
+                   "--oauth-folder", oauth_folder,
+                   "--log-level", self.log_level.get(),
+                   "export",
+                   "--export-file", self.export_file.get(),
+                   "--workout-ids", ",".join(selected_ids)]
+            
+            if self.export_clean.get():
+                cmd.append("--clean")
+                
+            cmd.extend(["--format", self.export_format.get()])
+            
+            self.log(f"Esecuzione comando: {' '.join(cmd)}")
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            stdout, stderr = process.communicate()
+            
+            if process.returncode != 0:
+                self.log(f"Errore durante l'esportazione: {stderr}")
+                messagebox.showerror("Errore", f"Errore durante l'esportazione: {stderr}")
+            else:
+                self.log(f"Esportazione completata con successo su {self.export_file.get()}")
+                messagebox.showinfo("Successo", f"Esportazione completata con successo su {self.export_file.get()}")
+        
+        except Exception as e:
+            self.log(f"Errore durante l'esportazione: {str(e)}")
+            messagebox.showerror("Errore", f"Errore durante l'esportazione: {str(e)}")
+        
+        # Rimuovi il file temporaneo
+        if os.path.exists(temp_file):
+            os.remove(temp_file)
+
 
     def create_schedule_tab(self):
         schedule_frame = ttk.Frame(self.notebook)
@@ -323,6 +472,15 @@ class GarminPlannerGUI(tk.Tk):
     def perform_login(self):
         self.log("Avvio procedura di login...")
         
+        # Assicurati che la cartella OAuth esista
+        oauth_folder = self.oauth_folder.get()
+        if not os.path.exists(oauth_folder):
+            try:
+                os.makedirs(oauth_folder, exist_ok=True)
+                self.log(f"Creata cartella OAuth: {oauth_folder}")
+            except Exception as e:
+                self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
+                
         # Creiamo una finestra di dialogo personalizzata
         login_dialog = tk.Toplevel(self)
         login_dialog.title("Login Garmin Connect")
@@ -388,11 +546,16 @@ class GarminPlannerGUI(tk.Tk):
         self.wait_window(login_dialog)
 
     
+
     def _do_login_process(self, email, password):
         """Esegue effettivamente il processo di login con le credenziali fornite"""
+        # Assicurati che la cartella OAuth esista
+        oauth_folder = self.oauth_folder.get()
         try:
-            import sys
-            import os
+            # Non dichiarare os all'interno della funzione perché è già importato a livello globale
+            if not os.path.exists(oauth_folder):
+                os.makedirs(oauth_folder, exist_ok=True)
+                self.log(f"Creata cartella OAuth: {oauth_folder}")
             
             # Aggiungiamo la directory corrente al percorso Python
             sys.path.append(SCRIPT_DIR)
@@ -407,7 +570,7 @@ class GarminPlannerGUI(tk.Tk):
             self.log(f"Tentativo di login con email: {email[:3]}***")
             try:
                 garth.login(email, password)
-                garth.save(self.oauth_folder.get())
+                garth.save(oauth_folder)
                 self.log("Login completato con successo")
                 messagebox.showinfo("Successo", "Login completato con successo")
             except Exception as e:
@@ -539,6 +702,15 @@ class GarminPlannerGUI(tk.Tk):
         threading.Thread(target=self._do_import).start()
     
     def _do_import(self):
+        # Assicurati che la cartella OAuth esista
+        oauth_folder = self.oauth_folder.get()
+        if not os.path.exists(oauth_folder):
+            try:
+                os.makedirs(oauth_folder, exist_ok=True)
+                self.log(f"Creata cartella OAuth: {oauth_folder}")
+            except Exception as e:
+                self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
+                
         try:
             cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
                    "--oauth-folder", self.oauth_folder.get(),
@@ -582,6 +754,16 @@ class GarminPlannerGUI(tk.Tk):
         """Refresh the list of workouts from Garmin Connect"""
         self.log("Aggiornamento lista allenamenti...")
         
+        # Assicurati che la cartella OAuth esista
+        oauth_folder = self.oauth_folder.get()
+        if not os.path.exists(oauth_folder):
+            try:
+                os.makedirs(oauth_folder, exist_ok=True)
+                self.log(f"Creata cartella OAuth: {oauth_folder}")
+            except Exception as e:
+                self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
+                return
+        
         # Clear existing items
         for item in self.workouts_tree.get_children():
             self.workouts_tree.delete(item)
@@ -605,6 +787,7 @@ class GarminPlannerGUI(tk.Tk):
             else:
                 try:
                     workouts = json.loads(stdout)
+                    self.save_workouts_to_cache(workouts)
                     
                     # Add workouts to the tree view
                     for workout in workouts:
@@ -621,13 +804,23 @@ class GarminPlannerGUI(tk.Tk):
             self.log(f"Errore durante l'aggiornamento: {str(e)}")
     
     def perform_export(self):
-        """Export workouts to a file"""
-        self.log("Esportazione degli allenamenti...")
+        """Export all workouts to a file, or display them if no file is specified"""
+        self.log("Esportazione di tutti gli allenamenti...")
         
         # Run the export command in a separate thread
         threading.Thread(target=self._do_export).start()
     
     def _do_export(self):
+        # Assicurati che la cartella OAuth esista
+        oauth_folder = self.oauth_folder.get()
+        if not os.path.exists(oauth_folder):
+            try:
+                os.makedirs(oauth_folder, exist_ok=True)
+                self.log(f"Creata cartella OAuth: {oauth_folder}")
+            except Exception as e:
+                self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
+                return
+                
         try:
             cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
                    "--oauth-folder", self.oauth_folder.get(),
@@ -682,6 +875,16 @@ class GarminPlannerGUI(tk.Tk):
     def refresh_calendar(self):
         """Refresh the calendar view"""
         self.log("Aggiornamento calendario...")
+        
+        # Assicurati che la cartella OAuth esista
+        oauth_folder = self.oauth_folder.get()
+        if not os.path.exists(oauth_folder):
+            try:
+                os.makedirs(oauth_folder, exist_ok=True)
+                self.log(f"Creata cartella OAuth: {oauth_folder}")
+            except Exception as e:
+                self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
+                return
         
         # Clear existing items
         for item in self.calendar_tree.get_children():
@@ -751,6 +954,16 @@ class GarminPlannerGUI(tk.Tk):
         threading.Thread(target=self._do_schedule).start()
     
     def _do_schedule(self):
+        # Assicurati che la cartella OAuth esista
+        oauth_folder = self.oauth_folder.get()
+        if not os.path.exists(oauth_folder):
+            try:
+                os.makedirs(oauth_folder, exist_ok=True)
+                self.log(f"Creata cartella OAuth: {oauth_folder}")
+            except Exception as e:
+                self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
+                return
+                
         try:
             cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
                    "--oauth-folder", self.oauth_folder.get(),
@@ -802,6 +1015,16 @@ class GarminPlannerGUI(tk.Tk):
         threading.Thread(target=self._do_unschedule).start()
     
     def _do_unschedule(self):
+        # Assicurati che la cartella OAuth esista
+        oauth_folder = self.oauth_folder.get()
+        if not os.path.exists(oauth_folder):
+            try:
+                os.makedirs(oauth_folder, exist_ok=True)
+                self.log(f"Creata cartella OAuth: {oauth_folder}")
+            except Exception as e:
+                self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
+                return
+                
         try:
             cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
                    "--oauth-folder", self.oauth_folder.get(),
@@ -862,6 +1085,16 @@ class GarminPlannerGUI(tk.Tk):
         threading.Thread(target=self._do_create_fartlek).start()
     
     def _do_create_fartlek(self):
+        # Assicurati che la cartella OAuth esista
+        oauth_folder = self.oauth_folder.get()
+        if not os.path.exists(oauth_folder):
+            try:
+                os.makedirs(oauth_folder, exist_ok=True)
+                self.log(f"Creata cartella OAuth: {oauth_folder}")
+            except Exception as e:
+                self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
+                return
+                
         try:
             cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
                    "--oauth-folder", self.oauth_folder.get(),

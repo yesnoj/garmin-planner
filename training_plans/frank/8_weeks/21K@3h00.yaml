@@ -13,6 +13,9 @@ config:
     hr_up: 5
     hr_down: 5
   name_prefix: ''
-W01S01 30' @6:20 + 4 allunghi:
-- warmup: 30min @ Zona1 -- Corsa
-- cooldown: lap-button
+W01S01 Intervals:
+- warmup: lap-button
+- repeat 7:
+  - interval: 800m in 3:30
+  - recovery: 90s -- Jogging
+- cooldown: 15min @ Zona3
