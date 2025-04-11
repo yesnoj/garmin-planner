@@ -43,7 +43,7 @@ class GarminPlannerGUI(tk.Tk):
             os.makedirs(CACHE_DIR, exist_ok=True)
         
         self.title("Garmin Planner")
-        self.geometry("800x700")
+        self.geometry("800x850")
         
         # Variables
         # Carica l'ultima cartella OAuth usata dal file di configurazione, se esiste
@@ -64,17 +64,34 @@ class GarminPlannerGUI(tk.Tk):
         # Status bar variable
         self.status_var = tk.StringVar(value="Pronto")
         
+        # Crea uno stile personalizzato per i pulsanti di accento
+        self.style = ttk.Style()
+        self.style.configure("Accent.TButton", 
+                            background="#0076c0",  # Colore di sfondo blu Garmin
+                            foreground="white",    # Testo bianco
+                            font=("", 10, "bold"))  # Font in grassetto
+
+        # Configura anche gli stati di hover e premuto
+        self.style.map("Accent.TButton",
+                    background=[('active', '#005486')],  # Più scuro quando attivo/hover
+                    foreground=[('active', 'white')])  # Testo rimane bianco
+        
         # Create the notebook (tabs)
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # Create tabs
+        # Create tabs (spostando Log all'ultimo posto)
         self.create_login_tab()
         self.create_import_tab()
         self.create_export_tab()
         self.create_schedule_tab()
-        self.create_log_tab()
         self.create_excel_tools_tab()
+        
+        # Aggiungi il nuovo tab per l'editor di workout
+        workout_editor.add_workout_editor_tab(self.notebook, self)
+        
+        # Crea la tab Log per ultima
+        self.create_log_tab()
 
         # Common settings frame
         self.create_settings_frame()
@@ -83,19 +100,33 @@ class GarminPlannerGUI(tk.Tk):
         self.status_bar = ttk.Label(self, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
-        # Aggiungi il nuovo tab per l'editor di workout
-        workout_editor.add_workout_editor_tab(self.notebook, self)
-
 
     def analyze_training_plan(self):
         """Analizza il piano di allenamento selezionato e mostra informazioni all'utente"""
         try:
-            training_plan_id = self.training_plan.get()
+            training_plan_id = self.training_plan.get().strip()
             if not training_plan_id:
                 self.training_plan_info.set("Nessun piano selezionato")
                 self.plan_imported = False
                 return
                 
+            # Aggiungi log di debug approfonditi
+            self.log(f"Analisi del piano: '{training_plan_id}'")
+            self.log(f"DEBUG: Formato dell'ID piano: '{training_plan_id}'")
+            self.log(f"DEBUG: Lunghezza ID piano: {len(training_plan_id)} caratteri")
+            self.log(f"DEBUG: Caratteri in esadecimale: {' '.join([hex(ord(c)) for c in training_plan_id])}")
+
+            # Se il piano è AM18W115K, controlla specificamente
+            if "AM18W115K" in training_plan_id:
+                self.log(f"DEBUG: Il piano contiene 'AM18W115K', verificheremo match esatti")
+            
+            # Prima verifichiamo se esiste un file YAML corrispondente e lo analizziamo
+            yaml_path = self.find_yaml_for_plan(training_plan_id)
+            if yaml_path:
+                self.log(f"Trovato file YAML per il piano: {yaml_path}")
+                self.analyze_yaml_plan(yaml_path)
+                return
+                    
             # Inizializza i contatori
             total_workouts = 0
             sessions_per_week = {}
@@ -105,13 +136,55 @@ class GarminPlannerGUI(tk.Tk):
                 with open(WORKOUTS_CACHE_FILE, 'r') as f:
                     workouts = json.load(f)
                     
+                    # Stampa info della cache
+                    self.log(f"DEBUG: Trovati {len(workouts)} allenamenti nella cache")
+                    workout_names = [w.get('workoutName', '') for w in workouts]
+                    unique_prefixes = set()
+                    for name in workout_names:
+                        parts = name.split()
+                        if parts:
+                            unique_prefixes.add(parts[0])
+                    self.log(f"DEBUG: Prefissi unici trovati: {unique_prefixes}")
+                    
+                    # Debug: stampa i primi allenamenti per vedere il formato
+                    for i, workout in enumerate(workouts[:5]):
+                        workout_name = workout.get('workoutName', '')
+                        self.log(f"Allenamento di debug #{i}: '{workout_name}'")
+                    
                     for workout in workouts:
                         workout_name = workout.get('workoutName', '')
-                        # Verifica se l'allenamento appartiene al piano specificato
+                        
+                        # Verifica con criteri più flessibili
+                        is_match = False
+                        
+                        # 1. Controllo esatto (il piano è una sottostringa esatta)
                         if training_plan_id in workout_name:
+                            is_match = True
+                        
+                        # 2. Controllo ignorando gli spazi alla fine
+                        elif training_plan_id.rstrip() in workout_name:
+                            is_match = True
+                        
+                        # 3. Controllo con pattern WxxSxx dopo il prefisso
+                        pattern = re.escape(training_plan_id) + r'\s*W\d\dS\d\d'
+                        if re.search(pattern, workout_name, re.IGNORECASE):
+                            is_match = True
+                            self.log(f"Corrispondenza per pattern regex: '{workout_name}' corrisponde a '{pattern}'")
+
+                        # 4. Controllo più permissivo (rimuove caratteri problematici)
+                        clean_plan_id = re.sub(r'[^a-zA-Z0-9]', '', training_plan_id)
+                        clean_workout_name = re.sub(r'[^a-zA-Z0-9]', '', workout_name)
+                        if clean_plan_id and clean_plan_id in clean_workout_name:
+                            is_match = True
+                            self.log(f"Corrispondenza con ID pulito: '{clean_workout_name}' contiene '{clean_plan_id}'")
+                                
+                        # Se c'è una corrispondenza, conta l'allenamento
+                        if is_match:
                             total_workouts += 1
+                            self.log(f"Trovato allenamento: '{workout_name}'")
+                            
                             # Cerca il pattern WxxSxx per estrarre settimana e sessione
-                            match = re.search(r'\s(W\d\d)S(\d\d)\s', workout_name)
+                            match = re.search(r'\s*(W\d\d)S(\d\d)\s*', workout_name)
                             if match:
                                 week_id = match.group(1)
                                 
@@ -139,14 +212,19 @@ class GarminPlannerGUI(tk.Tk):
                 else:
                     self.day_info_label.config(text="Seleziona i giorni preferiti per gli allenamenti")
                     
+                # Preseleziona i giorni in base al numero di sessioni
+                self.preselect_days(max_sessions)
+                    
                 # Imposta il flag di piano importato
                 self.plan_imported = True
+                self.log(f"Piano '{training_plan_id}' trovato con {total_workouts} allenamenti")
             else:
                 self.training_plan_info.set(f"Nessun allenamento trovato per '{training_plan_id}'")
                 self.day_info_label.config(text="Seleziona i giorni preferiti per gli allenamenti")
                 # Imposta il flag di piano non importato
                 self.plan_imported = False
-                
+                self.log(f"Nessun allenamento trovato per il piano '{training_plan_id}'")
+                    
         except Exception as e:
             self.log(f"Errore nell'analisi del piano: {str(e)}")
             self.training_plan_info.set("Errore nell'analisi del piano")
@@ -218,13 +296,194 @@ class GarminPlannerGUI(tk.Tk):
             self.save_config()  # Salva la configurazione quando viene cambiata la cartella
 
     def create_login_tab(self):
+        """Crea la tab Login"""
         login_frame = ttk.Frame(self.notebook)
         self.notebook.add(login_frame, text="Login")
         
-        ttk.Label(login_frame, text="Effettua il login al tuo account Garmin Connect", font=("", 12, "bold")).pack(pady=20)
-        ttk.Label(login_frame, text="Questo passaggio è necessario per utilizzare le funzionalità di Garmin Connect.").pack(pady=5)
+        # Chiama il metodo che crea il contenuto effettivo
+        self.create_login_tab_content(login_frame)
+
+
+    def create_login_tab_content(self, login_frame):
+        """Crea il contenuto della tab Login (separato per permettere il refresh)"""
+        # Verifica se esistono già file di autenticazione
+        oauth_folder = self.oauth_folder.get()
+        oauth_files_exist = False
         
-        ttk.Button(login_frame, text="Effettua login", command=self.perform_login).pack(pady=20)
+        if os.path.exists(oauth_folder):
+            # Controlla la presenza di file oauth
+            oauth_files = [f for f in os.listdir(oauth_folder) if f.startswith('oauth') and f.endswith('.json')]
+            if oauth_files:
+                oauth_files_exist = True
+        
+        # Titolo della pagina
+        ttk.Label(login_frame, text="Accesso a Garmin Connect", font=("", 14, "bold")).pack(pady=20)
+        
+        # Frame per lo stato di login
+        status_frame = ttk.LabelFrame(login_frame, text="Stato di accesso")
+        status_frame.pack(fill=tk.X, padx=20, pady=10)
+        
+        if oauth_files_exist:
+            # Mostra informazioni di login esistente
+            status_icon = "✅"  # Simbolo di spunta
+            status_color = "green"
+            status_message = "Hai già effettuato l'accesso a Garmin Connect."
+            last_login = "Ultimo accesso: " + self.get_last_login_time(oauth_folder)
+        else:
+            # Mostra informazioni di login necessario
+            status_icon = "❌"  # Simbolo X
+            status_color = "red"
+            status_message = "Non hai ancora effettuato l'accesso a Garmin Connect."
+            last_login = "È necessario effettuare l'accesso per utilizzare le funzionalità di pianificazione."
+        
+        # Visualizza lo stato
+        status_container = ttk.Frame(status_frame)
+        status_container.pack(fill=tk.X, padx=10, pady=10)
+        
+        ttk.Label(status_container, text=status_icon, font=("", 24)).pack(side=tk.LEFT, padx=10)
+        
+        status_text = ttk.Frame(status_container)
+        status_text.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        ttk.Label(status_text, text=status_message, font=("", 12, "bold"), foreground=status_color).pack(anchor=tk.W)
+        ttk.Label(status_text, text=last_login).pack(anchor=tk.W, pady=5)
+        
+        # Descrizione
+        description_frame = ttk.Frame(login_frame)
+        description_frame.pack(fill=tk.X, padx=20, pady=10)
+        
+        description_text = (
+            "Per utilizzare Garmin Planner è necessario effettuare l'accesso al tuo account Garmin Connect.\n\n"
+            "Le credenziali verranno salvate in modo sicuro nella cartella OAuth e utilizzate per comunicare con Garmin Connect.\n\n"
+            "Non è necessario effettuare nuovamente l'accesso ad ogni avvio dell'applicazione."
+        )
+        ttk.Label(description_frame, text=description_text, wraplength=600, justify="left").pack(pady=10)
+        
+        # Pulsanti
+        button_frame = ttk.Frame(login_frame)
+        button_frame.pack(pady=20)
+        
+        if oauth_files_exist:
+            ttk.Button(button_frame, text="Aggiorna credenziali", command=self.perform_login).pack(side=tk.LEFT, padx=10)
+            ttk.Button(button_frame, text="Verifica connessione", command=self.check_connection).pack(side=tk.LEFT, padx=10)
+            ttk.Button(button_frame, text="Logout", command=self.perform_logout).pack(side=tk.LEFT, padx=10)
+        else:
+            # Usa un pulsante tk standard con colori espliciti
+            login_button = tk.Button(button_frame, 
+                                  text="Effettua login", 
+                                  command=self.perform_login,
+                                  bg="#0076c0",       # colore di sfondo blu
+                                  fg="white",         # testo bianco
+                                  font=("", 10, "bold"),  # font in grassetto
+                                  padx=20,
+                                  pady=10,
+                                  relief=tk.RAISED,   # bordo in rilievo
+                                  cursor="hand2")     # cambia il cursore al passaggio
+            login_button.pack(padx=10, pady=5)
+            
+            # Gestione hover ed eventi del mouse
+            def on_enter(e):
+                login_button['bg'] = '#005486'  # blu più scuro al passaggio
+                
+            def on_leave(e):
+                login_button['bg'] = '#0076c0'  # ritorna al blu normale
+                
+            def on_click(e):
+                login_button['relief'] = tk.SUNKEN  # effetto premuto
+                
+            def on_release(e):
+                login_button['relief'] = tk.RAISED  # torna al normale
+                self.after(100, self.perform_login)  # esegue l'azione
+            
+            # Associa gli eventi
+            login_button.bind("<Enter>", on_enter)
+            login_button.bind("<Leave>", on_leave)
+            login_button.bind("<ButtonPress-1>", on_click)
+            login_button.bind("<ButtonRelease-1>", on_release)
+        
+        # Info sulla cartella OAuth
+        info_frame = ttk.Frame(login_frame)
+        info_frame.pack(fill=tk.X, padx=20, pady=10)
+        
+        ttk.Label(info_frame, text=f"Cartella OAuth: {oauth_folder}", font=("", 8)).pack(side=tk.LEFT)
+        ttk.Button(info_frame, text="Cambia", command=self.browse_oauth_folder, width=8).pack(side=tk.LEFT, padx=5)
+
+
+    def get_last_login_time(self, oauth_folder):
+        """Ottiene la data dell'ultimo login in base ai timestamp dei file OAuth"""
+        try:
+            if os.path.exists(oauth_folder):
+                oauth_files = [os.path.join(oauth_folder, f) for f in os.listdir(oauth_folder) 
+                              if f.startswith('oauth') and f.endswith('.json')]
+                
+                if oauth_files:
+                    # Ottieni il timestamp più recente
+                    timestamps = [os.path.getmtime(f) for f in oauth_files]
+                    latest_timestamp = max(timestamps)
+                    
+                    # Converti il timestamp in data/ora leggibile
+                    last_login_time = datetime.fromtimestamp(latest_timestamp)
+                    return last_login_time.strftime("%d/%m/%Y %H:%M:%S")
+                    
+            return "Data non disponibile"
+        except Exception as e:
+            self.log(f"Errore nel recupero della data di ultimo accesso: {str(e)}")
+            return "Data non disponibile"
+
+    def check_connection(self):
+        """Verifica la connessione a Garmin Connect usando le credenziali salvate"""
+        self.log("Verifica della connessione a Garmin Connect...")
+        
+        # Disabilita temporaneamente i pulsanti
+        for widget in self.winfo_children():
+            if isinstance(widget, ttk.Button):
+                widget.configure(state="disabled")
+        
+        # Esegui il controllo in un thread separato
+        threading.Thread(target=self._do_check_connection).start()
+
+    def _do_check_connection(self):
+        """Implementazione della verifica della connessione"""
+        try:
+            # Importa le librerie necessarie
+            import sys
+            sys.path.append(SCRIPT_DIR)
+            
+            # Usa il GarminClient per verificare la connessione
+            from planner.garmin_client import GarminClient
+            
+            client = GarminClient(self.oauth_folder.get())
+            
+            # Prova a ottenere la lista degli allenamenti come test
+            response = client.list_workouts()
+            
+            if response:
+                self.log("Connessione a Garmin Connect verificata con successo!")
+                messagebox.showinfo("Connessione riuscita", 
+                                  "La connessione a Garmin Connect è attiva e funzionante.\n\n"
+                                  f"Trovati {len(response)} allenamenti nel tuo account.")
+            else:
+                self.log("Connessione a Garmin Connect non riuscita. Nessuna risposta ricevuta.")
+                messagebox.showerror("Errore di connessione", 
+                                   "La connessione a Garmin Connect non ha restituito dati.\n\n"
+                                   "Prova ad aggiornare le credenziali.")
+                
+        except Exception as e:
+            self.log(f"Errore nella verifica della connessione: {str(e)}")
+            messagebox.showerror("Errore di connessione", 
+                               f"Si è verificato un errore durante la verifica della connessione:\n\n{str(e)}")
+        
+        finally:
+            # Riabilita i pulsanti nel thread principale
+            self.after(0, self._re_enable_buttons)
+
+    def _re_enable_buttons(self):
+        """Riabilita i pulsanti dopo una operazione"""
+        for widget in self.winfo_children():
+            if isinstance(widget, ttk.Button):
+                widget.configure(state="normal")
+
+
 
     def create_import_tab(self):
         import_frame = ttk.Frame(self.notebook)
@@ -1011,7 +1270,15 @@ class GarminPlannerGUI(tk.Tk):
     
     # Tab functionality methods
     def perform_login(self):
+        """Gestisce il processo di login a Garmin Connect"""
         self.log("Avvio procedura di login...")
+        
+        # Verifica se c'è già una finestra di login aperta (evita duplicati)
+        for widget in self.winfo_children():
+            if isinstance(widget, tk.Toplevel) and widget.title() == "Login Garmin Connect":
+                self.log("Finestra di login già aperta")
+                widget.lift()  # Porta in primo piano la finestra esistente
+                return
         
         # Assicurati che la cartella OAuth esista
         oauth_folder = self.oauth_folder.get()
@@ -1021,6 +1288,7 @@ class GarminPlannerGUI(tk.Tk):
                 self.log(f"Creata cartella OAuth: {oauth_folder}")
             except Exception as e:
                 self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
+                return
                 
         # Creiamo una finestra di dialogo personalizzata
         login_dialog = tk.Toplevel(self)
@@ -1046,8 +1314,9 @@ class GarminPlannerGUI(tk.Tk):
         ttk.Label(frame, text="Password:").grid(row=1, column=0, sticky=tk.W, pady=5)
         password_entry = ttk.Entry(frame, textvariable=password_var, show="*", width=30)
         password_entry.grid(row=1, column=1, pady=5)
-    
+
         def do_login():
+            """Callback quando l'utente preme Login"""
             email = email_var.get()
             password = password_var.get()
             
@@ -1055,15 +1324,41 @@ class GarminPlannerGUI(tk.Tk):
                 messagebox.showerror("Errore", "Email e password sono obbligatorie", parent=login_dialog)
                 return
             
-            # Chiudi la finestra di dialogo
-            login_dialog.destroy()
+            # Cambia l'interfaccia per mostrare che stiamo elaborando
+            for widget in frame.winfo_children():
+                if isinstance(widget, ttk.Entry) or isinstance(widget, ttk.Button):
+                    widget.configure(state="disabled")
+            
+            # Mostra un messaggio di attesa
+            wait_label = ttk.Label(frame, text="Login in corso...", font=("", 10, "italic"))
+            wait_label.grid(row=3, column=0, columnspan=2, pady=5)
+            login_dialog.update()
             
             # Esegui il login in un thread separato
-            threading.Thread(target=lambda: self._do_login_process(email, password)).start()
+            threading.Thread(target=lambda: self._do_login_process(email, password, login_dialog)).start()
 
         def cancel():
+            """Callback quando l'utente preme Annulla"""
             login_dialog.destroy()
             self.log("Login annullato")
+
+        # Pulsanti
+        button_frame = ttk.Frame(frame)
+        button_frame.grid(row=2, column=0, columnspan=2, pady=10)
+        
+        ttk.Button(button_frame, text="Login", command=do_login).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Annulla", command=cancel).pack(side=tk.LEFT, padx=5)
+        
+        # Centra la finestra sullo schermo
+        login_dialog.update_idletasks()
+        width = login_dialog.winfo_width()
+        height = login_dialog.winfo_height()
+        x = (login_dialog.winfo_screenwidth() // 2) - (width // 2)
+        y = (login_dialog.winfo_screenheight() // 2) - (height // 2)
+        login_dialog.geometry(f"{width}x{height}+{x}+{y}")
+        
+        # Imposta il focus sull'input dell'email
+        login_dialog.focus_set()
 
         # Pulsanti
         button_frame = ttk.Frame(frame)
@@ -1086,10 +1381,12 @@ class GarminPlannerGUI(tk.Tk):
         # Attendiamo che la finestra sia chiusa prima di continuare
         self.wait_window(login_dialog)
 
-    def _do_login_process(self, email, password):
+    def _do_login_process(self, email, password, login_dialog=None):
         """Esegue effettivamente il processo di login con le credenziali fornite"""
         # Assicurati che la cartella OAuth esista
         oauth_folder = self.oauth_folder.get()
+        success = False
+        
         try:
             # Non dichiarare os all'interno della funzione perché è già importato a livello globale
             if not os.path.exists(oauth_folder):
@@ -1111,14 +1408,110 @@ class GarminPlannerGUI(tk.Tk):
                 garth.login(email, password)
                 garth.save(oauth_folder)
                 self.log("Login completato con successo")
-                messagebox.showinfo("Successo", "Login completato con successo")
+                success = True
+                
+                # Chiudi il dialogo di login se esiste
+                if login_dialog and login_dialog.winfo_exists():
+                    login_dialog.destroy()
+                    
+                # Aggiorna l'interfaccia dopo il login riuscito
+                self.after(0, self.refresh_login_tab)
+                self.after(100, lambda: messagebox.showinfo("Successo", "Login completato con successo"))
+                
             except Exception as e:
                 self.log(f"Errore durante il login: {str(e)}")
-                messagebox.showerror("Errore", f"Errore durante il login: {str(e)}")
+                
+                # Se il dialogo esiste ancora, aggiorna l'interfaccia per mostrare l'errore
+                if login_dialog and login_dialog.winfo_exists():
+                    def update_ui():
+                        # Rimuovi messaggio di attesa se esiste
+                        for widget in login_dialog.winfo_children():
+                            if isinstance(widget, ttk.Label) and "Login in corso" in str(widget.cget("text")):
+                                widget.destroy()
+                        
+                        # Riattiva i campi
+                        for widget in login_dialog.winfo_children():
+                            if isinstance(widget, ttk.Entry):
+                                widget.configure(state="normal")
+                        
+                        # Riattiva i pulsanti
+                        for widget in login_dialog.winfo_children():
+                            if isinstance(widget, ttk.Button):
+                                widget.configure(state="normal")
+                        
+                        # Mostra errore
+                        messagebox.showerror("Errore", f"Errore durante il login: {str(e)}", parent=login_dialog)
+                    
+                    self.after(0, update_ui)
+                else:
+                    # Mostra errore nella finestra principale
+                    self.after(0, lambda: messagebox.showerror("Errore", f"Errore durante il login: {str(e)}"))
                 
         except Exception as e:
             self.log(f"Errore durante l'inizializzazione del login: {str(e)}")
-            messagebox.showerror("Errore", f"Errore durante l'inizializzazione del login: {str(e)}")
+            
+            # Se il dialogo esiste ancora, chiudilo
+            if login_dialog and login_dialog.winfo_exists():
+                login_dialog.destroy()
+                
+            # Mostra errore nella finestra principale
+            self.after(0, lambda: messagebox.showerror("Errore", f"Errore durante l'inizializzazione del login: {str(e)}"))
+
+    def perform_logout(self):
+        """Esegue il logout cancellando i file OAuth"""
+        # Chiedi conferma all'utente
+        if not messagebox.askyesno("Conferma logout", 
+                                 "Sei sicuro di voler effettuare il logout?\n\n"
+                                 "Verranno eliminati tutti i file di autenticazione e dovrai effettuare nuovamente il login."):
+            return
+        
+        oauth_folder = self.oauth_folder.get()
+        if os.path.exists(oauth_folder):
+            try:
+                # Elimina tutti i file OAuth
+                oauth_files = [f for f in os.listdir(oauth_folder) if f.startswith('oauth') and f.endswith('.json')]
+                
+                if not oauth_files:
+                    messagebox.showinfo("Informazione", "Nessun file di autenticazione trovato.")
+                    return
+                    
+                for file in oauth_files:
+                    file_path = os.path.join(oauth_folder, file)
+                    os.remove(file_path)
+                    self.log(f"File eliminato: {file_path}")
+                
+                # Aggiorna la tab Login
+                self.refresh_login_tab()
+                
+                messagebox.showinfo("Logout completato", "Logout effettuato con successo.")
+                
+            except Exception as e:
+                self.log(f"Errore durante il logout: {str(e)}")
+                messagebox.showerror("Errore", f"Si è verificato un errore durante il logout: {str(e)}")
+        else:
+            messagebox.showinfo("Informazione", "Cartella OAuth non trovata.")
+
+    def refresh_login_tab(self):
+        """Aggiorna l'interfaccia della tab Login ricostruendola"""
+        # Salva l'indice della tab attualmente selezionata
+        current_tab = self.notebook.index("current")
+        
+        # Rimuovi la tab esistente
+        login_tab_index = 0  # Assumiamo che Login sia la prima tab
+        self.notebook.forget(login_tab_index)
+        
+        # Ricrea la tab Login
+        login_frame = ttk.Frame(self.notebook)
+        self.notebook.insert(login_tab_index, login_frame, text="Login")
+        
+        # Ridisegna il contenuto della tab
+        self.create_login_tab_content(login_frame)
+        
+        # Ripristina la tab che era selezionata
+        self.notebook.select(current_tab)
+        
+        self.log("Tab Login aggiornata con il nuovo stato")
+
 
     def browse_import_file(self):
         filename = filedialog.askopenfilename(
@@ -1221,11 +1614,106 @@ class GarminPlannerGUI(tk.Tk):
                 plan_data = yaml.safe_load(f)
                 if 'config' in plan_data and 'name_prefix' in plan_data['config']:
                     plan_id = plan_data['config']['name_prefix'].strip()
+                    
+                    # Set the plan ID in the Schedule tab without switching tabs
                     self.training_plan.set(plan_id)
-                    self.log(f"Piano selezionato: {plan_id}")
+                    self.log(f"Piano selezionato: {plan_id} (ID impostato nella tab Pianifica)")
+                    
+                    # Analizza il piano usando il file YAML ma non cambia tab
+                    self.analyze_yaml_plan(plan_path)
         except Exception as e:
             self.log(f"Errore nel leggere il file del piano: {str(e)}")
     
+
+    def analyze_yaml_plan(self, yaml_path):
+        """Analizza il piano direttamente dal file YAML senza necessità di importarlo"""
+        try:
+            self.log(f"Analisi piano da file YAML: {yaml_path}")
+            
+            with open(yaml_path, 'r') as f:
+                plan_data = yaml.safe_load(f)
+                
+                # Rimuovi la sezione config se presente
+                config = plan_data.pop('config', {})
+                
+                # Conta gli allenamenti (escludendo la configurazione)
+                workout_count = len(plan_data)
+                
+                # Analizza le settimane e sessioni
+                weeks = {}
+                
+                for workout_name in plan_data.keys():
+                    # Cerca il pattern WxxSxx nel nome
+                    match = re.search(r'\s*(W\d\d)S(\d\d)\s*', workout_name)
+                    if match:
+                        week_id = match.group(1)
+                        session_id = match.group(2)
+                        
+                        # Conteggia le sessioni per settimana
+                        if week_id not in weeks:
+                            weeks[week_id] = 0
+                        weeks[week_id] += 1
+                
+                # Costruisci il testo informativo
+                num_weeks = len(weeks)
+                max_sessions = max(weeks.values()) if weeks else 0
+                
+                info_text = f"Piano da file YAML: {workout_count} allenamenti, {num_weeks} settimane"
+                if weeks:
+                    info_text += f"\nAllenamenti per settimana: "
+                    for week, count in sorted(weeks.items()):
+                        info_text += f"{week}={count} "
+                
+                # Aggiorna l'interfaccia
+                self.training_plan_info.set(info_text)
+                
+                # Aggiorna il testo informativo sui giorni
+                if max_sessions > 0:
+                    self.day_info_label.config(text=f"Si suggerisce di selezionare {max_sessions} giorni per settimana")
+                else:
+                    self.day_info_label.config(text="Seleziona i giorni preferiti per gli allenamenti")
+                
+                # Preseleziona i giorni in base al numero di sessioni
+                self.preselect_days(max_sessions)
+                
+                # Imposta il flag di piano caricato
+                self.plan_imported = True
+                
+                self.log(f"Analisi completata: {workout_count} allenamenti in {num_weeks} settimane")
+                
+        except Exception as e:
+            self.log(f"Errore nell'analisi del piano YAML: {str(e)}")
+            self.training_plan_info.set(f"Errore nell'analisi del piano YAML: {str(e)}")
+            self.plan_imported = False
+
+    def preselect_days(self, sessions_per_week):
+        """Preseleziona i giorni della settimana in base al numero di sessioni"""
+        # Prima deseleziona tutti i giorni
+        for var in self.day_selections:
+            var.set(0)
+        
+        # Poi seleziona i giorni appropriati
+        if sessions_per_week == 1:
+            self.day_selections[2].set(1)  # Mercoledì
+        elif sessions_per_week == 2:
+            self.day_selections[1].set(1)  # Martedì
+            self.day_selections[4].set(1)  # Venerdì
+        elif sessions_per_week == 3:
+            self.day_selections[1].set(1)  # Martedì
+            self.day_selections[3].set(1)  # Giovedì
+            self.day_selections[5].set(1)  # Sabato
+        elif sessions_per_week == 4:
+            self.day_selections[1].set(1)  # Martedì
+            self.day_selections[3].set(1)  # Giovedì
+            self.day_selections[5].set(1)  # Sabato
+            self.day_selections[6].set(1)  # Domenica
+        elif sessions_per_week >= 5:
+            self.day_selections[0].set(1)  # Lunedì
+            self.day_selections[1].set(1)  # Martedì
+            self.day_selections[3].set(1)  # Giovedì
+            self.day_selections[4].set(1)  # Venerdì
+            self.day_selections[6].set(1)  # Domenica
+
     def perform_import(self):
         """Import workouts from a YAML file"""
         if not self.import_file.get():
@@ -1419,11 +1907,11 @@ class GarminPlannerGUI(tk.Tk):
             messagebox.showerror("Errore", "Formato date non valido. Usa YYYY-MM-DD")
             return
         
-        # Controlla se sono stati selezionati dei giorni
+        # Ottieni i giorni selezionati
         selected_days = []
         for i, var in enumerate(self.day_selections):
             if var.get():
-                selected_days.append(str(i))
+                selected_days.append(i)  # Nota: usiamo gli indici numerici, non le stringhe
         
         if not selected_days:
             messagebox.showwarning("Nessun giorno selezionato", 
@@ -1434,37 +1922,28 @@ class GarminPlannerGUI(tk.Tk):
         # Verifica se siamo in modalità simulazione
         is_dry_run = self.schedule_dry_run.get()
         
-        # Cerca il file YAML corrispondente al piano
-        training_plan_id = self.training_plan.get().strip()
-        yaml_file = None
+        # Per prima cosa, verifica se c'è un file YAML corrispondente, indipendentemente da plan_imported
+        yaml_path = None
+        if is_dry_run:
+            yaml_path = self.find_yaml_for_plan(self.training_plan.get().strip())
         
-        # Se non siamo in modalità simulazione, cerchiamo il file YAML per l'importazione
-        if not is_dry_run:
-            yaml_file = self.find_yaml_for_plan(training_plan_id)
+        # Se siamo in modalità simulazione e c'è un file YAML
+        if is_dry_run and yaml_path:
+            self.log(f"Simulazione pianificazione usando il file YAML: {yaml_path}")
+            # Pianifica gli allenamenti dal file YAML usando le stesse date
+            self.plan_yaml_workouts(yaml_path, start_date, race_date, selected_days)
+            return
         
-        if yaml_file and not is_dry_run:
-            # Chiedi conferma all'utente
-            response = messagebox.askyesno("Importazione e pianificazione", 
-                                          f"Trovato il file YAML per il piano '{training_plan_id}'.\n\n"
-                                          f"Vuoi importare gli allenamenti prima di pianificarli?")
-            
-            if response:
-                # Importa prima gli allenamenti
-                self.log(f"Importazione automatica degli allenamenti da {yaml_file}...")
-                
-                # Configura le variabili di importazione
-                self.import_file.set(yaml_file)
-                self.import_replace.set(True)  # Sostituisci eventuali allenamenti esistenti
-                
-                # Esegui l'importazione in un thread separato e attendi il completamento
-                import_thread = threading.Thread(target=self._do_import_for_schedule, args=(selected_days,))
-                import_thread.start()
-                return
+        # Se siamo in modalità simulazione ma non c'è un file YAML e gli allenamenti non sono importati
+        if is_dry_run and not self.plan_imported and not yaml_path:
+            # Ora è appropriato mostrare un messaggio di errore perché non abbiamo né un file YAML né gli allenamenti importati
+            messagebox.showerror("Errore", "File YAML del piano non trovato e nessun allenamento importato. Importa prima gli allenamenti o fornisci un file YAML valido.")
+            return
         
         # Se siamo in modalità simulazione, aggiungiamo un messaggio informativo
         if is_dry_run:
             self.log(f"Simulazione pianificazione allenamenti per il piano {self.training_plan.get()}...")
-            self.log(f"Giorni selezionati: {', '.join([self.day_names[int(d)] for d in selected_days])}")
+            self.log(f"Giorni selezionati: {', '.join([self.day_names[d] for d in selected_days])}")
             self.log(f"Data inizio: {self.start_day.get()}")
             self.log(f"Data gara: {self.race_day.get()}")
             self.log("(Modalità dry-run - nessuna modifica effettiva verrà apportata)")
@@ -1472,43 +1951,240 @@ class GarminPlannerGUI(tk.Tk):
             self.log(f"Pianificazione allenamenti per il piano {self.training_plan.get()}...")
             self.log(f"Data inizio: {self.start_day.get()}")
         
+        # Converti selected_days in stringhe per _do_schedule
+        selected_days_str = [str(d) for d in selected_days]
+        
         # Esegui la pianificazione con il flag dry-run corretto
-        threading.Thread(target=lambda: self._do_schedule(selected_days, is_dry_run)).start()
+        threading.Thread(target=lambda: self._do_schedule(selected_days_str, is_dry_run)).start()
+
+    def plan_yaml_workouts(self, yaml_path, start_date, race_date, selected_days):
+        """Pianifica gli allenamenti dal file YAML usando le date selezionate"""
+        try:
+            today = datetime.today().date()
+            
+            # Carica il file YAML
+            with open(yaml_path, 'r') as f:
+                plan_data = yaml.safe_load(f)
+                
+                # Rimuovi la configurazione
+                plan_data.pop('config', {})
+                
+                # Estrai e ordina gli allenamenti per settimana e sessione
+                workouts = []
+                for name, _ in plan_data.items():
+                    match = re.search(r'(W\d\d)S(\d\d)', name)
+                    if match:
+                        week_id = match.group(1)
+                        session_id = int(match.group(2))
+                        workouts.append((week_id, session_id, name))
+                
+                # Ordina per settimana e sessione
+                workouts.sort()
+                
+                # Calcola il lunedì della settimana per iniziare la pianificazione
+                if start_date.weekday() == 0:  # 0 = Monday
+                    next_monday = start_date
+                else:
+                    days_until_monday = (7 - start_date.weekday()) % 7
+                    next_monday = start_date + timedelta(days=days_until_monday)
+                
+                self.log(f"Pianificazione dal lunedì {next_monday}")
+                
+                # Organizza gli allenamenti per settimana
+                week_sessions = {}
+                for week_id, session_id, name in workouts:
+                    if week_id not in week_sessions:
+                        week_sessions[week_id] = {}
+                    week_sessions[week_id][session_id] = name
+                
+                # Ordina le settimane
+                weeks = sorted(week_sessions.keys())
+                
+                # Pianificazione
+                scheduled = []
+                used_dates = set()
+                
+                for week_index, week_id in enumerate(weeks):
+                    week_start = next_monday + timedelta(weeks=week_index)
+                    
+                    # Salta settimane che sarebbero dopo la gara
+                    if week_start > race_date:
+                        self.log(f"Settimana {week_id} sarebbe dopo la data della gara. Saltata.")
+                        continue
+                    
+                    sessions = week_sessions[week_id]
+                    session_ids = sorted(sessions.keys())
+                    
+                    # Verifica che ci siano abbastanza giorni selezionati
+                    if len(selected_days) < len(session_ids):
+                        self.log(f"Non abbastanza giorni selezionati per settimana {week_id}. Necessari {len(session_ids)}, disponibili {len(selected_days)}.")
+                    
+                    # Assegna gli allenamenti ai giorni selezionati
+                    for i, session_id in enumerate(session_ids):
+                        workout_name = sessions[session_id]
+                        
+                        # Utilizza i giorni selezionati in modo ciclico
+                        day_index = selected_days[i % len(selected_days)]
+                        
+                        # Calcola la data specifica
+                        workout_date = week_start + timedelta(days=day_index)
+                        date_str = workout_date.strftime('%Y-%m-%d')
+                        
+                        # Controlla che non sia nel passato
+                        if workout_date < today:
+                            self.log(f"Allenamento {week_id}S{session_id} sarebbe pianificato nel passato ({date_str}). Saltato.")
+                            continue
+                        
+                        # Controlla che non sia dopo la data della gara
+                        if workout_date > race_date:
+                            self.log(f"Allenamento {week_id}S{session_id} sarebbe pianificato dopo la data della gara ({date_str}). Saltato.")
+                            continue
+                        
+                        # Controlla se questa data è già stata utilizzata
+                        if date_str in used_dates:
+                            self.log(f"Data {date_str} già occupata. Cerco un'alternativa...")
+                            
+                            # Cerca una data alternativa
+                            alternative_found = False
+                            for offset in range(1, 7):
+                                alt_date = workout_date + timedelta(days=offset)
+                                alt_date_str = alt_date.strftime('%Y-%m-%d')
+                                
+                                if alt_date <= race_date and alt_date_str not in used_dates:
+                                    workout_date = alt_date
+                                    date_str = alt_date_str
+                                    alternative_found = True
+                                    self.log(f"Trovata data alternativa {date_str} per {workout_name}")
+                                    break
+                            
+                            if not alternative_found:
+                                self.log(f"Impossibile trovare una data alternativa per {workout_name}. Saltato.")
+                                continue
+                        
+                        # Aggiungi alla pianificazione
+                        used_dates.add(date_str)
+                        day_name = calendar.day_name[workout_date.weekday()]
+                        self.log(f"{workout_name} pianificato per {day_name} {date_str}")
+                        
+                        scheduled.append({
+                            'date': date_str,
+                            'workout': workout_name + " (SIMULAZIONE)"
+                        })
+                
+                # Ordina la pianificazione per data
+                scheduled.sort(key=lambda x: x['date'])
+                
+                # Visualizza nella tabella del calendario
+                self.display_yaml_schedule(scheduled)
+                
+                # Mostra un messaggio all'utente
+                messagebox.showinfo("Simulazione completata", 
+                                  f"Simulazione pianificazione completata con successo.\n"
+                                  f"Sono stati pianificati {len(scheduled)} allenamenti.\n"
+                                  f"Questi allenamenti sono visualizzati nella tabella con l'etichetta (SIMULAZIONE).")
+        
+        except Exception as e:
+            self.log(f"Errore nella pianificazione: {str(e)}")
+            import traceback
+            self.log(traceback.format_exc())
+            messagebox.showerror("Errore", f"Si è verificato un errore durante la pianificazione: {str(e)}")
+
+    def display_yaml_schedule(self, scheduled):
+        """Visualizza la pianificazione nella tabella del calendario"""
+        try:
+            # Pulisci la tabella esistente
+            for item in self.calendar_tree.get_children():
+                self.calendar_tree.delete(item)
+            
+            # Aggiungi gli allenamenti pianificati
+            for item in scheduled:
+                date = item['date']
+                workout = item['workout']
+                self.calendar_tree.insert("", "end", values=(date, workout))
+        
+        except Exception as e:
+            self.log(f"Errore nella visualizzazione della pianificazione: {str(e)}")
+
+
+
+
 
     def find_yaml_for_plan(self, plan_id):
         """Cerca il file YAML corrispondente al piano specificato"""
         try:
-            # Look for the training_plans directory
-            plans_dir = os.path.join(SCRIPT_DIR, "training_plans")
-            if not os.path.exists(plans_dir):
-                self.log("Directory training_plans non trovata")
-                return None
+            self.log(f"Ricerca del file YAML per il piano: '{plan_id}'")
             
             # Normalizza il plan_id per la ricerca
             plan_id_normalized = plan_id.lower().strip()
             
-            # Cerca ricorsivamente nei file YAML
-            for root, _, files in os.walk(plans_dir):
-                for file in files:
-                    if file.endswith(('.yaml', '.yml')):
-                        file_path = os.path.join(root, file)
-                        
-                        # Controlla se il file contiene il piano
-                        try:
-                            with open(file_path, 'r', encoding='utf-8') as f:
-                                content = f.read()
+            # Controlla se il file YAML è già stato selezionato nella tab Importa
+            import_file = self.import_file.get()
+            if import_file and os.path.exists(import_file) and import_file.endswith(('.yaml', '.yml')):
+                self.log(f"Controllando il file selezionato: {import_file}")
+                # Verifica se il file contiene il piano
+                try:
+                    with open(import_file, 'r', encoding='utf-8') as f:
+                        data = yaml.safe_load(f)
+                        if 'config' in data and 'name_prefix' in data['config']:
+                            name_prefix = data['config']['name_prefix'].strip().lower()
+                            
+                            # Verifica se corrisponde al piano cercato
+                            self.log(f"Confronto: '{name_prefix}' con '{plan_id_normalized}'")
+                            if plan_id_normalized in name_prefix or name_prefix in plan_id_normalized:
+                                self.log(f"Corrispondenza trovata! Usando il file YAML già selezionato: {import_file}")
+                                return import_file
+                            else:
+                                self.log(f"Prefisso {name_prefix} non corrisponde a {plan_id_normalized}")
+                except Exception as e:
+                    self.log(f"Errore nella lettura del file {import_file}: {str(e)}")
+            
+            # Cerca nelle directory standard
+            search_dirs = [
+                os.path.join(SCRIPT_DIR, "training_plans"),  # Directory principale training_plans
+                SCRIPT_DIR,  # Directory principale dello script
+                os.getcwd()  # Directory di lavoro corrente
+            ]
+            
+            self.log(f"Cercando nelle directory: {search_dirs}")
+            
+            for search_dir in search_dirs:
+                if os.path.exists(search_dir):
+                    self.log(f"Cercando in: {search_dir}")
+                    # Cerca ricorsivamente nei file YAML
+                    for root, _, files in os.walk(search_dir):
+                        for file in files:
+                            if file.endswith(('.yaml', '.yml')):
+                                file_path = os.path.join(root, file)
+                                self.log(f"Trovato file YAML: {file_path}, verifico se contiene il piano")
                                 
-                                # Cerca name_prefix nel file
-                                match = re.search(r'name_prefix:\s*[\'"]?([^\'"]+)[\'"]?', content)
-                                if match:
-                                    name_prefix = match.group(1).strip()
-                                    
-                                    # Verifica se corrisponde al piano cercato
-                                    if plan_id_normalized in name_prefix.lower() or name_prefix.lower() in plan_id_normalized:
-                                        self.log(f"Trovato file YAML per il piano '{plan_id}': {file_path}")
-                                        return file_path
-                        except Exception as e:
-                            self.log(f"Errore nella lettura del file {file_path}: {str(e)}")
+                                # Controlla se il file contiene il piano
+                                try:
+                                    with open(file_path, 'r', encoding='utf-8') as f:
+                                        data = yaml.safe_load(f)
+                                        if 'config' in data and 'name_prefix' in data['config']:
+                                            name_prefix = data['config']['name_prefix'].strip().lower()
+                                            
+                                            # Verifica se corrisponde al piano cercato
+                                            self.log(f"Confronto: '{name_prefix}' con '{plan_id_normalized}'")
+                                            if plan_id_normalized in name_prefix or name_prefix in plan_id_normalized:
+                                                self.log(f"Corrispondenza trovata! File YAML per il piano '{plan_id}': {file_path}")
+                                                return file_path
+                                            else:
+                                                self.log(f"Prefisso {name_prefix} non corrisponde a {plan_id_normalized}")
+                                except Exception as e:
+                                    self.log(f"Errore nella lettura del file {file_path}: {str(e)}")
+            
+            # Se non trova automaticamente, chiede all'utente di selezionare un file
+            if messagebox.askyesno("File YAML non trovato", 
+                                  f"Non è stato trovato un file YAML per il piano '{plan_id}'.\n\n"
+                                  f"Vuoi selezionare manualmente un file YAML?"):
+                file_path = filedialog.askopenfilename(
+                    title="Seleziona file YAML",
+                    filetypes=[("YAML files", "*.yaml *.yml"), ("All files", "*.*")]
+                )
+                if file_path:
+                    self.log(f"File YAML selezionato manualmente: {file_path}")
+                    return file_path
             
             self.log(f"Nessun file YAML trovato per il piano '{plan_id}'")
             return None
@@ -1823,62 +2499,65 @@ class GarminPlannerGUI(tk.Tk):
                 self.log(f"Errore durante l'aggiornamento silenzioso: {str(e)}")
 
     def perform_unschedule(self):
-            """Unschedule workouts from a training plan"""
-            if not self.training_plan.get():
-                messagebox.showerror("Errore", "Inserisci l'ID del piano di allenamento")
-                return
-            
-            # Ask for confirmation
-            if not messagebox.askyesno("Conferma", f"Sei sicuro di voler rimuovere tutti gli allenamenti pianificati per {self.training_plan.get()}?"):
-                return
-            
-            self.log(f"Rimozione pianificazione allenamenti per il piano {self.training_plan.get()}...")
-            
-            # Run the unschedule command in a separate thread
-            threading.Thread(target=self._do_unschedule).start()
+        """Unschedule workouts from a training plan"""
+        if not self.training_plan.get():
+            messagebox.showerror("Errore", "Inserisci l'ID del piano di allenamento")
+            return
         
+        # Ask for confirmation
+        if not messagebox.askyesno("Conferma", f"Sei sicuro di voler rimuovere tutti gli allenamenti pianificati per {self.training_plan.get()}?"):
+            return
+        
+        self.log(f"Rimozione pianificazione allenamenti per il piano {self.training_plan.get()}...")
+        
+        # Run the unschedule command in a separate thread
+        threading.Thread(target=self._do_unschedule).start()
+        
+
+
+
     def _do_unschedule(self):
-            # Assicurati che la cartella OAuth esista
-            oauth_folder = self.oauth_folder.get()
-            if not os.path.exists(oauth_folder):
-                try:
-                    os.makedirs(oauth_folder, exist_ok=True)
-                    self.log(f"Creata cartella OAuth: {oauth_folder}")
-                except Exception as e:
-                    self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
-                    return
-                    
+        # Assicurati che la cartella OAuth esista
+        oauth_folder = self.oauth_folder.get()
+        if not os.path.exists(oauth_folder):
             try:
-                cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
-                       "--oauth-folder", self.oauth_folder.get(),
-                       "--log-level", self.log_level.get()
-                       ]
-                
-                if self.schedule_dry_run.get():
-                    cmd.append("--dry-run")
-                
-                cmd.extend(["unschedule",
-                          "--training-plan", self.training_plan.get()])
-                
-                self.log(f"Esecuzione comando: {' '.join(cmd)}")
-                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                stdout, stderr = process.communicate()
-                
-                if process.returncode != 0:
-                    self.log(f"Errore durante la rimozione della pianificazione: {stderr}")
-                    messagebox.showerror("Errore", f"Errore durante la rimozione della pianificazione: {stderr}")
-                else:
-                    self.log("Rimozione pianificazione completata con successo")
-                    if self.schedule_dry_run.get():
-                        self.log("(Modalità dry-run - nessuna modifica effettiva)")
-                    else:
-                        messagebox.showinfo("Successo", "Rimozione pianificazione completata con successo")
-                        # Refresh the calendar
-                        self.refresh_calendar()
-            
+                os.makedirs(oauth_folder, exist_ok=True)
+                self.log(f"Creata cartella OAuth: {oauth_folder}")
             except Exception as e:
-                self.log(f"Errore durante la rimozione della pianificazione: {str(e)}")
-                messagebox.showerror("Errore", f"Errore durante la rimozione della pianificazione: {str(e)}")
+                self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
+                return
+                
+        try:
+            cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
+                   "--oauth-folder", self.oauth_folder.get(),
+                   "--log-level", self.log_level.get()
+                   ]
+            
+            if self.schedule_dry_run.get():
+                cmd.append("--dry-run")
+            
+            cmd.extend(["unschedule",
+                      "--training-plan", self.training_plan.get()])
+            
+            self.log(f"Esecuzione comando: {' '.join(cmd)}")
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            stdout, stderr = process.communicate()
+            
+            if process.returncode != 0:
+                self.log(f"Errore durante la rimozione della pianificazione: {stderr}")
+                messagebox.showerror("Errore", f"Errore durante la rimozione della pianificazione: {stderr}")
+            else:
+                self.log("Rimozione pianificazione completata con successo")
+                if self.schedule_dry_run.get():
+                    self.log("(Modalità dry-run - nessuna modifica effettiva)")
+                else:
+                    messagebox.showinfo("Successo", "Rimozione pianificazione completata con successo")
+                    # Refresh the calendar
+                    self.refresh_calendar()
+        
+        except Exception as e:
+            self.log(f"Errore durante la rimozione della pianificazione: {str(e)}")
+            messagebox.showerror("Errore", f"Errore durante la rimozione della pianificazione: {str(e)}")
         
 
 class TextHandler(logging.Handler):

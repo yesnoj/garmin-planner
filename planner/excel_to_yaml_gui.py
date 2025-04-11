@@ -13,13 +13,13 @@ import os
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import threading
-import datetime
 from datetime import timedelta
 import calendar
 import pandas as pd
 from tkcalendar import DateEntry  # Aggiungiamo il componente calendario
 import openpyxl
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+from datetime import datetime, timedelta
 
 # Verifica che le librerie necessarie siano installate
 try:
@@ -76,9 +76,88 @@ class ScheduleDialog(tk.Toplevel):
         # Attende che la finestra venga chiusa
         self.wait_window()
     
+    def create_custom_date_picker(self, parent, date_var):
+        """Create a custom date picker with separate widgets for year, month, and day"""
+        frame = ttk.Frame(parent)
+        
+        # Get current date from variable or use today
+        try:
+            current_date = datetime.strptime(date_var.get(), "%Y-%m-%d")
+        except (ValueError, TypeError):
+            current_date = datetime.now()
+        
+        # Year picker
+        year_values = list(range(current_date.year, current_date.year + 10))
+        year_var = tk.StringVar(value=str(current_date.year))
+        ttk.Label(frame, text="Anno:").grid(row=0, column=0, padx=(0, 5))
+        year_combo = ttk.Combobox(frame, textvariable=year_var, values=year_values, width=6, state="readonly")
+        year_combo.grid(row=0, column=1, padx=(0, 10))
+        
+        # Month picker
+        month_names = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", 
+                      "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"]
+        month_var = tk.StringVar(value=month_names[current_date.month-1])
+        ttk.Label(frame, text="Mese:").grid(row=0, column=2, padx=(0, 5))
+        month_combo = ttk.Combobox(frame, textvariable=month_var, values=month_names, width=10, state="readonly")
+        month_combo.grid(row=0, column=3, padx=(0, 10))
+        
+        # Day picker - days will be adjusted based on month/year
+        day_var = tk.StringVar(value=str(current_date.day))
+        ttk.Label(frame, text="Giorno:").grid(row=0, column=4, padx=(0, 5))
+        day_combo = ttk.Combobox(frame, textvariable=day_var, width=5, state="readonly")
+        day_combo.grid(row=0, column=5)
+        
+        def update_days(*args):
+            """Update the available days based on the selected month and year"""
+            try:
+                year = int(year_var.get())
+                month = month_names.index(month_var.get()) + 1
+                
+                # Get the number of days in the month
+                _, num_days = calendar.monthrange(year, month)
+                
+                # Update the day values
+                day_values = [str(i) for i in range(1, num_days + 1)]
+                day_combo['values'] = day_values
+                
+                # Adjust the day if it's out of range
+                current_day = int(day_var.get()) if day_var.get() else 1
+                if current_day > num_days:
+                    day_var.set(str(num_days))
+                elif not day_var.get():
+                    day_var.set("1")
+                    
+            except (ValueError, TypeError):
+                # Default to 31 days if there's an error
+                day_combo['values'] = [str(i) for i in range(1, 32)]
+        
+        # Initial update of days
+        update_days()
+        
+        # Function to update the main date variable
+        def update_date(*args):
+            try:
+                year = int(year_var.get())
+                month = month_names.index(month_var.get()) + 1
+                day = int(day_var.get())
+                
+                # Validate the date
+                date_obj = datetime(year, month, day)
+                date_var.set(date_obj.strftime("%Y-%m-%d"))
+            except (ValueError, TypeError):
+                # Invalid date, don't update
+                pass
+        
+        # Bind the update function to the variables
+        year_var.trace_add("write", update_date)
+        month_var.trace_add("write", lambda *args: [update_days(), update_date()])
+        day_var.trace_add("write", update_date)
+        
+        return frame
+    
     def create_widgets(self):
         """Crea i widget dell'interfaccia"""
-        main_frame = ttk.Frame(self, padding="5")
+        main_frame = ttk.Frame(self, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
         
         # Titolo
@@ -88,18 +167,28 @@ class ScheduleDialog(tk.Toplevel):
         ttk.Label(main_frame, text="Imposta la data di inizio e seleziona i giorni della settimana per gli allenamenti.",
                  wraplength=450).pack(pady=5)
         
+        # Frame per nome atleta
+        athlete_frame = ttk.LabelFrame(main_frame, text="Atleta")
+        athlete_frame.pack(fill=tk.X, padx=5, pady=10)
+        
+        ttk.Label(athlete_frame, text="Nome dell'atleta:").pack(side=tk.LEFT, padx=5, pady=5)
+        self.athlete_name_var = tk.StringVar()
+        ttk.Entry(athlete_frame, textvariable=self.athlete_name_var, width=30).pack(side=tk.LEFT, padx=5, pady=5, fill=tk.X, expand=True)
+        
         # Frame per la data di inizio
         date_frame = ttk.LabelFrame(main_frame, text="Data di Inizio")
         date_frame.pack(fill=tk.X, padx=5, pady=10)
         
         ttk.Label(date_frame, text="Seleziona la data di inizio del piano:").pack(pady=5)
         
-        # Data odierna + 7 giorni come default
-        default_start = datetime.datetime.now().date() + timedelta(days=7)
-        self.start_date = DateEntry(date_frame, width=12, background='darkblue',
-                                  foreground='white', borderwidth=2, date_pattern='dd/MM/yyyy',
-                                  year=default_start.year, month=default_start.month, day=default_start.day)
-        self.start_date.pack(pady=5)
+        # Data di default: oggi + 7 giorni
+        default_start = datetime.now().date() + timedelta(days=7)
+        # Variabile per memorizzare la data
+        self.start_date_var = tk.StringVar(value=default_start.strftime("%Y-%m-%d"))
+        
+        # Usa il selettore di data personalizzato invece di DateEntry
+        start_date_picker = self.create_custom_date_picker(date_frame, self.start_date_var)
+        start_date_picker.pack(pady=5)
         
         # Frame per i giorni della settimana
         days_frame = ttk.LabelFrame(main_frame, text="Giorni della Settimana")
@@ -122,11 +211,7 @@ class ScheduleDialog(tk.Toplevel):
         buttons_frame = ttk.Frame(days_frame)
         buttons_frame.pack(fill=tk.X, padx=5, pady=5)
         
-        ttk.Button(buttons_frame, text="Giorni Feriali", command=lambda: self.select_days([0, 1, 2, 3, 4])).pack(side=tk.LEFT, padx=5)
-        ttk.Button(buttons_frame, text="Weekend", command=lambda: self.select_days([5, 6])).pack(side=tk.LEFT, padx=5)
-        ttk.Button(buttons_frame, text="Tutti", command=lambda: self.select_days(range(7))).pack(side=tk.LEFT, padx=5)
-        ttk.Button(buttons_frame, text="Nessuno", command=lambda: self.select_days([])).pack(side=tk.LEFT, padx=5)
-        
+    
         # Frame per le sessioni per settimana
         sessions_frame = ttk.LabelFrame(main_frame, text="Sessioni per Settimana")
         sessions_frame.pack(fill=tk.X, padx=5, pady=10)
@@ -148,6 +233,7 @@ class ScheduleDialog(tk.Toplevel):
         
         ttk.Button(buttons_frame, text="Annulla", command=self.destroy).pack(side=tk.RIGHT, padx=5)
         ttk.Button(buttons_frame, text="Pianifica Date", command=self.schedule_dates).pack(side=tk.RIGHT, padx=5)
+
     
     def select_days(self, indices):
         """Seleziona i giorni specificati"""
@@ -159,7 +245,6 @@ class ScheduleDialog(tk.Toplevel):
         for i in indices:
             self.days_vars[i].set(1)
     
-
     def load_excel_info(self):
         """Carica le informazioni dal file Excel"""
         try:
@@ -220,89 +305,6 @@ class ScheduleDialog(tk.Toplevel):
             elif max_sessions >= 5:
                 self.select_days([0, 1, 3, 4, 6])  # L, M, G, V, D
 
-    
-    def create_widgets(self):
-        """Crea i widget dell'interfaccia"""
-        main_frame = ttk.Frame(self, padding="10")
-        main_frame.pack(fill=tk.BOTH, expand=True)
-        
-        # Titolo
-        ttk.Label(main_frame, text="Pianifica Allenamenti", font=("", 14, "bold")).pack(pady=10)
-        
-        # Descrizione
-        ttk.Label(main_frame, text="Imposta la data di inizio e seleziona i giorni della settimana per gli allenamenti.",
-                 wraplength=450).pack(pady=5)
-        
-        # Frame per nome atleta
-        athlete_frame = ttk.LabelFrame(main_frame, text="Atleta")
-        athlete_frame.pack(fill=tk.X, padx=5, pady=10)
-        
-        ttk.Label(athlete_frame, text="Nome dell'atleta:").pack(side=tk.LEFT, padx=5, pady=5)
-        self.athlete_name_var = tk.StringVar()
-        ttk.Entry(athlete_frame, textvariable=self.athlete_name_var, width=30).pack(side=tk.LEFT, padx=5, pady=5, fill=tk.X, expand=True)
-        
-        # Frame per la data di inizio
-        date_frame = ttk.LabelFrame(main_frame, text="Data di Inizio")
-        date_frame.pack(fill=tk.X, padx=5, pady=10)
-        
-        ttk.Label(date_frame, text="Seleziona la data di inizio del piano:").pack(pady=5)
-        
-        # Data odierna + 7 giorni come default
-        default_start = datetime.datetime.now().date() + timedelta(days=7)
-        self.start_date = DateEntry(date_frame, width=12, background='darkblue',
-                                  foreground='white', borderwidth=2, date_pattern='yyyy-MM-dd',
-                                  year=default_start.year, month=default_start.month, day=default_start.day)
-        self.start_date.pack(pady=5)
-        
-        # Frame per i giorni della settimana
-        days_frame = ttk.LabelFrame(main_frame, text="Giorni della Settimana")
-        days_frame.pack(fill=tk.X, padx=5, pady=10)
-        
-        # Crea checkbox per ogni giorno della settimana
-        self.days_vars = []
-        days = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
-        
-        days_grid = ttk.Frame(days_frame)
-        days_grid.pack(padx=5, pady=5)
-        
-        # Prima riga: checkbox
-        for i, day in enumerate(days):
-            var = tk.IntVar(value=0)  # Deselezionato di default
-            self.days_vars.append(var)
-            ttk.Checkbutton(days_grid, text=day, variable=var).grid(row=0, column=i, padx=5, pady=5)
-        
-        # Aggiungi bottoni per selezionare gruppi comuni
-        buttons_frame = ttk.Frame(days_frame)
-        buttons_frame.pack(fill=tk.X, padx=5, pady=5)
-        
-        ttk.Button(buttons_frame, text="Giorni Feriali", command=lambda: self.select_days([0, 1, 2, 3, 4])).pack(side=tk.LEFT, padx=5)
-        ttk.Button(buttons_frame, text="Weekend", command=lambda: self.select_days([5, 6])).pack(side=tk.LEFT, padx=5)
-        ttk.Button(buttons_frame, text="Tutti", command=lambda: self.select_days(range(7))).pack(side=tk.LEFT, padx=5)
-        ttk.Button(buttons_frame, text="Nessuno", command=lambda: self.select_days([])).pack(side=tk.LEFT, padx=5)
-        
-        # Frame per le sessioni per settimana
-        sessions_frame = ttk.LabelFrame(main_frame, text="Sessioni per Settimana")
-        sessions_frame.pack(fill=tk.X, padx=5, pady=10)
-        
-        ttk.Label(sessions_frame, text="Quante sessioni di allenamento vuoi fare ogni settimana?").pack(pady=5)
-        
-        sessions_values = [str(i) for i in range(1, 8)]
-        self.sessions_var = tk.StringVar(value="3")  # Default: 3 sessioni a settimana
-        sessions_combo = ttk.Combobox(sessions_frame, textvariable=self.sessions_var, values=sessions_values, width=5, state="readonly")
-        sessions_combo.pack(pady=5)
-        
-        # Informazioni sugli allenamenti attuali
-        self.workouts_info = ttk.Label(main_frame, text="", wraplength=450)
-        self.workouts_info.pack(pady=10)
-        
-        # Pulsanti OK e Annulla
-        buttons_frame = ttk.Frame(main_frame)
-        buttons_frame.pack(fill=tk.X, padx=5, pady=10)
-        
-        ttk.Button(buttons_frame, text="Annulla", command=self.destroy).pack(side=tk.RIGHT, padx=5)
-        ttk.Button(buttons_frame, text="Pianifica Date", command=self.schedule_dates).pack(side=tk.RIGHT, padx=5)
-
-
 
 
     def schedule_dates(self):
@@ -313,7 +315,14 @@ class ScheduleDialog(tk.Toplevel):
                 messagebox.showerror("Errore", "Seleziona almeno un giorno della settimana.")
                 return
                 
-            start_date = self.start_date.get_date()
+            # Ottieni la data di inizio dal selettore personalizzato
+            start_date_str = self.start_date_var.get()
+            try:
+                start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+            except ValueError:
+                messagebox.showerror("Errore", f"Data non valida: {start_date_str}")
+                return
+                
             athlete_name = self.athlete_name_var.get().strip()
             
             # Carica il file Excel
@@ -417,7 +426,7 @@ class ScheduleDialog(tk.Toplevel):
             
             # Vai al primo giorno selezionato
             while weekday not in selected_days:
-                current_date += datetime.timedelta(days=1)
+                current_date += timedelta(days=1)
                 weekday = current_date.weekday()
             
             current_week = workouts[0][0]
@@ -429,12 +438,12 @@ class ScheduleDialog(tk.Toplevel):
                     current_week = week
                     # Vai a lunedì della settimana successiva
                     days_to_monday = 7 - current_date.weekday()
-                    current_date += datetime.timedelta(days=days_to_monday)
+                    current_date += timedelta(days=days_to_monday)
                     weekday = 0  # lunedì
                     
                     # Vai al primo giorno selezionato della nuova settimana
                     while weekday not in selected_days:
-                        current_date += datetime.timedelta(days=1)
+                        current_date += timedelta(days=1)
                         weekday = current_date.weekday()
                 
                 # Assegna la data
@@ -473,7 +482,7 @@ class ScheduleDialog(tk.Toplevel):
                 if days_to_add == 0:
                     days_to_add = 7  # Stesso giorno della settimana successiva
                 
-                current_date += datetime.timedelta(days=days_to_add)
+                current_date += timedelta(days=days_to_add)
                 weekday = current_date.weekday()
             
             # Adatta la larghezza della colonna Date
@@ -616,7 +625,7 @@ class ExcelToYamlGUI(tk.Tk):
         
         # Versione
         version_label = ttk.Label(main_frame, 
-                                text=f"v1.2.0 - {datetime.datetime.now().year}", 
+                                text=f"v1.2.0 - {datetime.now().year}", 
                                 foreground="gray")
         version_label.pack(side=tk.RIGHT, padx=10, pady=5)
         
@@ -627,7 +636,7 @@ class ExcelToYamlGUI(tk.Tk):
     
     def log(self, message):
         """Aggiunge un messaggio all'area di log"""
-        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
+        timestamp = datetime.now().strftime("%H:%M:%S")
         self.log_text.configure(state="normal")
         self.log_text.insert(tk.END, f"[{timestamp}] {message}\n")
         self.log_text.see(tk.END)
