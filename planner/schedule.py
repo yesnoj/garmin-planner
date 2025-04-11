@@ -55,6 +55,22 @@ def cmd_schedule_workouts(args):
         logging.warning(f'Race day {race_day} is in the past. Please set a future date.')
         return None
     
+    # Calcola la data di inizio se specificata
+    start_date = today
+    if args.start_day:
+        try:
+            start_date = datetime.datetime.strptime(args.start_day, '%Y-%m-%d').date()
+            # Verifica che la data di inizio non sia nel passato
+            if start_date < today:
+                logging.warning(f'Start date {start_date} is in the past. Using today instead.')
+                start_date = today
+            elif start_date > race_day:
+                logging.warning(f'Start date {start_date} is after race day {race_day}. Using today instead.')
+                start_date = today
+            logging.info(f'Using custom start date: {start_date}')
+        except ValueError:
+            logging.warning(f'Invalid start date format: {args.start_day}. Using today instead.')
+    
     # Ottieni giorni personalizzati
     custom_days = []
     if args.workout_days:
@@ -70,8 +86,13 @@ def cmd_schedule_workouts(args):
             logging.warning(f'Invalid workout days specified: {args.workout_days}. Must be comma-separated integers (0-6).')
             return None
     
-    # Calcola il lunedì della settimana successiva
-    next_monday = today + datetime.timedelta(days=(7 - today.weekday()))
+    # Calcola il lunedì della settimana per iniziare la pianificazione
+    if start_date.weekday() == 0:  # 0 = Monday
+        next_monday = start_date
+    else:
+        days_until_monday = (7 - start_date.weekday()) % 7
+        next_monday = start_date + datetime.timedelta(days=days_until_monday)
+    
     logging.info(f'Starting planning from Monday {next_monday}')
     
     # Pianifica gli allenamenti

@@ -65,6 +65,7 @@ def parse_args(argv):
     schedule.add_argument('--race-day', required=True, help='the date of the race. Should correspond to the last workout of the training plan.')
     schedule.add_argument('--training-plan', required=True, help='the training plan ID. Corresponds to the common prefix of all workouts in the plan.')
     schedule.add_argument('--workout-days', required=False, help='comma-separated list of day indices (0=Monday, 6=Sunday) for each session in a week')
+    schedule.add_argument('--start-day', required=False, help='the date from which to start planning the training sessions. Format: YYYY-MM-DD')
 
     unschedule = subparsers.add_parser('unschedule', help='unschedule workouts from calendar.')
     unschedule.set_defaults(func=cmd_unschedule_workouts)
