@@ -185,7 +185,6 @@ def excel_to_yaml(excel_file, output_file=None):
 def parse_workout_steps(steps_str, workout_name):
     """
     Analizza una stringa di passi e restituisce una lista strutturata.
-    Supporta sia il separatore newline ('\n') che il punto e virgola (';').
     
     Args:
         steps_str: Stringa contenente i passi dell'allenamento
@@ -239,6 +238,7 @@ def parse_workout_steps(steps_str, workout_name):
                 if not step_lines[i].startswith((' ', '\t')):
                     break
                 
+                # Identifica il tipo di passo e i dettagli del sottopasso
                 substep_parts = substep_str.split(':')
                 if len(substep_parts) < 2:
                     print(f"ATTENZIONE: formato sotto-passo non valido in {workout_name}: {substep_str}")
@@ -248,19 +248,35 @@ def parse_workout_steps(steps_str, workout_name):
                 substep_type = substep_parts[0].strip().lower()
                 substep_details = ':'.join(substep_parts[1:]).strip()
                 
+                # IMPORTANTE: Assicurati che cooldown non finisca nella ripetizione
+                if substep_type == 'cooldown':
+                    # Se troviamo un cooldown all'interno di una ripetizione, è probabilmente un errore
+                    # Lo aggiungeremo dopo al livello principale
+                    print(f"AVVISO: 'cooldown' trovato all'interno di una ripetizione in {workout_name}. Spostato fuori dalla ripetizione.")
+                    # Salva il cooldown per aggiungerlo più tardi
+                    cooldown_details = substep_details
+                    i += 1
+                    # Aggiungi il passo di ripetizione con i suoi sotto-passi
+                    repeat_step = {f"repeat {iterations}": substeps}
+                    workout_steps.append(repeat_step)
+                    # Aggiungi il cooldown come passo separato
+                    workout_steps.append({"cooldown": cooldown_details})
+                    break  # Esci dal loop dei sottopassi
+                
                 substeps.append({substep_type: substep_details})
                 i += 1
             
-            # Aggiungi il passo di ripetizione con i suoi sotto-passi
-            repeat_step = {f"repeat {iterations}": substeps}
-            workout_steps.append(repeat_step)
+            # Se il loop è terminato normalmente, aggiungi il passo di ripetizione
+            if i >= len(step_lines) or not step_lines[i].startswith((' ', '\t')):
+                repeat_step = {f"repeat {iterations}": substeps}
+                workout_steps.append(repeat_step)
         else:
             # Aggiungi un passo normale
             workout_steps.append({step_type: step_details})
             i += 1
     
     return workout_steps
-
+    
 def auto_adjust_column_widths(worksheet):
     """
     Regola automaticamente la larghezza delle colonne in base al contenuto
@@ -281,7 +297,7 @@ def auto_adjust_column_widths(worksheet):
 def create_sample_excel(output_file='sample_training_plan.xlsx'):
     """
     Crea un file Excel di esempio con la struttura prevista per il piano di allenamento.
-    Include supporto per la colonna Date e nome atleta.
+    Include supporto per la colonna Date.
     """
     try:
         import openpyxl
@@ -293,6 +309,14 @@ def create_sample_excel(output_file='sample_training_plan.xlsx'):
         return None
     
     wb = openpyxl.Workbook()
+    
+    # Definisci il bordo sottile qui, prima di usarlo
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
     
     # Foglio Config
     config_sheet = wb.active
