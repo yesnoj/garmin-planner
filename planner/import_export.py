@@ -58,14 +58,27 @@ def cmd_export_workouts(args):
         return len(wo_dict)
 
     client = GarminClient(args.oauth_folder)
-    workout_ids = client.list_workouts()
+    all_workouts = client.list_workouts()
+    workout_ids = all_workouts  # Default to all workouts
 
-    if args.name_filter:
-        filtered = []
-        for workout in workout_ids:
+    # Filter by workout_ids if specified
+    if args.workout_ids:
+        specified_ids = args.workout_ids.split(',')
+        filtered_workouts = []
+        for workout in all_workouts:
+            if str(workout['workoutId']) in specified_ids:
+                filtered_workouts.append(workout)
+        workout_ids = filtered_workouts
+        logging.info(f'Filtering to {len(workout_ids)} workouts by ID')
+
+    # Filter by name_filter if specified (only if not already filtered by IDs)
+    elif args.name_filter:
+        filtered_workouts = []
+        for workout in all_workouts:
             if re.search(args.name_filter, workout['workoutName']):
-                filtered.append(workout)
-        workout_ids = filtered
+                filtered_workouts.append(workout)
+        workout_ids = filtered_workouts
+        logging.info(f'Filtering to {len(workout_ids)} workouts by name pattern')
 
     workouts = []
     for wid in workout_ids:
@@ -136,10 +149,9 @@ def cmd_delete_workouts(args):
 config = {}
 
 def import_workouts(plan_file, name_filter=None):
-
     # Load the file to get workout descriptions (added as comments in the YAML file)
     descriptions = {}
-    with open(plan_file, 'r') as yfile:
+    with open(plan_file, 'r', encoding='utf-8') as yfile:
         line_pattern = re.compile(r'^([^:]+):\s*#\s*(.*)\s*$')
         for line in yfile:
             m = line_pattern.match(line)
@@ -148,7 +160,7 @@ def import_workouts(plan_file, name_filter=None):
                 comment = m.group(2)
                 descriptions[key] = comment
 
-    with open(plan_file, 'r') as file:
+    with open(plan_file, 'r', encoding='utf-8') as file:
         workouts = []
         import_json = yaml.safe_load(file)
 
@@ -156,57 +168,106 @@ def import_workouts(plan_file, name_filter=None):
         global config
         config = import_json.pop('config', {})
 
+        # Correggi la configurazione prima di espanderla
+        fix_config(config)
         expand_config(config)
 
         for name, steps in import_json.items():
             if name_filter and not re.search(name_filter, name):
                 continue
 
+            # Rimuovi eventuali informazioni sulla data dal nome
+            name = re.sub(r'\s+\(Data:.*\)', '', name)
+
+            # Correzione dei passi di repeat prima di creare il workout
+            fix_steps(steps)
+
             w = Workout("running", config.get('name_prefix', '') + name, descriptions.get(name, None))
             for step in steps:
                 for k, v in step.items():
-                  if not k.startswith('repeat'):
-                    end_condition = get_end_condition(v)
-                    ws_target=get_target(v)
-                    ws = WorkoutStep(
-                        0,
-                        k,
-                        get_description(v, ws_target),
-                        end_condition=end_condition,
-                        end_condition_value=get_end_condition_value(v, end_condition),
-                        target=ws_target
-                    )
-                    w.add_step(ws)
-                  else:
-                      m = re.compile(r'^repeat\s+(\d+)$').match(k)
-                      iterations = int(m.group(1))
-                      # create the repetition step
-                      ws = WorkoutStep(
-                          0,
-                          'repeat',
-                          get_description(v),
-                          end_condition='iterations',
-                          end_condition_value=iterations
-                      )
-                      # create the repeated steps
-                      for step in v:
-                        for rk, rv in step.items():
-                          end_condition = get_end_condition(rv)
-                          rws_target=get_target(rv)
-                          rws = WorkoutStep(
-                              0,
-                              rk,
-                              get_description(rv, rws_target),
-                              end_condition=end_condition,
-                              end_condition_value=get_end_condition_value(rv, end_condition),
-                              target=rws_target
-                          )
-                        ws.add_step(rws)
+                    if k == 'repeat':
+                        # Gestisci la struttura repeat in modo corretto
+                        iterations = v
+                        substeps = step.get('steps', [])
+                        
+                        # Crea il passo di repeat
+                        ws = WorkoutStep(
+                            0,
+                            'repeat',
+                            '',
+                            end_condition='iterations',
+                            end_condition_value=iterations
+                        )
+                        
+                        # Aggiungi i sottostep
+                        for substep in substeps:
+                            for sk, sv in substep.items():
+                                sub_end_condition = get_end_condition(sv)
+                                sub_target = get_target(sv)
+                                rws = WorkoutStep(
+                                    0,
+                                    sk,
+                                    get_description(sv, sub_target),
+                                    end_condition=sub_end_condition,
+                                    end_condition_value=get_end_condition_value(sv, sub_end_condition),
+                                    target=sub_target
+                                )
+                                ws.add_step(rws)
+                        
+                        w.add_step(ws)
+                    elif not k.startswith('repeat') and k != 'steps':
+                        end_condition = get_end_condition(v)
+                        ws_target = get_target(v)
+                        ws = WorkoutStep(
+                            0,
+                            k,
+                            get_description(v, ws_target),
+                            end_condition=end_condition,
+                            end_condition_value=get_end_condition_value(v, end_condition),
+                            target=ws_target
+                        )
                         w.add_step(ws)
 
-            #print(json.dumps(w.garminconnect_json(), indent=2))
             workouts.append(w)
         return workouts
+
+def fix_config(config):
+    """
+    Corregge la configurazione prima di espanderla.
+    Assicura che i valori numerici siano effettivamente numerici.
+    """
+    if 'heart_rates' in config:
+        for key, value in config['heart_rates'].items():
+            if isinstance(value, str) and value.isdigit():
+                config['heart_rates'][key] = int(value)
+
+def fix_steps(steps):
+    """
+    Corregge la struttura dei passi di un allenamento.
+    
+    Args:
+        steps: Lista dei passi dell'allenamento
+    """
+    if not isinstance(steps, list):
+        return
+    
+    for step in steps:
+        if not isinstance(step, dict):
+            continue
+            
+        # Controlla se c'è una chiave che inizia con 'repeat '
+        for key in list(step.keys()):
+            repeat_match = re.match(r'^repeat\s+(\d+)$', key)
+            if repeat_match:
+                iterations = int(repeat_match.group(1))
+                substeps = step.pop(key)  # Rimuovi la vecchia chiave
+                
+                # Crea la nuova struttura di ripetizione
+                step['repeat'] = iterations
+                step['steps'] = substeps
+                
+                # Correggi anche i substeps ricorsivamente
+                fix_steps(substeps)
 
 def get_description(step_txt, target=None):
     description = None
@@ -334,39 +395,61 @@ def clean_step(step_txt):
     return step_txt    
 
 def expand_config(config):
-    paces = config.get('paces', [])
+    paces = config.get('paces', {})
     # If we find paces in <distance> in <time> format, convert them to mm:ss
     for pk, pv in paces.items():
-        if re.compile('^.+ in .+$').match(pv.strip()):
+        if isinstance(pv, str) and re.compile('^.+ in .+$').match(pv.strip()):
             paces[pk] = ms_to_pace(dist_time_to_ms(pv))
-    heart_rates = config.get('heart_rates', [])
-    for hrk, hrv in heart_rates.items():
-        hr_range = []
-        hr_up = heart_rates.get('hr_up', 0)
-        hr_down = heart_rates.get('hr_down', 0)
-
+    
+    heart_rates = config.get('heart_rates', {})
+    for hrk, hrv in list(heart_rates.items()):
         # If we get an integer, this is a fixed hr. We leave it as it is.
         if isinstance(hrv, int):
             continue
 
-        m = re.compile(r'^\s*(\d{2}-?\d{0,2})% (.+)\s*$').match(hrv)
-        if m:
-            ref_hr = m.group(2)
-            if not ref_hr in heart_rates:
-                raise ValueError(f'Cannot find heart rate target \'{ref_hr}\' in heart rate config. Found in \'{hrk}\')')
-            ref_hr = heart_rates[ref_hr]
-            hr_range = m.group(1)
-            hr_range = hr_range.split('-')
+        # Assicuriamoci che i valori numerici siano effettivamente numerici
+        if isinstance(hrv, str) and hrv.isdigit():
+            heart_rates[hrk] = int(hrv)
+            continue
 
-            # If only one value was given, we apply the margins
-            if len(hr_range) == 1:
-                hr_range.append(hr_range[0])
-                hr_range[0] -=  hr_down
-                hr_range[1] += hr_up
-
-            # Calculate the actual HR range based on the % value
-            hr_range[0] = round(ref_hr * float(hr_range[0])/100)
-            hr_range[1] = round(ref_hr * float(hr_range[1])/100)
-            heart_rates[hrk] = '-'.join([str(hr) for hr in hr_range])
+        # Gestione per riferimenti percentuali
+        if isinstance(hrv, str):
+            m = re.compile(r'^\s*(\d+(?:-\d+)?)%\s*(.+)\s*$').match(hrv)
+            if m:
+                ref_hr_key = m.group(2).strip()
+                if ref_hr_key in heart_rates:
+                    ref_hr = heart_rates[ref_hr_key]
+                    
+                    # Assicuriamoci che ref_hr sia un numero
+                    if isinstance(ref_hr, str):
+                        try:
+                            ref_hr = int(ref_hr)
+                            heart_rates[ref_hr_key] = ref_hr  # Aggiorniamo anche il valore di riferimento
+                        except ValueError:
+                            logging.warning(f"Impossibile convertire '{ref_hr_key}' in numero: {ref_hr}")
+                            continue
+                    
+                    hr_range_str = m.group(1)
+                    hr_range = hr_range_str.split('-')
+                    
+                    # Con una singola percentuale
+                    if len(hr_range) == 1:
+                        try:
+                            percent = float(hr_range[0]) / 100
+                            heart_rates[hrk] = int(ref_hr * percent)
+                        except (ValueError, TypeError) as e:
+                            logging.warning(f"Errore nella conversione percentuale HR: {hr_range[0]} - {str(e)}")
+                    # Con un intervallo di percentuali
+                    else:
+                        try:
+                            low_percent = float(hr_range[0]) / 100
+                            high_percent = float(hr_range[1]) / 100
+                            low_hr = int(ref_hr * low_percent)
+                            high_hr = int(ref_hr * high_percent)
+                            heart_rates[hrk] = f"{low_hr}-{high_hr}"
+                        except (ValueError, TypeError) as e:
+                            logging.warning(f"Errore nella conversione intervallo percentuale HR: {hr_range} - {str(e)}")
+                else:
+                    logging.warning(f"Errore: riferimento HR '{ref_hr_key}' non trovato per '{hrk}'")
     
     return

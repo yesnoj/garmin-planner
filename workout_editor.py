@@ -842,12 +842,8 @@ class WorkoutStepsEditor(tk.Toplevel):
             iterations, steps = dialog.result
             
             # Create the repeat step
-            repeat_step = {'repeat': iterations}
+            repeat_step = {'repeat': iterations, 'steps': steps}
             
-            # Add the repeated steps
-            if steps:
-                repeat_step.update(steps)
-                
             # Add to steps list
             self.workout_steps.append(repeat_step)
             

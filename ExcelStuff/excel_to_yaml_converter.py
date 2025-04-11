@@ -13,8 +13,17 @@ import yaml
 import re
 import os
 import sys
+import copy
 from datetime import datetime
 import argparse
+
+# Personalizza il dumper YAML per evitare i riferimenti/alias
+class NoAliasDumper(yaml.SafeDumper):
+    def ignore_aliases(self, data):
+        return True
+
+# Tipi di passi supportati da garmin-planner
+VALID_STEP_TYPES = {"warmup", "cooldown", "interval", "recovery", "rest", "repeat", "other"}
 
 def excel_to_yaml(excel_file, output_file=None):
     """
@@ -121,8 +130,20 @@ def excel_to_yaml(excel_file, output_file=None):
             # Assicurati che ci siano sia il nome che il valore
             if pd.notna(row.iloc[0]) and pd.notna(row.iloc[1]):
                 name = str(row.iloc[0]).strip()
-                value = str(row.iloc[1]).strip()
+                value = row.iloc[1]
+                
+                # Converti i valori numerici in interi
+                if isinstance(value, (int, float)) and not pd.isna(value):
+                    value = int(value)
+                elif isinstance(value, str) and value.strip().isdigit():
+                    value = int(value.strip())
+                else:
+                    value = str(value).strip()
+                    
                 plan['config']['heart_rates'][name] = value
+    
+    # Dictionary to store workout descriptions for comments
+    workout_descriptions = {}
     
     # Processa gli allenamenti dal DataFrame
     for _, row in df.iterrows():
@@ -135,8 +156,11 @@ def excel_to_yaml(excel_file, output_file=None):
         session = str(int(row['Session'])).zfill(2)
         description = str(row['Description']).strip()
         
-        # Crea il nome completo dell'allenamento
+        # Crea il nome completo dell'allenamento (senza includere la data)
         full_name = f"W{week}S{session} {description}"
+        
+        # Memorizza la descrizione per i commenti
+        workout_descriptions[full_name] = description
         
         # Estrai i passi dell'allenamento
         steps_str = str(row['Steps']).strip()
@@ -144,43 +168,41 @@ def excel_to_yaml(excel_file, output_file=None):
         # Prepara la lista dei passi
         workout_steps = parse_workout_steps(steps_str, full_name)
         
-        # Se c'è una colonna Date, aggiungi la data al nome
-        if 'Date' in df.columns and pd.notna(row['Date']):
-            try:
-                if isinstance(row['Date'], datetime.datetime):
-                    date_str = row['Date'].strftime("%d/%m/%Y")
-                else:
-                    date_str = str(row['Date'])
-                
-                # Aggiungi la data come commento
-                full_name = f"{full_name} (Data: {date_str})"
-            except:
-                pass  # Ignora se c'è un problema con la data
-        
-        # Aggiungi l'allenamento al piano
+        # Aggiungi l'allenamento al piano (senza la data nel nome)
         plan[full_name] = workout_steps
     
     # Salva il piano in formato YAML
-    with open(output_file, 'w') as f:
-        # Aggiungi i commenti per le descrizioni degli allenamenti
-        yaml_content = yaml.dump(plan, default_flow_style=False, sort_keys=False)
-        
-        # Modifica il YAML per aggiungere i commenti per le descrizioni
-        for workout_name, steps in plan.items():
-            if workout_name != 'config' and ' ' in workout_name:
-                # Trova la descrizione dopo lo spazio nel nome dell'allenamento
-                workout_id, description = workout_name.split(' ', 1)
-                
-                # Sostituzione nel YAML per aggiungere il commento
-                workout_line = f"{workout_name}:"
-                workout_line_with_comment = f"{workout_name}: # {description}"
-                yaml_content = yaml_content.replace(workout_line, workout_line_with_comment)
-        
-        f.write(yaml_content)
+    with open(output_file, 'w', encoding='utf-8') as f:
+        # Usa NoAliasDumper per evitare riferimenti YAML
+        yaml.dump(plan, f, default_flow_style=False, sort_keys=False, Dumper=NoAliasDumper)
     
     print(f"Conversione completata! File YAML salvato in: {output_file}")
+    
+    # Ora aggiungi i commenti al file
+    add_comments_to_yaml(output_file, workout_descriptions)
+    
     return plan
 
+def add_comments_to_yaml(yaml_file, descriptions):
+    """
+    Aggiunge commenti al file YAML per le descrizioni degli allenamenti.
+    
+    Args:
+        yaml_file: Percorso del file YAML
+        descriptions: Dizionario con nomi degli allenamenti e relative descrizioni
+    """
+    with open(yaml_file, 'r', encoding='utf-8') as f:
+        content = f.read()
+    
+    # Aggiungi i commenti per ciascun allenamento
+    for workout_name, description in descriptions.items():
+        # Trova la riga con il nome dell'allenamento
+        pattern = f"^{re.escape(workout_name)}:"
+        content = re.sub(pattern, f"{workout_name}: # {description}", content, flags=re.MULTILINE)
+    
+    # Scrivi il contenuto aggiornato
+    with open(yaml_file, 'w', encoding='utf-8') as f:
+        f.write(content)
 
 def parse_workout_steps(steps_str, workout_name):
     """
@@ -218,6 +240,15 @@ def parse_workout_steps(steps_str, workout_name):
         step_type = step_parts[0].strip().lower()
         step_details = ':'.join(step_parts[1:]).strip()
         
+        # Verifica se è un tipo di passo valido per garmin-planner
+        if step_type not in VALID_STEP_TYPES:
+            if step_type == "steady":
+                print(f"ATTENZIONE: 'steady' non è supportato in garmin-planner. Convertito in 'interval' in {workout_name}")
+                step_type = "interval"
+            else:
+                print(f"ATTENZIONE: tipo di passo '{step_type}' non riconosciuto in {workout_name}, convertito in 'other'")
+                step_type = "other"
+        
         # Controlla se questo è un passo di ripetizione
         repeat_match = re.match(r'^repeat\s+(\d+)$', step_type)
         if repeat_match:
@@ -248,8 +279,17 @@ def parse_workout_steps(steps_str, workout_name):
                 substep_type = substep_parts[0].strip().lower()
                 substep_details = ':'.join(substep_parts[1:]).strip()
                 
+                # Verifica se è un tipo di sottopasso valido per garmin-planner
+                if substep_type not in VALID_STEP_TYPES:
+                    if substep_type == "steady":
+                        print(f"ATTENZIONE: 'steady' non è supportato in garmin-planner. Convertito in 'interval' in {workout_name}")
+                        substep_type = "interval"
+                    else:
+                        print(f"ATTENZIONE: tipo di sotto-passo '{substep_type}' non riconosciuto in {workout_name}, convertito in 'other'")
+                        substep_type = "other"
+                
                 # IMPORTANTE: Assicurati che cooldown non finisca nella ripetizione
-                if substep_type == 'cooldown':
+                if substep_type == "cooldown":
                     # Se troviamo un cooldown all'interno di una ripetizione, è probabilmente un errore
                     # Lo aggiungeremo dopo al livello principale
                     print(f"AVVISO: 'cooldown' trovato all'interno di una ripetizione in {workout_name}. Spostato fuori dalla ripetizione.")
@@ -257,7 +297,8 @@ def parse_workout_steps(steps_str, workout_name):
                     cooldown_details = substep_details
                     i += 1
                     # Aggiungi il passo di ripetizione con i suoi sotto-passi
-                    repeat_step = {f"repeat {iterations}": substeps}
+                    # Formato corretto per garmin-planner: chiave 'repeat' e valore numero di iterazioni
+                    repeat_step = {"repeat": iterations, "steps": copy.deepcopy(substeps)}
                     workout_steps.append(repeat_step)
                     # Aggiungi il cooldown come passo separato
                     workout_steps.append({"cooldown": cooldown_details})
@@ -268,7 +309,8 @@ def parse_workout_steps(steps_str, workout_name):
             
             # Se il loop è terminato normalmente, aggiungi il passo di ripetizione
             if i >= len(step_lines) or not step_lines[i].startswith((' ', '\t')):
-                repeat_step = {f"repeat {iterations}": substeps}
+                # Formato corretto per garmin-planner: chiave 'repeat' e valore numero di iterazioni
+                repeat_step = {"repeat": iterations, "steps": copy.deepcopy(substeps)}
                 workout_steps.append(repeat_step)
         else:
             # Aggiungi un passo normale
@@ -377,7 +419,7 @@ def create_sample_excel(output_file='sample_training_plan.xlsx'):
     
     # Esempio di uso di max_hr con percentuali
     hr_sheet['A2'] = 'max_hr'
-    hr_sheet['B2'] = '198'
+    hr_sheet['B2'] = 198  # Usa un intero invece di una stringa
     
     hr_sheet['A3'] = 'Z1'
     hr_sheet['B3'] = '62-76% max_hr'
@@ -426,15 +468,15 @@ def create_sample_excel(output_file='sample_training_plan.xlsx'):
         cell.fill = header_fill
         cell.border = thin_border  # Aggiungi bordo a tutte le celle dell'intestazione
     
-    # Aggiungi alcuni esempi di allenamenti
+    # Aggiungi alcuni esempi di allenamenti (usando SOLO tipi di passi supportati)
     workouts = [
         # Week, Session, Description, Steps
-        (1, 1, 'Corsa facile', 'warmup: 10min @ Z1; steady: 30min @ Z2; cooldown: 5min @ Z1'),
+        (1, 1, 'Corsa facile', 'warmup: 10min @ Z1; interval: 30min @ Z2; cooldown: 5min @ Z1'),
         (1, 2, 'Intervalli brevi', 'warmup: 15min @ Z1; repeat 5:\n  interval: 400m @ Z5\n  recovery: 2min @ Z1; cooldown: 10min @ Z1'),
-        (1, 3, 'Lungo lento', 'warmup: 10min @ Z1; steady: 45min @ Z2; cooldown: 5min @ Z1'),
-        (2, 1, 'Corsa rigenerativa', 'steady: 30min @ Z1'),
-        (2, 2, 'Threshold run', 'warmup: 15min @ Z1; steady: 20min @ Z4; cooldown: 10min @ Z1'),
-        (2, 3, 'Lungo progressivo', 'warmup: 10min @ Z1; steady: 30min @ Z2; steady: 20min @ Z3; cooldown: 10min @ Z1')
+        (1, 3, 'Lungo lento', 'warmup: 10min @ Z1; interval: 45min @ Z2; cooldown: 5min @ Z1'),
+        (2, 1, 'Corsa rigenerativa', 'interval: 30min @ Z1'),
+        (2, 2, 'Threshold run', 'warmup: 15min @ Z1; interval: 20min @ Z4; cooldown: 10min @ Z1'),
+        (2, 3, 'Lungo progressivo', 'warmup: 10min @ Z1; interval: 30min @ Z2; interval: 20min @ Z3; cooldown: 10min @ Z1')
     ]
     
     # Definisci colori alternati per le settimane

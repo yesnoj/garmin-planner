@@ -231,10 +231,7 @@ class GarminPlannerGUI(tk.Tk):
         
         # Variables
         self.import_file = tk.StringVar()
-        self.import_name_filter = tk.StringVar()
         self.import_replace = tk.BooleanVar(value=False)
-        self.import_treadmill = tk.BooleanVar(value=False)
-        self.import_dry_run = tk.BooleanVar(value=False)
         
         # Widgets
         ttk.Label(import_frame, text="Importa allenamenti da file YAML", font=("", 12, "bold")).pack(pady=10)
@@ -242,34 +239,25 @@ class GarminPlannerGUI(tk.Tk):
         file_frame = ttk.Frame(import_frame)
         file_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        ttk.Label(file_frame, text="File allenamenti:").grid(row=0, column=0, padx=5, pady=5)
+        ttk.Label(file_frame, text="File allenamenti:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
         ttk.Entry(file_frame, textvariable=self.import_file, width=50).grid(row=0, column=1, padx=5, pady=5)
         ttk.Button(file_frame, text="Sfoglia", command=self.browse_import_file).grid(row=0, column=2, padx=5, pady=5)
-        
-        filter_frame = ttk.Frame(import_frame)
-        filter_frame.pack(fill=tk.X, padx=10, pady=5)
-        
-        ttk.Label(filter_frame, text="Filtro nomi:").grid(row=0, column=0, padx=5, pady=5)
-        ttk.Entry(filter_frame, textvariable=self.import_name_filter, width=30).grid(row=0, column=1, padx=5, pady=5)
         
         options_frame = ttk.Frame(import_frame)
         options_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        ttk.Checkbutton(options_frame, text="Sostituisci allenamenti esistenti", variable=self.import_replace).grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-        ttk.Checkbutton(options_frame, text="Modalità tapis roulant", variable=self.import_treadmill).grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
-        ttk.Checkbutton(options_frame, text="Simulazione (dry run)", variable=self.import_dry_run).grid(row=0, column=2, padx=5, pady=5, sticky=tk.W)
+        ttk.Checkbutton(options_frame, text="Sostituisci allenamenti esistenti", variable=self.import_replace).pack(side=tk.LEFT, padx=5, pady=5)
         
         ttk.Button(import_frame, text="Importa", command=self.perform_import).pack(pady=10)
         
         # Display available training plans
-        # Aggiungi un frame per i pulsanti sopra il treeview
         tree_buttons_frame = ttk.Frame(import_frame)
         tree_buttons_frame.pack(fill=tk.X, padx=10, pady=5)
 
         ttk.Label(tree_buttons_frame, text="Piani di allenamento disponibili:").pack(side=tk.LEFT, padx=5)
         ttk.Button(tree_buttons_frame, text="Aggiorna lista", command=self.load_training_plans).pack(side=tk.RIGHT, padx=5)
         
-        # Poi crea il training_plans_tree come già presente nel codice originale
+        # Crea il training_plans_tree
         self.training_plans_tree = ttk.Treeview(import_frame, columns=("plan", "weeks", "type"), show="headings")
         self.training_plans_tree.heading("plan", text="Piano")
         self.training_plans_tree.heading("weeks", text="Settimane")
@@ -288,7 +276,6 @@ class GarminPlannerGUI(tk.Tk):
         
         # Variables
         self.export_file = tk.StringVar()
-        self.export_name_filter = tk.StringVar()
         self.export_format = tk.StringVar(value="YAML")
         self.export_clean = tk.BooleanVar(value=True)
         
@@ -298,33 +285,25 @@ class GarminPlannerGUI(tk.Tk):
         file_frame = ttk.Frame(export_frame)
         file_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        ttk.Label(file_frame, text="File di destinazione:").grid(row=0, column=0, padx=5, pady=5)
+        ttk.Label(file_frame, text="File di destinazione:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
         ttk.Entry(file_frame, textvariable=self.export_file, width=50).grid(row=0, column=1, padx=5, pady=5)
         ttk.Button(file_frame, text="Sfoglia", command=self.browse_export_file).grid(row=0, column=2, padx=5, pady=5)
-        
-        filter_frame = ttk.Frame(export_frame)
-        filter_frame.pack(fill=tk.X, padx=10, pady=5)
-        
-        ttk.Label(filter_frame, text="Filtro nomi:").grid(row=0, column=0, padx=5, pady=5)
-        ttk.Entry(filter_frame, textvariable=self.export_name_filter, width=30).grid(row=0, column=1, padx=5, pady=5)
         
         options_frame = ttk.Frame(export_frame)
         options_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        ttk.Label(options_frame, text="Formato:").grid(row=0, column=0, padx=5, pady=5)
+        ttk.Label(options_frame, text="Formato:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
         ttk.Combobox(options_frame, textvariable=self.export_format, values=["YAML", "JSON"]).grid(row=0, column=1, padx=5, pady=5)
         ttk.Checkbutton(options_frame, text="Pulisci dati", variable=self.export_clean).grid(row=0, column=2, padx=5, pady=5, sticky=tk.W)
         
-        # Bottoni per l'esportazione
+        # Bottoni per l'esportazione - solo il bottone "Esporta Selezionati"
         export_buttons_frame = ttk.Frame(export_frame)
         export_buttons_frame.pack(fill=tk.X, padx=10, pady=5)
-        ttk.Button(export_buttons_frame, text="Esporta Tutti", command=self.perform_export).pack(side=tk.LEFT, padx=5)
         ttk.Button(export_buttons_frame, text="Esporta Selezionati", command=self.export_selected_workouts).pack(side=tk.LEFT, padx=5)
         ttk.Button(export_buttons_frame, text="Elimina Selezionati", command=self.delete_selected_workouts).pack(side=tk.LEFT, padx=5)
-
         
-        # List of current workouts
-        ttk.Label(export_frame, text="Allenamenti disponibili su Garmin Connect").pack(pady=5)
+        # Lista degli allenamenti disponibili
+        ttk.Label(export_frame, text="Allenamenti disponibili su Garmin Connect:").pack(pady=(10, 5))
         
         self.workouts_tree = ttk.Treeview(export_frame, columns=("id", "name"), show="headings")
         self.workouts_tree.heading("id", text="ID")
@@ -336,6 +315,7 @@ class GarminPlannerGUI(tk.Tk):
         # Carica gli allenamenti dalla cache
         self.load_workouts_from_cache()
         
+        # Bottone per aggiornare la lista
         ttk.Button(export_frame, text="Aggiorna lista", command=self.refresh_workouts).pack(pady=5)
 
 
@@ -444,7 +424,7 @@ class GarminPlannerGUI(tk.Tk):
                 return  # Utente ha annullato
             self.export_file.set(filename)
         
-        # Esporta ciascun allenamento selezionato
+        # Esporta gli allenamenti selezionati
         self.log(f"Esportazione di {len(selected_ids)} allenamenti selezionati...")
         
         # Avvia il processo di esportazione
@@ -673,8 +653,6 @@ class GarminPlannerGUI(tk.Tk):
             self.log(f"Errore nell'analisi del piano: {str(e)}")
             self.training_plan_info.set("Errore nell'analisi del piano")
             self.plan_imported = False
-
-
 
 
     def create_log_tab(self):
@@ -944,22 +922,13 @@ class GarminPlannerGUI(tk.Tk):
                 self.log(f"Creata cartella OAuth: {oauth_folder}")
             except Exception as e:
                 self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
-                
+                    
         try:
             cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
                    "--oauth-folder", self.oauth_folder.get(),
-                   "--log-level", self.log_level.get()]
-            
-            if self.import_treadmill.get():
-                cmd.append("--treadmill")
-            
-            if self.import_dry_run.get():
-                cmd.append("--dry-run")
-            
-            cmd.extend(["import", "--workouts-file", self.import_file.get()])
-            
-            if self.import_name_filter.get():
-                cmd.extend(["--name-filter", self.import_name_filter.get()])
+                   "--log-level", self.log_level.get(),
+                   "import", 
+                   "--workouts-file", self.import_file.get()]
             
             if self.import_replace.get():
                 cmd.append("--replace")
@@ -973,12 +942,9 @@ class GarminPlannerGUI(tk.Tk):
                 messagebox.showerror("Errore", f"Errore durante l'importazione: {stderr}")
             else:
                 self.log("Importazione completata con successo")
-                if self.import_dry_run.get():
-                    self.log("(Modalità dry-run - nessuna modifica effettiva)")
-                else:
-                    messagebox.showinfo("Successo", "Importazione completata con successo")
-                    # Refresh the workout list
-                    self.refresh_workouts()
+                messagebox.showinfo("Successo", "Importazione completata con successo")
+                # Refresh the workout list
+                self.refresh_workouts()
         
         except Exception as e:
             self.log(f"Errore durante l'importazione: {str(e)}")
@@ -1038,75 +1004,6 @@ class GarminPlannerGUI(tk.Tk):
         
         except Exception as e:
             self.log(f"Errore durante l'aggiornamento: {str(e)}")
-    
-    def perform_export(self):
-        """Export workouts to a file"""
-        self.log("Esportazione degli allenamenti...")
-        
-        # Run the export command in a separate thread
-        threading.Thread(target=self._do_export).start()
-    
-    def _do_export(self):
-        # Assicurati che la cartella OAuth esista
-        oauth_folder = self.oauth_folder.get()
-        if not os.path.exists(oauth_folder):
-            try:
-                os.makedirs(oauth_folder, exist_ok=True)
-                self.log(f"Creata cartella OAuth: {oauth_folder}")
-            except Exception as e:
-                self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
-                return
-                
-        try:
-            cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
-                   "--oauth-folder", self.oauth_folder.get(),
-                   "--log-level", self.log_level.get(),
-                   "export"]
-            
-            if self.export_file.get():
-                cmd.extend(["--export-file", self.export_file.get()])
-            
-            if self.export_name_filter.get():
-                cmd.extend(["--name-filter", self.export_name_filter.get()])
-            
-            cmd.extend(["--format", self.export_format.get()])
-            
-            if self.export_clean.get():
-                cmd.append("--clean")
-            
-            self.log(f"Esecuzione comando: {' '.join(cmd)}")
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            stdout, stderr = process.communicate()
-            
-            if process.returncode != 0:
-                self.log(f"Errore durante l'esportazione: {stderr}")
-                messagebox.showerror("Errore", f"Errore durante l'esportazione: {stderr}")
-            else:
-                if self.export_file.get():
-                    self.log(f"Esportazione completata con successo su {self.export_file.get()}")
-                    messagebox.showinfo("Successo", f"Esportazione completata con successo su {self.export_file.get()}")
-                else:
-                    # Display the output in a popup
-                    output_window = tk.Toplevel(self)
-                    output_window.title("Risultato Esportazione")
-                    output_window.geometry("800x600")
-                    
-                    text = tk.Text(output_window, wrap=tk.NONE)
-                    text.pack(fill=tk.BOTH, expand=True)
-                    
-                    # Add a scrollbar
-                    scrollbar = ttk.Scrollbar(text, command=text.yview)
-                    text.configure(yscrollcommand=scrollbar.set)
-                    scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
-                    
-                    text.insert(tk.END, stdout)
-                    text.config(state=tk.DISABLED)
-                    
-                    self.log("Esportazione completata con successo")
-        
-        except Exception as e:
-            self.log(f"Errore durante l'esportazione: {str(e)}")
-            messagebox.showerror("Errore", f"Errore durante l'esportazione: {str(e)}")
     
     def refresh_calendar(self):
         """Refresh the calendar view"""
@@ -1288,350 +1185,345 @@ class GarminPlannerGUI(tk.Tk):
 
 
     def _simulate_schedule(self, selected_days):
-        """Simula la pianificazione degli allenamenti senza apportare modifiche"""
-        try:
-            # Recupera i parametri necessari
-            training_plan_id = self.training_plan.get().strip()
-            race_day = datetime.strptime(self.race_day.get(), "%Y-%m-%d").date()
-            today = datetime.today().date()
-            
-            # Calcola il lunedì della settimana successiva
-            next_monday = today + timedelta(days=(7 - today.weekday()))
-            
-            # Converte i giorni selezionati in indici
-            day_indices = [int(day) for day in selected_days]
-            day_names = [self.day_names[i] for i in day_indices]
-            
-            self.log(f"Simulazione pianificazione per '{training_plan_id}' con giorni: {', '.join(day_names)}")
-            
-            # Cerca gli allenamenti nella cache
-            workouts = []
-            if os.path.exists(WORKOUTS_CACHE_FILE):
-                with open(WORKOUTS_CACHE_FILE, 'r') as f:
-                    all_workouts = json.load(f)
-                    
-                    # Filtra per il piano di allenamento
-                    plan_workouts = []
-                    for workout in all_workouts:
-                        workout_name = workout.get('workoutName', '')
-                        if training_plan_id in workout_name:
-                            plan_workouts.append(workout)
-                    
-                    # Estrai informazioni settimana/sessione
-                    workout_infos = {}
-                    for workout in plan_workouts:
-                        workout_name = workout.get('workoutName', '')
-                        workout_id = workout.get('workoutId', '')
+            """Simula la pianificazione degli allenamenti senza apportare modifiche"""
+            try:
+                # Recupera i parametri necessari
+                training_plan_id = self.training_plan.get().strip()
+                race_day = datetime.strptime(self.race_day.get(), "%Y-%m-%d").date()
+                today = datetime.today().date()
+                
+                # Calcola il lunedì della settimana successiva
+                next_monday = today + timedelta(days=(7 - today.weekday()))
+                
+                # Converte i giorni selezionati in indici
+                day_indices = [int(day) for day in selected_days]
+                day_names = [self.day_names[i] for i in day_indices]
+                
+                self.log(f"Simulazione pianificazione per '{training_plan_id}' con giorni: {', '.join(day_names)}")
+                
+                # Cerca gli allenamenti nella cache
+                workouts = []
+                if os.path.exists(WORKOUTS_CACHE_FILE):
+                    with open(WORKOUTS_CACHE_FILE, 'r') as f:
+                        all_workouts = json.load(f)
                         
-                        match = re.search(r'\s(W\d\d)S(\d\d)\s', workout_name)
-                        if match:
-                            week_id = match.group(1)
-                            session_id = int(match.group(2))
+                        # Filtra per il piano di allenamento
+                        plan_workouts = []
+                        for workout in all_workouts:
+                            workout_name = workout.get('workoutName', '')
+                            if training_plan_id in workout_name:
+                                plan_workouts.append(workout)
+                        
+                        # Estrai informazioni settimana/sessione
+                        workout_infos = {}
+                        for workout in plan_workouts:
+                            workout_name = workout.get('workoutName', '')
+                            workout_id = workout.get('workoutId', '')
                             
-                            if week_id not in workout_infos:
-                                workout_infos[week_id] = {}
-                            workout_infos[week_id][session_id] = {
-                                'id': workout_id,
-                                'name': workout_name
-                            }
-            
-            # Se non ci sono allenamenti, mostra un messaggio
-            if not workout_infos:
-                self.log("Nessun allenamento trovato per la simulazione")
-                messagebox.showinfo("Simulazione", 
-                                  f"Nessun allenamento trovato per il piano '{training_plan_id}'.\n\n"
-                                  f"Importa prima gli allenamenti per poter simulare la pianificazione.")
-                return
+                            match = re.search(r'\s(W\d\d)S(\d\d)\s', workout_name)
+                            if match:
+                                week_id = match.group(1)
+                                session_id = int(match.group(2))
+                                
+                                if week_id not in workout_infos:
+                                    workout_infos[week_id] = {}
+                                workout_infos[week_id][session_id] = {
+                                    'id': workout_id,
+                                    'name': workout_name
+                                }
                 
-            # Ora simula la pianificazione
-            simulated_schedule = []
-            
-            for week_index, (week_id, sessions) in enumerate(sorted(workout_infos.items())):
-                week_start = next_monday + timedelta(weeks=week_index)
+                # Se non ci sono allenamenti, mostra un messaggio
+                if not workout_infos:
+                    self.log("Nessun allenamento trovato per la simulazione")
+                    messagebox.showinfo("Simulazione", 
+                                      f"Nessun allenamento trovato per il piano '{training_plan_id}'.\n\n"
+                                      f"Importa prima gli allenamenti per poter simulare la pianificazione.")
+                    return
+                    
+                # Ora simula la pianificazione
+                simulated_schedule = []
                 
-                # Salta settimane che sarebbero dopo la gara
-                if week_start > race_day:
-                    self.log(f"Settimana {week_id} sarebbe dopo la gara. Saltata.")
-                    continue
+                for week_index, (week_id, sessions) in enumerate(sorted(workout_infos.items())):
+                    week_start = next_monday + timedelta(weeks=week_index)
                     
-                # Ordina le sessioni
-                session_ids = sorted(sessions.keys())
-                
-                # Assegna allenamenti ai giorni selezionati
-                for i, session_id in enumerate(session_ids):
-                    workout_info = sessions[session_id]
-                    
-                    # Determina il giorno della settimana
-                    day_index = day_indices[i % len(day_indices)]
-                    
-                    # Calcola la data
-                    workout_date = week_start + timedelta(days=day_index)
-                    date_str = workout_date.strftime('%Y-%m-%d')
-                    
-                    # Salta date nel passato o dopo la gara
-                    if workout_date < today:
-                        self.log(f"Allenamento {week_id}S{session_id:02d} cadrebbe nel passato ({date_str}). Saltato.")
+                    # Salta settimane che sarebbero dopo la gara
+                    if week_start > race_day:
+                        self.log(f"Settimana {week_id} sarebbe dopo la gara. Saltata.")
                         continue
                         
-                    if workout_date > race_day:
-                        self.log(f"Allenamento {week_id}S{session_id:02d} cadrebbe dopo la gara ({date_str}). Saltato.")
-                        continue
+                    # Ordina le sessioni
+                    session_ids = sorted(sessions.keys())
                     
-                    # Aggiungi alla simulazione
-                    simulated_schedule.append({
-                        'date': date_str,
-                        'title': workout_info['name'],
-                        'id': workout_info['id'],
-                        'day': self.day_names[day_index]
+                    # Assegna allenamenti ai giorni selezionati
+                    for i, session_id in enumerate(session_ids):
+                        workout_info = sessions[session_id]
+                        
+                        # Determina il giorno della settimana
+                        day_index = day_indices[i % len(day_indices)]
+                        
+                        # Calcola la data
+                        workout_date = week_start + timedelta(days=day_index)
+                        date_str = workout_date.strftime('%Y-%m-%d')
+                        
+                        # Salta date nel passato o dopo la gara
+                        if workout_date < today:
+                            self.log(f"Allenamento {week_id}S{session_id:02d} cadrebbe nel passato ({date_str}). Saltato.")
+                            continue
+                            
+                        if workout_date > race_day:
+                            self.log(f"Allenamento {week_id}S{session_id:02d} cadrebbe dopo la gara ({date_str}). Saltato.")
+                            continue
+                        
+                        # Aggiungi alla simulazione
+                        simulated_schedule.append({
+                            'date': date_str,
+                            'title': workout_info['name'],
+                            'id': workout_info['id'],
+                            'day': self.day_names[day_index]
+                        })
+                        
+                        self.log(f"SIMULAZIONE: Allenamento {week_id}S{session_id:02d} pianificato per {self.day_names[day_index]} {date_str}")
+                
+                # Ordina per data
+                simulated_schedule.sort(key=lambda x: x['date'])
+                
+                # Visualizza gli allenamenti simulati
+                self._display_simulated_workouts(simulated_schedule)
+                
+            except Exception as e:
+                self.log(f"Errore durante la simulazione: {str(e)}")
+                messagebox.showerror("Errore", f"Errore durante la simulazione: {str(e)}")
+
+        
+    def _do_schedule(self, selected_days, is_dry_run=False):
+            # Assicurati che la cartella OAuth esista
+            oauth_folder = self.oauth_folder.get()
+            if not os.path.exists(oauth_folder):
+                try:
+                    os.makedirs(oauth_folder, exist_ok=True)
+                    self.log(f"Creata cartella OAuth: {oauth_folder}")
+                except Exception as e:
+                    self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
+                    return
+            
+            # Se siamo in modalità dry-run, usiamo un approccio diverso
+            if is_dry_run:
+                self._simulate_schedule(selected_days)
+                return
+                        
+            try:
+                cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
+                       "--oauth-folder", self.oauth_folder.get(),
+                       "--log-level", self.log_level.get()]
+                
+                cmd.extend(["schedule",
+                          "--training-plan", self.training_plan.get(),
+                          "--race-day", self.race_day.get()])
+                
+                # Add selected days if any
+                if selected_days:
+                    cmd.extend(["--workout-days", ",".join(selected_days)])
+                
+                self.log(f"Esecuzione comando: {' '.join(cmd)}")
+                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                stdout, stderr = process.communicate()
+                
+                if process.returncode != 0:
+                    self.log(f"Errore durante la pianificazione: {stderr}")
+                    messagebox.showerror("Errore", f"Errore durante la pianificazione: {stderr}")
+                else:
+                    self.log("Pianificazione completata con successo")
+                    messagebox.showinfo("Successo", "Pianificazione completata con successo")
+                    
+                    # Refresh the calendar
+                    self.refresh_calendar()
+                
+            except Exception as e:
+                self.log(f"Errore durante la pianificazione: {str(e)}")
+                messagebox.showerror("Errore", f"Errore durante la pianificazione: {str(e)}")
+        
+    def _parse_schedule_output(self, output):
+            """Estrai le informazioni sugli allenamenti pianificati dall'output del comando"""
+            try:
+                workouts = []
+                # Cerca linee come "Scheduling workout XXX (YYY) on ZZZZ-MM-DD"
+                pattern = r"Scheduling workout (.*?) \((.*?)\) on (\d{4}-\d{2}-\d{2})"
+                matches = re.findall(pattern, output)
+                
+                for match in matches:
+                    workout_name, workout_id, date = match
+                    workouts.append({
+                        'date': date,
+                        'title': workout_name,
+                        'id': workout_id
                     })
                     
-                    self.log(f"SIMULAZIONE: Allenamento {week_id}S{session_id:02d} pianificato per {self.day_names[day_index]} {date_str}")
-            
-            # Ordina per data
-            simulated_schedule.sort(key=lambda x: x['date'])
-            
-            # Visualizza gli allenamenti simulati
-            self._display_simulated_workouts(simulated_schedule)
-            
-        except Exception as e:
-            self.log(f"Errore durante la simulazione: {str(e)}")
-            messagebox.showerror("Errore", f"Errore durante la simulazione: {str(e)}")
-
-    
-    def _do_schedule(self, selected_days, is_dry_run=False):
-        # Assicurati che la cartella OAuth esista
-        oauth_folder = self.oauth_folder.get()
-        if not os.path.exists(oauth_folder):
-            try:
-                os.makedirs(oauth_folder, exist_ok=True)
-                self.log(f"Creata cartella OAuth: {oauth_folder}")
+                return workouts
             except Exception as e:
-                self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
-                return
-        
-        # Se siamo in modalità dry-run, usiamo un approccio diverso
-        if is_dry_run:
-            self._simulate_schedule(selected_days)
-            return
-                    
-        try:
-            cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
-                   "--oauth-folder", self.oauth_folder.get(),
-                   "--log-level", self.log_level.get()]
-            
-            cmd.extend(["schedule",
-                      "--training-plan", self.training_plan.get(),
-                      "--race-day", self.race_day.get()])
-            
-            # Add selected days if any
-            if selected_days:
-                cmd.extend(["--workout-days", ",".join(selected_days)])
-            
-            self.log(f"Esecuzione comando: {' '.join(cmd)}")
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            stdout, stderr = process.communicate()
-            
-            if process.returncode != 0:
-                self.log(f"Errore durante la pianificazione: {stderr}")
-                messagebox.showerror("Errore", f"Errore durante la pianificazione: {stderr}")
-            else:
-                self.log("Pianificazione completata con successo")
-                messagebox.showinfo("Successo", "Pianificazione completata con successo")
-                
-                # Refresh the calendar
-                self.refresh_calendar()
-            
-        except Exception as e:
-            self.log(f"Errore durante la pianificazione: {str(e)}")
-            messagebox.showerror("Errore", f"Errore durante la pianificazione: {str(e)}")
-    
-    def _parse_schedule_output(self, output):
-        """Estrai le informazioni sugli allenamenti pianificati dall'output del comando"""
-        try:
-            workouts = []
-            # Cerca linee come "Scheduling workout XXX (YYY) on ZZZZ-MM-DD"
-            pattern = r"Scheduling workout (.*?) \((.*?)\) on (\d{4}-\d{2}-\d{2})"
-            matches = re.findall(pattern, output)
-            
-            for match in matches:
-                workout_name, workout_id, date = match
-                workouts.append({
-                    'date': date,
-                    'title': workout_name,
-                    'id': workout_id
-                })
-                
-            return workouts
-        except Exception as e:
-            self.log(f"Errore nel parsing dell'output di pianificazione: {str(e)}")
-            return None
+                self.log(f"Errore nel parsing dell'output di pianificazione: {str(e)}")
+                return None
 
     def _display_simulated_workouts(self, workouts):
-        """Visualizza gli allenamenti simulati nella tabella del calendario"""
-        try:
-            # Pulisci la tabella del calendario
-            for item in self.calendar_tree.get_children():
-                self.calendar_tree.delete(item)
+            """Visualizza gli allenamenti simulati nella tabella del calendario"""
+            try:
+                # Pulisci la tabella del calendario
+                for item in self.calendar_tree.get_children():
+                    self.calendar_tree.delete(item)
+                    
+                # Aggiungi gli allenamenti simulati
+                for workout in workouts:
+                    self.calendar_tree.insert("", "end", values=(workout['date'], workout['title'] + " (SIMULAZIONE)"))
+                    
+                self.log(f"Visualizzati {len(workouts)} allenamenti simulati nel calendario")
                 
-            # Aggiungi gli allenamenti simulati
-            for workout in workouts:
-                self.calendar_tree.insert("", "end", values=(workout['date'], workout['title'] + " (SIMULAZIONE)"))
-                
-            self.log(f"Visualizzati {len(workouts)} allenamenti simulati nel calendario")
+                # Mostra un messaggio all'utente
+                if workouts:
+                    messagebox.showinfo("Simulazione completata", 
+                                      f"Simulazione pianificazione completata.\n"
+                                      f"Sono stati trovati {len(workouts)} allenamenti da pianificare.\n"
+                                      f"Questi allenamenti sono mostrati nel calendario con l'etichetta (SIMULAZIONE).\n\n"
+                                      f"Nessuna modifica è stata apportata al calendario di Garmin Connect.")
+                else:
+                    messagebox.showinfo("Simulazione", "Nessun allenamento da pianificare con i criteri specificati.")
             
-            # Mostra un messaggio all'utente
-            if workouts:
-                messagebox.showinfo("Simulazione completata", 
-                                  f"Simulazione pianificazione completata.\n"
-                                  f"Sono stati trovati {len(workouts)} allenamenti da pianificare.\n"
-                                  f"Questi allenamenti sono mostrati nel calendario con l'etichetta (SIMULAZIONE).\n\n"
-                                  f"Nessuna modifica è stata apportata al calendario di Garmin Connect.")
-            else:
-                messagebox.showinfo("Simulazione", "Nessun allenamento da pianificare con i criteri specificati.")
-        
-        except Exception as e:
-            self.log(f"Errore nella visualizzazione degli allenamenti simulati: {str(e)}")
+            except Exception as e:
+                self.log(f"Errore nella visualizzazione degli allenamenti simulati: {str(e)}")
 
 
     def _do_import_for_schedule(self, selected_days):
-        """Importa gli allenamenti e poi pianifica"""
-        # Assicurati che la cartella OAuth esista
-        oauth_folder = self.oauth_folder.get()
-        if not os.path.exists(oauth_folder):
+            """Importa gli allenamenti e poi pianifica"""
+            # Assicurati che la cartella OAuth esista
+            oauth_folder = self.oauth_folder.get()
+            if not os.path.exists(oauth_folder):
+                try:
+                    os.makedirs(oauth_folder, exist_ok=True)
+                    self.log(f"Creata cartella OAuth: {oauth_folder}")
+                except Exception as e:
+                    self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
+                    return
+                        
             try:
-                os.makedirs(oauth_folder, exist_ok=True)
-                self.log(f"Creata cartella OAuth: {oauth_folder}")
-            except Exception as e:
-                self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
-                return
+                cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
+                       "--oauth-folder", self.oauth_folder.get(),
+                       "--log-level", self.log_level.get(),
+                       "import", 
+                       "--workouts-file", self.import_file.get()]
+                
+                if self.import_replace.get():
+                    cmd.append("--replace")
+                
+                self.log(f"Esecuzione comando: {' '.join(cmd)}")
+                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                stdout, stderr = process.communicate()
+                
+                if process.returncode != 0:
+                    self.log(f"Errore durante l'importazione: {stderr}")
+                    messagebox.showerror("Errore", f"Errore durante l'importazione: {stderr}")
+                else:
+                    self.log("Importazione completata con successo")
                     
-        try:
-            cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
-                   "--oauth-folder", self.oauth_folder.get(),
-                   "--log-level", self.log_level.get()]
-            
-            if self.import_treadmill.get():
-                cmd.append("--treadmill")
-            
-            cmd.extend(["import", "--workouts-file", self.import_file.get()])
-            
-            if self.import_name_filter.get():
-                cmd.extend(["--name-filter", self.import_name_filter.get()])
-            
-            if self.import_replace.get():
-                cmd.append("--replace")
-            
-            self.log(f"Esecuzione comando: {' '.join(cmd)}")
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            stdout, stderr = process.communicate()
-            
-            if process.returncode != 0:
-                self.log(f"Errore durante l'importazione: {stderr}")
-                messagebox.showerror("Errore", f"Errore durante l'importazione: {stderr}")
-            else:
-                self.log("Importazione completata con successo")
-                
-                # Aggiorna la lista degli allenamenti in background
-                refresh_thread = threading.Thread(target=self._refresh_workouts_silent)
-                refresh_thread.start()
-                refresh_thread.join()  # Attendi il completamento
-                
-                # Ora procedi con la pianificazione
-                self.log(f"Ora procedo con la pianificazione...")
-                self._do_schedule(selected_days)
-                
-        except Exception as e:
-            self.log(f"Errore durante l'importazione: {str(e)}")
-            messagebox.showerror("Errore", f"Errore durante l'importazione: {str(e)}")
+                    # Aggiorna la lista degli allenamenti in background
+                    refresh_thread = threading.Thread(target=self._refresh_workouts_silent)
+                    refresh_thread.start()
+                    refresh_thread.join()  # Attendi il completamento
+                    
+                    # Ora procedi con la pianificazione
+                    self.log(f"Ora procedo con la pianificazione...")
+                    self._do_schedule(selected_days)
+                    
+            except Exception as e:
+                self.log(f"Errore durante l'importazione: {str(e)}")
+                messagebox.showerror("Errore", f"Errore durante l'importazione: {str(e)}")
 
 
     def _refresh_workouts_silent(self):
-        """Versione silenziosa di refresh_workouts che non mostra messaggi all'utente"""
-        try:
-            cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
-                   "--oauth-folder", self.oauth_folder.get(),
-                   "--log-level", self.log_level.get(),
-                   "export"]
+            """Versione silenziosa di refresh_workouts che non mostra messaggi all'utente"""
+            try:
+                cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
+                       "--oauth-folder", self.oauth_folder.get(),
+                       "--log-level", self.log_level.get(),
+                       "export"]
+                
+                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                stdout, stderr = process.communicate()
+                
+                if process.returncode == 0:
+                    try:
+                        workouts = json.loads(stdout)
+                        # Salva gli allenamenti nella cache
+                        self.save_workouts_to_cache(workouts)
+                        self.log(f"Aggiornati {len(workouts)} allenamenti nella cache")
+                    except json.JSONDecodeError:
+                        self.log("Errore nel decodificare la risposta JSON")
             
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            stdout, stderr = process.communicate()
-            
-            if process.returncode == 0:
-                try:
-                    workouts = json.loads(stdout)
-                    # Salva gli allenamenti nella cache
-                    self.save_workouts_to_cache(workouts)
-                    self.log(f"Aggiornati {len(workouts)} allenamenti nella cache")
-                except json.JSONDecodeError:
-                    self.log("Errore nel decodificare la risposta JSON")
-        
-        except Exception as e:
-            self.log(f"Errore durante l'aggiornamento silenzioso: {str(e)}")
+            except Exception as e:
+                self.log(f"Errore durante l'aggiornamento silenzioso: {str(e)}")
 
     def perform_unschedule(self):
-        """Unschedule workouts from a training plan"""
-        if not self.training_plan.get():
-            messagebox.showerror("Errore", "Inserisci l'ID del piano di allenamento")
-            return
-        
-        # Ask for confirmation
-        if not messagebox.askyesno("Conferma", f"Sei sicuro di voler rimuovere tutti gli allenamenti pianificati per {self.training_plan.get()}?"):
-            return
-        
-        self.log(f"Rimozione pianificazione allenamenti per il piano {self.training_plan.get()}...")
-        
-        # Run the unschedule command in a separate thread
-        threading.Thread(target=self._do_unschedule).start()
-    
-    def _do_unschedule(self):
-        # Assicurati che la cartella OAuth esista
-        oauth_folder = self.oauth_folder.get()
-        if not os.path.exists(oauth_folder):
-            try:
-                os.makedirs(oauth_folder, exist_ok=True)
-                self.log(f"Creata cartella OAuth: {oauth_folder}")
-            except Exception as e:
-                self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
+            """Unschedule workouts from a training plan"""
+            if not self.training_plan.get():
+                messagebox.showerror("Errore", "Inserisci l'ID del piano di allenamento")
                 return
-                
-        try:
-            cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
-                   "--oauth-folder", self.oauth_folder.get(),
-                   "--log-level", self.log_level.get()
-                   ]
             
-            if self.schedule_dry_run.get():
-                cmd.append("--dry-run")
+            # Ask for confirmation
+            if not messagebox.askyesno("Conferma", f"Sei sicuro di voler rimuovere tutti gli allenamenti pianificati per {self.training_plan.get()}?"):
+                return
             
-            cmd.extend(["unschedule",
-                      "--training-plan", self.training_plan.get()])
+            self.log(f"Rimozione pianificazione allenamenti per il piano {self.training_plan.get()}...")
             
-            self.log(f"Esecuzione comando: {' '.join(cmd)}")
-            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            stdout, stderr = process.communicate()
-            
-            if process.returncode != 0:
-                self.log(f"Errore durante la rimozione della pianificazione: {stderr}")
-                messagebox.showerror("Errore", f"Errore durante la rimozione della pianificazione: {stderr}")
-            else:
-                self.log("Rimozione pianificazione completata con successo")
-                if self.schedule_dry_run.get():
-                    self.log("(Modalità dry-run - nessuna modifica effettiva)")
-                else:
-                    messagebox.showinfo("Successo", "Rimozione pianificazione completata con successo")
-                    # Refresh the calendar
-                    self.refresh_calendar()
+            # Run the unschedule command in a separate thread
+            threading.Thread(target=self._do_unschedule).start()
         
-        except Exception as e:
-            self.log(f"Errore durante la rimozione della pianificazione: {str(e)}")
-            messagebox.showerror("Errore", f"Errore durante la rimozione della pianificazione: {str(e)}")
-    
+    def _do_unschedule(self):
+            # Assicurati che la cartella OAuth esista
+            oauth_folder = self.oauth_folder.get()
+            if not os.path.exists(oauth_folder):
+                try:
+                    os.makedirs(oauth_folder, exist_ok=True)
+                    self.log(f"Creata cartella OAuth: {oauth_folder}")
+                except Exception as e:
+                    self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
+                    return
+                    
+            try:
+                cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
+                       "--oauth-folder", self.oauth_folder.get(),
+                       "--log-level", self.log_level.get()
+                       ]
+                
+                if self.schedule_dry_run.get():
+                    cmd.append("--dry-run")
+                
+                cmd.extend(["unschedule",
+                          "--training-plan", self.training_plan.get()])
+                
+                self.log(f"Esecuzione comando: {' '.join(cmd)}")
+                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+                stdout, stderr = process.communicate()
+                
+                if process.returncode != 0:
+                    self.log(f"Errore durante la rimozione della pianificazione: {stderr}")
+                    messagebox.showerror("Errore", f"Errore durante la rimozione della pianificazione: {stderr}")
+                else:
+                    self.log("Rimozione pianificazione completata con successo")
+                    if self.schedule_dry_run.get():
+                        self.log("(Modalità dry-run - nessuna modifica effettiva)")
+                    else:
+                        messagebox.showinfo("Successo", "Rimozione pianificazione completata con successo")
+                        # Refresh the calendar
+                        self.refresh_calendar()
+            
+            except Exception as e:
+                self.log(f"Errore durante la rimozione della pianificazione: {str(e)}")
+                messagebox.showerror("Errore", f"Errore durante la rimozione della pianificazione: {str(e)}")
+        
 
 class TextHandler(logging.Handler):
     """Handler per redirezionare i log al widget Text"""
     
     def __init__(self, text_widget):
-        logging.Handler.__init__(self)
+        # Inizializzare con un livello specifico (INFO)
+        logging.Handler.__init__(self, level=logging.INFO)
         self.text_widget = text_widget
         
     def emit(self, record):
