@@ -770,7 +770,10 @@ class ExcelToYamlGUI(tk.Tk):
             # Aggiorna l'interfaccia nel thread principale
             self.after(0, lambda: self._conversion_success(yaml_path, len(plan) - 1))  # -1 per escludere config
         except Exception as e:
-            self.after(0, lambda: self._conversion_error(str(e)))
+            # Cattura l'errore e memorizza il messaggio
+            error_msg = str(e)
+            # Usa una variabile locale invece di riferirsi a 'e' nella lambda
+            self.after(0, lambda msg=error_msg: self._conversion_error(msg))
     
     def _conversion_success(self, yaml_path, workout_count):
         """Chiamato quando la conversione è stata completata con successo"""

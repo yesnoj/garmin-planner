@@ -31,7 +31,41 @@ def excel_to_yaml(excel_file, output_file=None):
     print(f"Convertendo {excel_file} in {output_file}...")
     
     # Carica il file Excel
-    xls = pd.ExcelFile(excel_file)
+    try:
+        # Leggi esplicitamente con le intestazioni nella seconda riga (header=1)
+        df = pd.read_excel(excel_file, sheet_name='Workouts', header=1)
+        
+        # Verifica che ci siano le colonne richieste
+        required_cols = ['Week', 'Session', 'Description', 'Steps']
+        if all(col in df.columns for col in required_cols):
+            print("Foglio 'Workouts' trovato con intestazioni nella seconda riga.")
+        else:
+            # Verifica se le colonne esistono ma con case diverso
+            df_cols_lower = [col.lower() for col in df.columns]
+            missing = []
+            
+            for req_col in required_cols:
+                if req_col.lower() not in df_cols_lower:
+                    missing.append(req_col)
+            
+            if missing:
+                raise ValueError(f"Colonne mancanti nel foglio 'Workouts': {', '.join(missing)}")
+            else:
+                # Rinomina le colonne per uniformarle
+                rename_map = {}
+                for col in df.columns:
+                    for req_col in required_cols:
+                        if col.lower() == req_col.lower():
+                            rename_map[col] = req_col
+                
+                df = df.rename(columns=rename_map)
+                print("Colonne rinominate per uniformità.")
+        
+        # Ora puoi continuare con la lettura del resto del file
+        xls = pd.ExcelFile(excel_file)
+        
+    except Exception as e:
+        raise ValueError(f"Errore nel caricamento del foglio 'Workouts': {str(e)}")
     
     # Dizionario che conterrà il piano completo
     plan = {'config': {
@@ -74,9 +108,9 @@ def excel_to_yaml(excel_file, output_file=None):
         
         for _, row in paces_df.iterrows():
             # Assicurati che ci siano sia il nome che il valore
-            if pd.notna(row[0]) and pd.notna(row[1]):
-                name = str(row[0]).strip()
-                value = str(row[1]).strip()
+            if pd.notna(row.iloc[0]) and pd.notna(row.iloc[1]):
+                name = str(row.iloc[0]).strip()
+                value = str(row.iloc[1]).strip()
                 plan['config']['paces'][name] = value
     
     # Estrai le frequenze cardiache
@@ -85,114 +119,46 @@ def excel_to_yaml(excel_file, output_file=None):
         
         for _, row in hr_df.iterrows():
             # Assicurati che ci siano sia il nome che il valore
-            if pd.notna(row[0]) and pd.notna(row[1]):
-                name = str(row[0]).strip()
-                value = str(row[1]).strip()
+            if pd.notna(row.iloc[0]) and pd.notna(row.iloc[1]):
+                name = str(row.iloc[0]).strip()
+                value = str(row.iloc[1]).strip()
                 plan['config']['heart_rates'][name] = value
     
-    # Ora processiamo gli allenamenti in base alla struttura del file Excel
-    
-    # Controlla se esiste un foglio "Workouts" che contiene tutti gli allenamenti
-    if 'Workouts' in xls.sheet_names:
-        # Formato a foglio singolo - tutti gli allenamenti sono in un unico foglio
-        workouts_df = pd.read_excel(xls, 'Workouts', header=0)
+    # Processa gli allenamenti dal DataFrame
+    for _, row in df.iterrows():
+        # Verifica che ci siano i dati necessari
+        if pd.isna(row['Week']) or pd.isna(row['Session']) or pd.isna(row['Description']) or pd.isna(row['Steps']):
+            continue
         
-        # Identifica le colonne dal nome
-        week_col = None
-        session_col = None
-        desc_col = None
-        steps_col = None
+        # Estrai i dati
+        week = str(int(row['Week'])).zfill(2)  # Formatta come 01, 02, ecc.
+        session = str(int(row['Session'])).zfill(2)
+        description = str(row['Description']).strip()
         
-        for i, col_name in enumerate(workouts_df.columns):
-            col_name_lower = str(col_name).lower()
-            if col_name_lower == 'week':
-                week_col = i
-            elif col_name_lower == 'session':
-                session_col = i
-            elif col_name_lower == 'description':
-                desc_col = i
-            elif col_name_lower == 'steps':
-                steps_col = i
+        # Crea il nome completo dell'allenamento
+        full_name = f"W{week}S{session} {description}"
         
-        # Verifica che le colonne necessarie esistano
-        if None in (week_col, session_col, desc_col, steps_col):
-            raise ValueError("Il foglio 'Workouts' deve contenere le colonne: 'Week', 'Session', 'Description', 'Steps'")
+        # Estrai i passi dell'allenamento
+        steps_str = str(row['Steps']).strip()
         
-        # Identifica se c'è una colonna Date e la sua posizione
-        date_col = None
-        for i, col_name in enumerate(workouts_df.columns):
-            if str(col_name).lower() == 'date':
-                date_col = i
-                break
+        # Prepara la lista dei passi
+        workout_steps = parse_workout_steps(steps_str, full_name)
         
-        # Processa gli allenamenti
-        for _, row in workouts_df.iterrows():
-            # Verifica che ci siano le informazioni minime necessarie
-            if pd.isna(row[week_col]) or pd.isna(row[session_col]) or pd.isna(row[desc_col]) or pd.isna(row[steps_col]):
-                continue
-            
-            # Estrai settimana, sessione, descrizione e passi
-            week = str(int(row[week_col])).zfill(2)  # Converte in int per rimuovere decimali e poi formatta
-            session = str(int(row[session_col])).zfill(2)
-            description = str(row[desc_col]).strip()
-            
-            # Crea il nome completo dell'allenamento con il formato WxxSxx
-            full_name = f"W{week}S{session} {description}"
-            
-            # Estrai i passi dell'allenamento
-            steps_str = str(row[steps_col]).strip()
-            
-            # Prepara la lista dei passi
-            workout_steps = parse_workout_steps(steps_str, full_name)
-            
-            # Se c'è una data, aggiungila ai commenti dell'allenamento
-            if date_col is not None and pd.notna(row[date_col]):
-                date_str = ""
-                if isinstance(row[date_col], datetime):
-                    date_str = row[date_col].strftime("%d/%m/%Y")
+        # Se c'è una colonna Date, aggiungi la data al nome
+        if 'Date' in df.columns and pd.notna(row['Date']):
+            try:
+                if isinstance(row['Date'], datetime.datetime):
+                    date_str = row['Date'].strftime("%d/%m/%Y")
                 else:
-                    date_str = str(row[date_col])
+                    date_str = str(row['Date'])
                 
-                # Modifica il nome per includere la data nel commento (sarà estratto dal parser YAML)
+                # Aggiungi la data come commento
                 full_name = f"{full_name} (Data: {date_str})"
-            
-            # Aggiungi l'allenamento al piano
-            plan[full_name] = workout_steps
-    else:
-        # Formato a fogli multipli - ogni settimana ha il suo foglio
-        for sheet_name in xls.sheet_names:
-            # Cerca fogli che corrispondono al pattern "Week01", "Week02", ecc.
-            if re.match(r'^Week\d+$', sheet_name):
-                week_number = sheet_name.replace('Week', '')
-                
-                # Leggi il foglio della settimana
-                week_df = pd.read_excel(xls, sheet_name, header=0)
-                
-                # Processa gli allenamenti in questa settimana
-                for _, row in week_df.iterrows():
-                    # Ignora le righe senza nome di allenamento
-                    if pd.isna(row[0]) or not str(row[0]).strip():
-                        continue
-                    
-                    # Estrai il nome e la descrizione dell'allenamento
-                    session_name = str(row[0]).strip()
-                    description = str(row[1]).strip() if pd.notna(row[1]) else ""
-                    
-                    # Crea il nome completo dell'allenamento con il formato WxxSxx
-                    full_name = f"W{week_number}S{session_name.zfill(2)} {description}"
-                    
-                    # Ignora se non ci sono passi dell'allenamento
-                    if pd.isna(row[2]):
-                        continue
-                    
-                    # Estrai i passi dell'allenamento
-                    steps_str = str(row[2]).strip()
-                    
-                    # Prepara la lista dei passi
-                    workout_steps = parse_workout_steps(steps_str, full_name)
-                    
-                    # Aggiungi l'allenamento al piano
-                    plan[full_name] = workout_steps
+            except:
+                pass  # Ignora se c'è un problema con la data
+        
+        # Aggiungi l'allenamento al piano
+        plan[full_name] = workout_steps
     
     # Salva il piano in formato YAML
     with open(output_file, 'w') as f:
@@ -214,6 +180,7 @@ def excel_to_yaml(excel_file, output_file=None):
     
     print(f"Conversione completata! File YAML salvato in: {output_file}")
     return plan
+
 
 def parse_workout_steps(steps_str, workout_name):
     """
@@ -418,18 +385,22 @@ def create_sample_excel(output_file='sample_training_plan.xlsx'):
     athlete_cell.value = "Atleta: "  # Predisposta per essere compilata
     athlete_cell.alignment = Alignment(horizontal='center', vertical='center')
     athlete_cell.font = Font(size=12, bold=True)
-    
+    # Aggiungi bordo alla cella dell'atleta
+    athlete_cell.border = thin_border
+
     # Intestazioni nella riga 2
     workouts_sheet['A2'] = 'Week'
-    workouts_sheet['B2'] = 'Date'  # Aggiungiamo la colonna Date
+    workouts_sheet['B2'] = 'Date'
     workouts_sheet['C2'] = 'Session'
     workouts_sheet['D2'] = 'Description'
     workouts_sheet['E2'] = 'Steps'
-    
+
     # Formatta l'intestazione
     for col in ['A', 'B', 'C', 'D', 'E']:
-        workouts_sheet[f'{col}2'].font = Font(bold=True)
-        workouts_sheet[f'{col}2'].fill = header_fill
+        cell = workouts_sheet[f'{col}2']
+        cell.font = Font(bold=True)
+        cell.fill = header_fill
+        cell.border = thin_border  # Aggiungi bordo a tutte le celle dell'intestazione
     
     # Aggiungi alcuni esempi di allenamenti
     workouts = [
