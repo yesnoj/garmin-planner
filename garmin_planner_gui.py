@@ -1036,7 +1036,7 @@ class GarminPlannerGUI(tk.Tk):
         self.yaml_output_file = tk.StringVar()
         
         # Titolo e descrizione
-        ttk.Label(excel_frame, text="Strumenti di conversione Excel ↔ YAML", font=("", 12, "bold")).pack(pady=10)
+        ttk.Label(excel_frame, text="Strumenti di conversione Excel 🠖 YAML", font=("", 12, "bold")).pack(pady=10)
         ttk.Label(excel_frame, text="Converti file Excel in formato YAML per l'importazione in Garmin Planner").pack(pady=5)
         
         # Frame per la conversione da Excel a YAML
