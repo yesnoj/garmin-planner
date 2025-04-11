@@ -43,7 +43,7 @@ class GarminPlannerGUI(tk.Tk):
             os.makedirs(CACHE_DIR, exist_ok=True)
         
         self.title("Garmin Planner")
-        self.geometry("800x600")
+        self.geometry("800x700")
         
         # Variables
         # Carica l'ultima cartella OAuth usata dal file di configurazione, se esiste
@@ -475,6 +475,10 @@ class GarminPlannerGUI(tk.Tk):
         default_race_date = (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d")
         self.race_day = tk.StringVar(value=default_race_date)
         
+        # Nuova variabile per la data di inizio
+        default_start_date = datetime.now().strftime("%Y-%m-%d")
+        self.start_day = tk.StringVar(value=default_start_date)
+        
         self.schedule_dry_run = tk.BooleanVar(value=False)
         
         # For day selection
@@ -494,17 +498,19 @@ class GarminPlannerGUI(tk.Tk):
         ttk.Entry(plan_frame, textvariable=self.training_plan, width=30).grid(row=0, column=1, padx=5, pady=5)
         ttk.Label(plan_frame, text="(prefisso comune degli allenamenti)").grid(row=0, column=2, padx=5, pady=5)
         
-        date_frame = ttk.Frame(schedule_frame)
-        date_frame.pack(fill=tk.X, padx=10, pady=5)
+        # Frame per le date
+        dates_frame = ttk.Frame(schedule_frame)
+        dates_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        ttk.Label(date_frame, text="Giorno gara:").grid(row=0, column=0, padx=5, pady=5)
+        # Data di inizio
+        ttk.Label(dates_frame, text="Data inizio:").grid(row=0, column=0, padx=5, pady=5)
+        start_date_picker = self.create_custom_date_picker(dates_frame, self.start_day)
+        start_date_picker.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
         
-        # Usa il widget DateEntry invece di Entry per la data
-        cal = DateEntry(date_frame, width=12, background='darkblue',
-                     foreground='white', borderwidth=2, 
-                     date_pattern='yyyy-mm-dd', 
-                     textvariable=self.race_day)
-        cal.grid(row=0, column=1, padx=5, pady=5)
+        # Data di gara
+        ttk.Label(dates_frame, text="Giorno gara:").grid(row=1, column=0, padx=5, pady=5)
+        race_date_picker = self.create_custom_date_picker(dates_frame, self.race_day)
+        race_date_picker.grid(row=1, column=1, padx=5, pady=5, sticky=tk.W)
         
         # Frame per la visualizzazione delle informazioni sul piano
         plan_info_frame = ttk.LabelFrame(schedule_frame, text="Informazioni sul piano")
@@ -558,7 +564,85 @@ class GarminPlannerGUI(tk.Tk):
         
         # Analizza il piano all'inizio
         self.analyze_training_plan()
-
+    
+    def create_custom_date_picker(self, parent, date_var):
+        """Create a custom date picker with separate widgets for year, month, and day"""
+        frame = ttk.Frame(parent)
+        
+        # Get current date from variable or use today
+        try:
+            current_date = datetime.strptime(date_var.get(), "%Y-%m-%d")
+        except (ValueError, TypeError):
+            current_date = datetime.now()
+        
+        # Year picker
+        year_values = list(range(current_date.year, current_date.year + 10))
+        year_var = tk.StringVar(value=str(current_date.year))
+        ttk.Label(frame, text="Anno:").grid(row=0, column=0, padx=(0, 5))
+        year_combo = ttk.Combobox(frame, textvariable=year_var, values=year_values, width=6, state="readonly")
+        year_combo.grid(row=0, column=1, padx=(0, 10))
+        
+        # Month picker
+        month_names = ["Gennaio", "Febbraio", "Marzo", "Aprile", "Maggio", "Giugno", 
+                      "Luglio", "Agosto", "Settembre", "Ottobre", "Novembre", "Dicembre"]
+        month_var = tk.StringVar(value=month_names[current_date.month-1])
+        ttk.Label(frame, text="Mese:").grid(row=0, column=2, padx=(0, 5))
+        month_combo = ttk.Combobox(frame, textvariable=month_var, values=month_names, width=10, state="readonly")
+        month_combo.grid(row=0, column=3, padx=(0, 10))
+        
+        # Day picker - days will be adjusted based on month/year
+        day_var = tk.StringVar(value=str(current_date.day))
+        ttk.Label(frame, text="Giorno:").grid(row=0, column=4, padx=(0, 5))
+        day_combo = ttk.Combobox(frame, textvariable=day_var, width=5, state="readonly")
+        day_combo.grid(row=0, column=5)
+        
+        def update_days(*args):
+            """Update the available days based on the selected month and year"""
+            try:
+                year = int(year_var.get())
+                month = month_names.index(month_var.get()) + 1
+                
+                # Get the number of days in the month
+                _, num_days = calendar.monthrange(year, month)
+                
+                # Update the day values
+                day_values = [str(i) for i in range(1, num_days + 1)]
+                day_combo['values'] = day_values
+                
+                # Adjust the day if it's out of range
+                current_day = int(day_var.get()) if day_var.get() else 1
+                if current_day > num_days:
+                    day_var.set(str(num_days))
+                elif not day_var.get():
+                    day_var.set("1")
+                    
+            except (ValueError, TypeError):
+                # Default to 31 days if there's an error
+                day_combo['values'] = [str(i) for i in range(1, 32)]
+        
+        # Initial update of days
+        update_days()
+        
+        # Function to update the main date variable
+        def update_date(*args):
+            try:
+                year = int(year_var.get())
+                month = month_names.index(month_var.get()) + 1
+                day = int(day_var.get())
+                
+                # Validate the date
+                date_obj = datetime(year, month, day)
+                date_var.set(date_obj.strftime("%Y-%m-%d"))
+            except (ValueError, TypeError):
+                # Invalid date, don't update
+                pass
+        
+        # Bind the update function to the variables
+        year_var.trace_add("write", update_date)
+        month_var.trace_add("write", lambda *args: [update_days(), update_date()])
+        day_var.trace_add("write", update_date)
+        
+        return frame
 
     def analyze_training_plan(self):
         """Analizza il piano di allenamento selezionato e mostra informazioni all'utente"""
@@ -1073,17 +1157,26 @@ class GarminPlannerGUI(tk.Tk):
         if not self.race_day.get():
             messagebox.showerror("Errore", "Inserisci la data della gara")
             return
-        
-        # Validate race day format
-        try:
-            selected_date = datetime.strptime(self.race_day.get(), "%Y-%m-%d")
-            today = datetime.today()
             
-            if selected_date.date() < today.date():
+        if not self.start_day.get():
+            messagebox.showerror("Errore", "Inserisci la data di inizio")
+            return
+        
+        # Validate race day and start day format
+        try:
+            race_date = datetime.strptime(self.race_day.get(), "%Y-%m-%d").date()
+            start_date = datetime.strptime(self.start_day.get(), "%Y-%m-%d").date()
+            today = datetime.today().date()
+            
+            if race_date < today:
                 messagebox.showerror("Errore", "La data della gara deve essere nel futuro")
                 return
+                
+            if start_date >= race_date:
+                messagebox.showerror("Errore", "La data di inizio deve essere precedente alla data della gara")
+                return
         except ValueError:
-            messagebox.showerror("Errore", "Formato data non valido. Usa YYYY-MM-DD")
+            messagebox.showerror("Errore", "Formato date non valido. Usa YYYY-MM-DD")
             return
         
         # Controlla se sono stati selezionati dei giorni
@@ -1132,14 +1225,15 @@ class GarminPlannerGUI(tk.Tk):
         if is_dry_run:
             self.log(f"Simulazione pianificazione allenamenti per il piano {self.training_plan.get()}...")
             self.log(f"Giorni selezionati: {', '.join([self.day_names[int(d)] for d in selected_days])}")
+            self.log(f"Data inizio: {self.start_day.get()}")
             self.log(f"Data gara: {self.race_day.get()}")
             self.log("(Modalità dry-run - nessuna modifica effettiva verrà apportata)")
         else:
             self.log(f"Pianificazione allenamenti per il piano {self.training_plan.get()}...")
+            self.log(f"Data inizio: {self.start_day.get()}")
         
         # Esegui la pianificazione con il flag dry-run corretto
         threading.Thread(target=lambda: self._do_schedule(selected_days, is_dry_run)).start()
-
 
     def find_yaml_for_plan(self, plan_id):
         """Cerca il file YAML corrispondente al piano specificato"""
@@ -1185,163 +1279,192 @@ class GarminPlannerGUI(tk.Tk):
 
 
     def _simulate_schedule(self, selected_days):
-            """Simula la pianificazione degli allenamenti senza apportare modifiche"""
-            try:
-                # Recupera i parametri necessari
-                training_plan_id = self.training_plan.get().strip()
-                race_day = datetime.strptime(self.race_day.get(), "%Y-%m-%d").date()
-                today = datetime.today().date()
+        """Simula la pianificazione degli allenamenti senza apportare modifiche"""
+        try:
+            # Recupera i parametri necessari
+            training_plan_id = self.training_plan.get().strip()
+            race_day = datetime.strptime(self.race_day.get(), "%Y-%m-%d").date()
+            start_day = datetime.strptime(self.start_day.get(), "%Y-%m-%d").date()
+            today = datetime.today().date()
+            
+            # Verifica che la data di inizio sia valida
+            if start_day < today:
+                self.log("Attenzione: La data di inizio è nel passato, verrà usata la data odierna.")
+                start_day = today
                 
-                # Calcola il lunedì della settimana successiva
-                next_monday = today + timedelta(days=(7 - today.weekday()))
+            if start_day >= race_day:
+                self.log("Errore: La data di inizio deve essere precedente alla data della gara.")
+                messagebox.showerror("Errore", "La data di inizio deve essere precedente alla data della gara.")
+                return
+            
+            # Calcola il primo giorno della settimana (lunedì) a partire dalla data di inizio
+            # Se start_day è già lunedì, usiamo quella data
+            # Altrimenti prendiamo il lunedì successivo
+            if start_day.weekday() == 0:  # 0 = lunedì
+                plan_start_date = start_day
+            else:
+                # Calcola il prossimo lunedì
+                days_until_monday = 7 - start_day.weekday()
+                plan_start_date = start_day + timedelta(days=days_until_monday)
                 
-                # Converte i giorni selezionati in indici
-                day_indices = [int(day) for day in selected_days]
-                day_names = [self.day_names[i] for i in day_indices]
-                
-                self.log(f"Simulazione pianificazione per '{training_plan_id}' con giorni: {', '.join(day_names)}")
-                
-                # Cerca gli allenamenti nella cache
-                workouts = []
-                if os.path.exists(WORKOUTS_CACHE_FILE):
-                    with open(WORKOUTS_CACHE_FILE, 'r') as f:
-                        all_workouts = json.load(f)
+            self.log(f"Data inizio selezionata: {start_day}, Data inizio effettiva (lunedì): {plan_start_date}")
+            
+            # Cerca gli allenamenti nella cache
+            workouts = []
+            workout_infos = {}
+            if os.path.exists(WORKOUTS_CACHE_FILE):
+                with open(WORKOUTS_CACHE_FILE, 'r') as f:
+                    all_workouts = json.load(f)
+                    
+                    # Filtra per il piano di allenamento
+                    plan_workouts = []
+                    for workout in all_workouts:
+                        workout_name = workout.get('workoutName', '')
+                        if training_plan_id in workout_name:
+                            plan_workouts.append(workout)
+                    
+                    # Estrai informazioni settimana/sessione
+                    for workout in plan_workouts:
+                        workout_name = workout.get('workoutName', '')
+                        workout_id = workout.get('workoutId', '')
                         
-                        # Filtra per il piano di allenamento
-                        plan_workouts = []
-                        for workout in all_workouts:
-                            workout_name = workout.get('workoutName', '')
-                            if training_plan_id in workout_name:
-                                plan_workouts.append(workout)
-                        
-                        # Estrai informazioni settimana/sessione
-                        workout_infos = {}
-                        for workout in plan_workouts:
-                            workout_name = workout.get('workoutName', '')
-                            workout_id = workout.get('workoutId', '')
+                        match = re.search(r'\s(W\d\d)S(\d\d)\s', workout_name)
+                        if match:
+                            week_id = match.group(1)
+                            session_id = int(match.group(2))
                             
-                            match = re.search(r'\s(W\d\d)S(\d\d)\s', workout_name)
-                            if match:
-                                week_id = match.group(1)
-                                session_id = int(match.group(2))
-                                
-                                if week_id not in workout_infos:
-                                    workout_infos[week_id] = {}
-                                workout_infos[week_id][session_id] = {
-                                    'id': workout_id,
-                                    'name': workout_name
-                                }
-                
-                # Se non ci sono allenamenti, mostra un messaggio
-                if not workout_infos:
-                    self.log("Nessun allenamento trovato per la simulazione")
-                    messagebox.showinfo("Simulazione", 
-                                      f"Nessun allenamento trovato per il piano '{training_plan_id}'.\n\n"
-                                      f"Importa prima gli allenamenti per poter simulare la pianificazione.")
-                    return
+                            if week_id not in workout_infos:
+                                workout_infos[week_id] = {}
+                            workout_infos[week_id][session_id] = {
+                                'id': workout_id,
+                                'name': workout_name
+                            }
+            
+            # Se non ci sono allenamenti, mostra un messaggio
+            if not workout_infos:
+                self.log("Nessun allenamento trovato per la simulazione")
+                messagebox.showinfo("Simulazione", 
+                                  f"Nessun allenamento trovato per il piano '{training_plan_id}'.\n\n"
+                                  f"Importa prima gli allenamenti per poter simulare la pianificazione.")
+                return
+            
+            # Ora simula la pianificazione
+            simulated_schedule = []
+            
+            for week_index, (week_id, sessions) in enumerate(sorted(workout_infos.items())):
+                # Estrai il numero della settimana (es. da "W03" ottieni 3)
+                match = re.search(r'W(\d\d)', week_id)
+                if not match:
+                    continue
                     
-                # Ora simula la pianificazione
-                simulated_schedule = []
+                week_number = int(match.group(1)) - 1  # -1 perché iniziamo dalla settimana 1, non 0
                 
-                for week_index, (week_id, sessions) in enumerate(sorted(workout_infos.items())):
-                    week_start = next_monday + timedelta(weeks=week_index)
+                # Calcola l'inizio di questa settimana del piano
+                week_start = plan_start_date + timedelta(weeks=week_number)
+                
+                # Salta questa settimana se inizia dopo la data della gara
+                if week_start > race_day:
+                    self.log(f"Settimana {week_id} inizierebbe dopo la data della gara. Saltata.")
+                    continue
+                
+                # Ordina le sessioni
+                session_ids = sorted(sessions.keys())
+                
+                # Assegna allenamenti ai giorni selezionati
+                for i, session_id in enumerate(session_ids):
+                    workout_info = sessions[session_id]
                     
-                    # Salta settimane che sarebbero dopo la gara
-                    if week_start > race_day:
-                        self.log(f"Settimana {week_id} sarebbe dopo la gara. Saltata.")
+                    # Determina il giorno della settimana
+                    if not selected_days:
+                        self.log("Nessun giorno selezionato per gli allenamenti.")
+                        return
+                    
+                    # Prendi il giorno in modo ciclico se ci sono più sessioni che giorni
+                    day_index = int(selected_days[i % len(selected_days)])
+                    
+                    # Calcola la data
+                    workout_date = week_start + timedelta(days=day_index)
+                    date_str = workout_date.strftime('%Y-%m-%d')
+                    
+                    # Salta date nel passato
+                    if workout_date < today:
+                        self.log(f"Allenamento {week_id}S{session_id:02d} cadrebbe nel passato ({date_str}). Saltato.")
                         continue
                         
-                    # Ordina le sessioni
-                    session_ids = sorted(sessions.keys())
+                    # Salta date dopo la gara
+                    if workout_date > race_day:
+                        self.log(f"Allenamento {week_id}S{session_id:02d} cadrebbe dopo la gara ({date_str}). Saltato.")
+                        continue
                     
-                    # Assegna allenamenti ai giorni selezionati
-                    for i, session_id in enumerate(session_ids):
-                        workout_info = sessions[session_id]
-                        
-                        # Determina il giorno della settimana
-                        day_index = day_indices[i % len(day_indices)]
-                        
-                        # Calcola la data
-                        workout_date = week_start + timedelta(days=day_index)
-                        date_str = workout_date.strftime('%Y-%m-%d')
-                        
-                        # Salta date nel passato o dopo la gara
-                        if workout_date < today:
-                            self.log(f"Allenamento {week_id}S{session_id:02d} cadrebbe nel passato ({date_str}). Saltato.")
-                            continue
-                            
-                        if workout_date > race_day:
-                            self.log(f"Allenamento {week_id}S{session_id:02d} cadrebbe dopo la gara ({date_str}). Saltato.")
-                            continue
-                        
-                        # Aggiungi alla simulazione
-                        simulated_schedule.append({
-                            'date': date_str,
-                            'title': workout_info['name'],
-                            'id': workout_info['id'],
-                            'day': self.day_names[day_index]
-                        })
-                        
-                        self.log(f"SIMULAZIONE: Allenamento {week_id}S{session_id:02d} pianificato per {self.day_names[day_index]} {date_str}")
-                
-                # Ordina per data
-                simulated_schedule.sort(key=lambda x: x['date'])
-                
-                # Visualizza gli allenamenti simulati
-                self._display_simulated_workouts(simulated_schedule)
-                
-            except Exception as e:
-                self.log(f"Errore durante la simulazione: {str(e)}")
-                messagebox.showerror("Errore", f"Errore durante la simulazione: {str(e)}")
+                    # Aggiungi alla simulazione
+                    simulated_schedule.append({
+                        'date': date_str,
+                        'title': workout_info['name'],
+                        'id': workout_info['id'],
+                        'day': self.day_names[day_index]
+                    })
+                    
+                    self.log(f"SIMULAZIONE: Allenamento {week_id}S{session_id:02d} pianificato per {self.day_names[day_index]} {date_str}")
+            
+            # Ordina per data
+            simulated_schedule.sort(key=lambda x: x['date'])
+            
+            # Visualizza gli allenamenti simulati
+            self._display_simulated_workouts(simulated_schedule)
+            
+        except Exception as e:
+            self.log(f"Errore durante la simulazione: {str(e)}")
+            messagebox.showerror("Errore", f"Errore durante la simulazione: {str(e)}")
 
         
     def _do_schedule(self, selected_days, is_dry_run=False):
-            # Assicurati che la cartella OAuth esista
-            oauth_folder = self.oauth_folder.get()
-            if not os.path.exists(oauth_folder):
-                try:
-                    os.makedirs(oauth_folder, exist_ok=True)
-                    self.log(f"Creata cartella OAuth: {oauth_folder}")
-                except Exception as e:
-                    self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
-                    return
-            
-            # Se siamo in modalità dry-run, usiamo un approccio diverso
-            if is_dry_run:
-                self._simulate_schedule(selected_days)
-                return
-                        
+        # Assicurati che la cartella OAuth esista
+        oauth_folder = self.oauth_folder.get()
+        if not os.path.exists(oauth_folder):
             try:
-                cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
-                       "--oauth-folder", self.oauth_folder.get(),
-                       "--log-level", self.log_level.get()]
-                
-                cmd.extend(["schedule",
-                          "--training-plan", self.training_plan.get(),
-                          "--race-day", self.race_day.get()])
-                
-                # Add selected days if any
-                if selected_days:
-                    cmd.extend(["--workout-days", ",".join(selected_days)])
-                
-                self.log(f"Esecuzione comando: {' '.join(cmd)}")
-                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                stdout, stderr = process.communicate()
-                
-                if process.returncode != 0:
-                    self.log(f"Errore durante la pianificazione: {stderr}")
-                    messagebox.showerror("Errore", f"Errore durante la pianificazione: {stderr}")
-                else:
-                    self.log("Pianificazione completata con successo")
-                    messagebox.showinfo("Successo", "Pianificazione completata con successo")
-                    
-                    # Refresh the calendar
-                    self.refresh_calendar()
-                
+                os.makedirs(oauth_folder, exist_ok=True)
+                self.log(f"Creata cartella OAuth: {oauth_folder}")
             except Exception as e:
-                self.log(f"Errore durante la pianificazione: {str(e)}")
-                messagebox.showerror("Errore", f"Errore durante la pianificazione: {str(e)}")
+                self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
+                return
         
+        # Se siamo in modalità dry-run, usiamo un approccio diverso
+        if is_dry_run:
+            self._simulate_schedule(selected_days)
+            return
+                    
+        try:
+            cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
+                   "--oauth-folder", self.oauth_folder.get(),
+                   "--log-level", self.log_level.get()]
+            
+            cmd.extend(["schedule",
+                      "--training-plan", self.training_plan.get(),
+                      "--race-day", self.race_day.get(),
+                      "--start-day", self.start_day.get()])  # Aggiungi la data di inizio
+            
+            # Add selected days if any
+            if selected_days:
+                cmd.extend(["--workout-days", ",".join(selected_days)])
+            
+            self.log(f"Esecuzione comando: {' '.join(cmd)}")
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            stdout, stderr = process.communicate()
+            
+            if process.returncode != 0:
+                self.log(f"Errore durante la pianificazione: {stderr}")
+                messagebox.showerror("Errore", f"Errore durante la pianificazione: {stderr}")
+            else:
+                self.log("Pianificazione completata con successo")
+                messagebox.showinfo("Successo", "Pianificazione completata con successo")
+                
+                # Refresh the calendar
+                self.refresh_calendar()
+            
+        except Exception as e:
+            self.log(f"Errore durante la pianificazione: {str(e)}")
+            messagebox.showerror("Errore", f"Errore durante la pianificazione: {str(e)}")
+            
     def _parse_schedule_output(self, output):
             """Estrai le informazioni sugli allenamenti pianificati dall'output del comando"""
             try:
@@ -1391,49 +1514,49 @@ class GarminPlannerGUI(tk.Tk):
 
 
     def _do_import_for_schedule(self, selected_days):
-            """Importa gli allenamenti e poi pianifica"""
-            # Assicurati che la cartella OAuth esista
-            oauth_folder = self.oauth_folder.get()
-            if not os.path.exists(oauth_folder):
-                try:
-                    os.makedirs(oauth_folder, exist_ok=True)
-                    self.log(f"Creata cartella OAuth: {oauth_folder}")
-                except Exception as e:
-                    self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
-                    return
-                        
+        """Importa gli allenamenti e poi pianifica"""
+        # Assicurati che la cartella OAuth esista
+        oauth_folder = self.oauth_folder.get()
+        if not os.path.exists(oauth_folder):
             try:
-                cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
-                       "--oauth-folder", self.oauth_folder.get(),
-                       "--log-level", self.log_level.get(),
-                       "import", 
-                       "--workouts-file", self.import_file.get()]
-                
-                if self.import_replace.get():
-                    cmd.append("--replace")
-                
-                self.log(f"Esecuzione comando: {' '.join(cmd)}")
-                process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-                stdout, stderr = process.communicate()
-                
-                if process.returncode != 0:
-                    self.log(f"Errore durante l'importazione: {stderr}")
-                    messagebox.showerror("Errore", f"Errore durante l'importazione: {stderr}")
-                else:
-                    self.log("Importazione completata con successo")
-                    
-                    # Aggiorna la lista degli allenamenti in background
-                    refresh_thread = threading.Thread(target=self._refresh_workouts_silent)
-                    refresh_thread.start()
-                    refresh_thread.join()  # Attendi il completamento
-                    
-                    # Ora procedi con la pianificazione
-                    self.log(f"Ora procedo con la pianificazione...")
-                    self._do_schedule(selected_days)
-                    
+                os.makedirs(oauth_folder, exist_ok=True)
+                self.log(f"Creata cartella OAuth: {oauth_folder}")
             except Exception as e:
-                self.log(f"Errore durante l'importazione: {str(e)}")
-                messagebox.showerror("Errore", f"Errore durante l'importazione: {str(e)}")
+                self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
+                return
+                    
+        try:
+            cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
+                   "--oauth-folder", self.oauth_folder.get(),
+                   "--log-level", self.log_level.get(),
+                   "import", 
+                   "--workouts-file", self.import_file.get()]
+            
+            if self.import_replace.get():
+                cmd.append("--replace")
+            
+            self.log(f"Esecuzione comando: {' '.join(cmd)}")
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            stdout, stderr = process.communicate()
+            
+            if process.returncode != 0:
+                self.log(f"Errore durante l'importazione: {stderr}")
+                messagebox.showerror("Errore", f"Errore durante l'importazione: {stderr}")
+            else:
+                self.log("Importazione completata con successo")
+                
+                # Aggiorna la lista degli allenamenti in background
+                refresh_thread = threading.Thread(target=self._refresh_workouts_silent)
+                refresh_thread.start()
+                refresh_thread.join()  # Attendi il completamento
+                
+                # Ora procedi con la pianificazione
+                self.log(f"Ora procedo con la pianificazione...")
+                self._do_schedule(selected_days, False)  # False = non è dry run
+                
+        except Exception as e:
+            self.log(f"Errore durante l'importazione: {str(e)}")
+            messagebox.showerror("Errore", f"Errore durante l'importazione: {str(e)}")
 
 
     def _refresh_workouts_silent(self):
