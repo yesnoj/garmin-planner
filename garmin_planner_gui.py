@@ -318,9 +318,10 @@ class GarminPlannerGUI(tk.Tk):
         # Bottoni per l'esportazione
         export_buttons_frame = ttk.Frame(export_frame)
         export_buttons_frame.pack(fill=tk.X, padx=10, pady=5)
-
         ttk.Button(export_buttons_frame, text="Esporta Tutti", command=self.perform_export).pack(side=tk.LEFT, padx=5)
         ttk.Button(export_buttons_frame, text="Esporta Selezionati", command=self.export_selected_workouts).pack(side=tk.LEFT, padx=5)
+        ttk.Button(export_buttons_frame, text="Elimina Selezionati", command=self.delete_selected_workouts).pack(side=tk.LEFT, padx=5)
+
         
         # List of current workouts
         ttk.Label(export_frame, text="Allenamenti disponibili su Garmin Connect").pack(pady=5)
@@ -336,6 +337,87 @@ class GarminPlannerGUI(tk.Tk):
         self.load_workouts_from_cache()
         
         ttk.Button(export_frame, text="Aggiorna lista", command=self.refresh_workouts).pack(pady=5)
+
+
+    def delete_selected_workouts(self):
+        """Elimina gli allenamenti selezionati da Garmin Connect"""
+        # Verifica se ci sono allenamenti selezionati
+        selected_items = self.workouts_tree.selection()
+        if not selected_items:
+            messagebox.showwarning("Nessuna selezione", "Seleziona almeno un allenamento da eliminare")
+            return
+        
+        # Ottieni gli ID degli allenamenti selezionati
+        selected_ids = []
+        selected_names = []
+        for item in selected_items:
+            values = self.workouts_tree.item(item, "values")
+            workout_id = values[0]
+            workout_name = values[1]
+            selected_ids.append(workout_id)
+            selected_names.append(workout_name)
+        
+        # Chiedi conferma all'utente
+        if len(selected_ids) == 1:
+            message = f"Sei sicuro di voler eliminare l'allenamento '{selected_names[0]}'?"
+        else:
+            message = f"Sei sicuro di voler eliminare {len(selected_ids)} allenamenti selezionati?"
+        
+        if not messagebox.askyesno("Conferma eliminazione", message):
+            return
+        
+        self.log(f"Eliminazione di {len(selected_ids)} allenamenti selezionati...")
+        
+        # Avvia il processo di eliminazione in un thread separato
+        threading.Thread(target=lambda: self._do_delete_workouts(selected_ids)).start()
+
+
+    def _do_delete_workouts(self, workout_ids):
+        """Esegue l'eliminazione diretta degli allenamenti tramite il client Garmin"""
+        oauth_folder = self.oauth_folder.get()
+        
+        try:
+            # Importa le librerie necessarie
+            import sys
+            sys.path.append(SCRIPT_DIR)
+            from planner.garmin_client import GarminClient
+            
+            # Crea un client Garmin direttamente
+            self.log(f"Creazione di un client Garmin Connect con OAuth folder: {oauth_folder}")
+            client = GarminClient(oauth_folder)
+            
+            # Elimina gli allenamenti uno per uno
+            deleted_count = 0
+            for workout_id in workout_ids:
+                self.log(f"Eliminazione diretta dell'allenamento {workout_id}...")
+                try:
+                    response = client.delete_workout(workout_id)
+                    self.log(f"Risposta dall'API: {response}")
+                    deleted_count += 1
+                except Exception as e:
+                    self.log(f"Errore nell'eliminazione dell'allenamento {workout_id}: {str(e)}")
+            
+            # Mostra un messaggio di conferma
+            if deleted_count > 0:
+                self.log(f"Eliminati {deleted_count} allenamenti con successo")
+                messagebox.showinfo("Successo", f"Eliminati {deleted_count} allenamenti con successo")
+                
+                # Forza l'aggiornamento della lista degli allenamenti
+                # Prima eliminiamo la cache per forzare un nuovo download
+                if os.path.exists(WORKOUTS_CACHE_FILE):
+                    os.remove(WORKOUTS_CACHE_FILE)
+                    self.log("Cache degli allenamenti rimossa per forzare un nuovo download")
+                
+                # Quindi aggiorniamo la lista
+                self.refresh_workouts()
+            else:
+                self.log("Nessun allenamento è stato eliminato")
+                messagebox.showwarning("Attenzione", "Nessun allenamento è stato eliminato")
+                
+        except Exception as e:
+            self.log(f"Errore durante l'eliminazione diretta: {str(e)}")
+            messagebox.showerror("Errore", f"Errore durante l'eliminazione: {str(e)}")
+
 
     def export_selected_workouts(self):
         """Export only selected workouts to a file"""

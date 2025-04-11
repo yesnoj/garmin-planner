@@ -111,8 +111,8 @@ def cmd_delete_workouts(args):
 
         # filter out invalid workout IDs
         for workout_id in workout_ids:
-            if not re.match(r'^\d{9}$', workout_id):
-                logging.warning(f'ignoring invalid workout id "{workout_id}". Must be 9 digit number.')
+            if not re.match(r'^\d{9,10}$', workout_id):
+                logging.warning(f'ignoring invalid workout id "{workout_id}". Must be 9 or 10 digit number.')
             else:
                 valid_ids.append(workout_id)
 
