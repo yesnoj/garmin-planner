@@ -38,7 +38,7 @@ except ImportError as e:
     sys.exit(1)
 
 # Importa il convertitore
-from excel_to_yaml_converter import excel_to_yaml, create_sample_excel
+from planner.excel_to_yaml_converter import excel_to_yaml, create_sample_excel
 
 class ScheduleDialog(tk.Toplevel):
     """Finestra di dialogo per pianificare gli allenamenti"""

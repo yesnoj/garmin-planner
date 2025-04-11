@@ -74,7 +74,8 @@ class GarminPlannerGUI(tk.Tk):
         self.create_export_tab()
         self.create_schedule_tab()
         self.create_log_tab()
-        
+        self.create_excel_tools_tab()
+
         # Common settings frame
         self.create_settings_frame()
         
@@ -685,9 +686,17 @@ class GarminPlannerGUI(tk.Tk):
                             is_match = True
                         
                         # 3. Controllo con pattern WxxSxx dopo il prefisso
-                        pattern = re.escape(training_plan_id) + r'\s*W\d\d\S\d\d'
+                        pattern = re.escape(training_plan_id) + r'\s*W\d\dS\d\d'
                         if re.search(pattern, workout_name, re.IGNORECASE):
                             is_match = True
+                            self.log(f"Corrispondenza per pattern regex: '{workout_name}' corrisponde a '{pattern}'")
+
+                        # 4. Controllo più permissivo (rimuove caratteri problematici)
+                        clean_plan_id = re.sub(r'[^a-zA-Z0-9]', '', training_plan_id)
+                        clean_workout_name = re.sub(r'[^a-zA-Z0-9]', '', workout_name)
+                        if clean_plan_id and clean_plan_id in clean_workout_name:
+                            is_match = True
+                            self.log(f"Corrispondenza con ID pulito: '{clean_workout_name}' contiene '{clean_plan_id}'")
                             
                         # Se c'è una corrispondenza, conta l'allenamento
                         if is_match:
@@ -756,6 +765,237 @@ class GarminPlannerGUI(tk.Tk):
         
         # Clear button
         ttk.Button(log_frame, text="Pulisci log", command=self.clear_log).pack(pady=5)
+
+
+    def create_excel_tools_tab(self):
+        """Crea la tab per le funzionalità di Excel"""
+        excel_frame = ttk.Frame(self.notebook)
+        self.notebook.add(excel_frame, text="Excel Tools")
+        
+        # Variabili
+        self.excel_input_file = tk.StringVar()
+        self.yaml_output_file = tk.StringVar()
+        
+        # Titolo e descrizione
+        ttk.Label(excel_frame, text="Strumenti di conversione Excel ↔ YAML", font=("", 12, "bold")).pack(pady=10)
+        ttk.Label(excel_frame, text="Converti file Excel in formato YAML per l'importazione in Garmin Planner").pack(pady=5)
+        
+        # Frame per la conversione da Excel a YAML
+        convert_frame = ttk.LabelFrame(excel_frame, text="Conversione Excel → YAML")
+        convert_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        # Input file Excel
+        input_frame = ttk.Frame(convert_frame)
+        input_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Label(input_frame, text="File Excel:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        ttk.Entry(input_frame, textvariable=self.excel_input_file, width=50).grid(row=0, column=1, padx=5, pady=5, sticky=tk.W+tk.E)
+        ttk.Button(input_frame, text="Sfoglia", command=self.browse_excel_input).grid(row=0, column=2, padx=5, pady=5)
+        
+        # Output file YAML
+        output_frame = ttk.Frame(convert_frame)
+        output_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        ttk.Label(output_frame, text="File YAML:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        ttk.Entry(output_frame, textvariable=self.yaml_output_file, width=50).grid(row=0, column=1, padx=5, pady=5, sticky=tk.W+tk.E)
+        ttk.Button(output_frame, text="Sfoglia", command=self.browse_yaml_output).grid(row=0, column=2, padx=5, pady=5)
+        
+        # Bottoni azione
+        btn_frame = ttk.Frame(convert_frame)
+        btn_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        ttk.Button(btn_frame, text="Crea file Excel di esempio", command=self.create_excel_sample).pack(side=tk.LEFT, padx=5, pady=5)
+        ttk.Button(btn_frame, text="Converti Excel → YAML", command=self.convert_excel_to_yaml).pack(side=tk.RIGHT, padx=5, pady=5)
+        
+        # Pianificazione degli allenamenti
+        plan_frame = ttk.LabelFrame(excel_frame, text="Pianificazione degli allenamenti nel file Excel")
+        plan_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        ttk.Label(plan_frame, text="Pianifica le date degli allenamenti direttamente nel file Excel").pack(pady=5)
+        ttk.Button(plan_frame, text="Pianifica allenamenti in Excel", command=self.schedule_workouts_in_excel).pack(pady=10)
+        
+        # Istruzioni
+        help_frame = ttk.LabelFrame(excel_frame, text="Informazioni")
+        help_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+        
+        help_text = (
+            "Utilizzo degli strumenti Excel:\n\n"
+            "1. Crea un file Excel di esempio per visualizzare la struttura richiesta\n"
+            "2. Modifica il file Excel con i tuoi allenamenti\n"
+            "3. Converti il file Excel in formato YAML\n"
+            "4. Importa il file YAML risultante in Garmin Planner utilizzando la tab 'Importa'\n\n"
+            "Oppure aggiungi le date direttamente nel file Excel con lo strumento di pianificazione."
+        )
+        
+        help_label = ttk.Label(help_frame, text=help_text, wraplength=700, justify=tk.LEFT)
+        help_label.pack(padx=10, pady=10, fill=tk.BOTH, expand=True)
+
+    def browse_excel_input(self):
+        """Apre il dialogo per selezionare il file Excel di input"""
+        filename = filedialog.askopenfilename(
+            title="Seleziona file Excel",
+            filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")]
+        )
+        if filename:
+            self.excel_input_file.set(filename)
+            self.log(f"File Excel selezionato: {filename}")
+            
+            # Se il file YAML non è stato specificato, proponi lo stesso nome con estensione YAML
+            if not self.yaml_output_file.get():
+                yaml_path = os.path.splitext(filename)[0] + ".yaml"
+                self.yaml_output_file.set(yaml_path)
+
+    def browse_yaml_output(self):
+        """Apre il dialogo per selezionare il file YAML di output"""
+        filename = filedialog.asksaveasfilename(
+            title="Salva file YAML",
+            filetypes=[("YAML files", "*.yaml"), ("All files", "*.*")],
+            defaultextension=".yaml"
+        )
+        if filename:
+            self.yaml_output_file.set(filename)
+            self.log(f"File YAML di output impostato: {filename}")
+
+    def create_excel_sample(self):
+        """Crea un file Excel di esempio"""
+        try:
+            # Importa il modulo excel_to_yaml_converter
+            from planner.excel_to_yaml_converter import create_sample_excel
+            
+            filename = filedialog.asksaveasfilename(
+                title="Salva file Excel di esempio",
+                filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
+                defaultextension=".xlsx"
+            )
+            if not filename:
+                return
+                
+            self.log(f"Creazione file Excel di esempio: {filename}")
+            
+            # Esegui la creazione in un thread separato
+            def _create_sample_thread():
+                try:
+                    created_file = create_sample_excel(filename)
+                    
+                    # Aggiorna l'interfaccia nel thread principale
+                    self.after(0, lambda: self._sample_created(created_file))
+                except Exception as e:
+                    self.after(0, lambda: self.log(f"Errore nella creazione del file di esempio: {str(e)}"))
+                    messagebox.showerror("Errore", f"Si è verificato un errore durante la creazione del file:\n{str(e)}")
+            
+            threading.Thread(target=_create_sample_thread).start()
+            
+        except Exception as e:
+            self.log(f"Errore: {str(e)}")
+            messagebox.showerror("Errore", f"Si è verificato un errore:\n{str(e)}")
+
+    def _sample_created(self, file_path):
+        """Chiamato quando il file di esempio è stato creato"""
+        self.log(f"File Excel di esempio creato con successo!")
+        self.excel_input_file.set(file_path)
+        
+        # Proponi un file YAML con lo stesso nome
+        yaml_path = os.path.splitext(file_path)[0] + ".yaml"
+        self.yaml_output_file.set(yaml_path)
+        
+        messagebox.showinfo("Successo", 
+                           f"File Excel di esempio creato con successo:\n{file_path}")
+
+    def convert_excel_to_yaml(self):
+        """Converte il file Excel in formato YAML"""
+        try:
+            # Verifica che il file Excel esista
+            excel_file = self.excel_input_file.get()
+            if not excel_file:
+                messagebox.showerror("Errore", "Seleziona un file Excel da convertire")
+                return
+                
+            if not os.path.exists(excel_file):
+                messagebox.showerror("Errore", f"Il file Excel non esiste: {excel_file}")
+                return
+                
+            # Determina il file YAML di output
+            yaml_file = self.yaml_output_file.get()
+            if not yaml_file:
+                yaml_file = os.path.splitext(excel_file)[0] + ".yaml"
+                self.yaml_output_file.set(yaml_file)
+                
+            self.log(f"Conversione di {excel_file} in {yaml_file}...")
+            
+            # Importa il modulo excel_to_yaml_converter
+            from planner.excel_to_yaml_converter import excel_to_yaml
+            
+            # Esegui la conversione in un thread separato
+            def _convert_thread():
+                try:
+                    plan = excel_to_yaml(excel_file, yaml_file)
+                    
+                    # Aggiorna l'interfaccia nel thread principale
+                    workout_count = len(plan) - 1 if "config" in plan else len(plan)  # -1 per escludere config
+                    self.after(0, lambda: self._conversion_success(yaml_file, workout_count))
+                except Exception as e:
+                    self.after(0, lambda: self.log(f"Errore nella conversione: {str(e)}"))
+                    messagebox.showerror("Errore", f"Si è verificato un errore durante la conversione:\n{str(e)}")
+            
+            threading.Thread(target=_convert_thread).start()
+            
+        except Exception as e:
+            self.log(f"Errore: {str(e)}")
+            messagebox.showerror("Errore", f"Si è verificato un errore:\n{str(e)}")
+
+    def _conversion_success(self, yaml_file, workout_count):
+        """Chiamato quando la conversione è stata completata con successo"""
+        self.log(f"Conversione completata con successo!")
+        self.log(f"File YAML salvato: {yaml_file}")
+        self.log(f"Piano di allenamento con {workout_count} allenamenti")
+        
+        messagebox.showinfo("Successo", 
+                          f"Conversione completata con successo!\n\n"
+                          f"File YAML salvato: {yaml_file}\n"
+                          f"Allenamenti creati: {workout_count}")
+
+    def schedule_workouts_in_excel(self):
+        """Apre il dialogo per pianificare gli allenamenti nel file Excel"""
+        try:
+            # Verifica che sia stato selezionato un file Excel
+            excel_file = self.excel_input_file.get()
+            if not excel_file:
+                messagebox.showerror("Errore", "Seleziona prima un file Excel.")
+                return
+                
+            if not os.path.exists(excel_file):
+                messagebox.showerror("Errore", f"Il file Excel non esiste: {excel_file}")
+                return
+                
+            # Importa il modulo necessario
+            from planner.excel_to_yaml_converter import excel_to_yaml
+            
+            # Crea una finestra di dialogo personalizzata per la pianificazione
+            self._open_schedule_dialog(excel_file)
+            
+        except Exception as e:
+            self.log(f"Errore: {str(e)}")
+            messagebox.showerror("Errore", f"Si è verificato un errore:\n{str(e)}")
+
+    def _open_schedule_dialog(self, excel_file):
+        """Apre un dialogo personalizzato per la pianificazione degli allenamenti"""
+        try:
+            # Importa la classe di dialogo
+            from planner.excel_to_yaml_gui import ScheduleDialog
+            
+            # Crea il dialogo
+            dialog = ScheduleDialog(self, excel_file)
+            
+            # Se la pianificazione è stata completata con successo
+            if dialog.result:
+                self.log("Pianificazione degli allenamenti in Excel completata con successo.")
+                messagebox.showinfo("Successo", "Le date sono state aggiunte al file Excel.")
+                
+        except Exception as e:
+            self.log(f"Errore durante l'apertura del dialogo di pianificazione: {str(e)}")
+            messagebox.showerror("Errore", f"Si è verificato un errore:\n{str(e)}")
+
+
 
     def clear_log(self):
         """Pulisce il contenuto della finestra di log"""
