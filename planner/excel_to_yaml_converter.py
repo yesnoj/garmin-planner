@@ -96,7 +96,12 @@ def excel_to_yaml(excel_file, output_file=None):
         # Estrai il prefisso del nome (se presente)
         name_prefix_rows = config_df[config_df.iloc[:, 0] == 'name_prefix']
         if not name_prefix_rows.empty:
-            plan['config']['name_prefix'] = str(name_prefix_rows.iloc[0, 1]).strip()
+            # Assicurati che il prefisso termini con uno spazio
+            prefix = str(name_prefix_rows.iloc[0, 1]).strip()
+            # Aggiungi uno spazio alla fine se non c'è già
+            if not prefix.endswith(' '):
+                prefix = prefix + ' '
+            plan['config']['name_prefix'] = prefix
         
         # Estrai i margini (se presenti)
         margins_rows = config_df[config_df.iloc[:, 0] == 'margins']
