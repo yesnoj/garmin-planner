@@ -2553,111 +2553,95 @@ class GarminPlannerGUI(tk.Tk):
                                       f"Seleziona esattamente {self.max_sessions} giorni per continuare.")
                 return
         
-        # DEBUG: Stampa le informazioni prima di procedere
-        self.log(f"DEBUG: Pianificazione con i seguenti parametri:")
-        self.log(f"DEBUG: Piano: {self.training_plan.get()}")
-        self.log(f"DEBUG: Data gara: {self.race_day.get()}")
-        self.log(f"DEBUG: Giorni selezionati: {[self.day_names[d] for d in selected_days]}")
-        self.log(f"DEBUG: Simulazione: {self.schedule_dry_run.get()}")
-        
         # Verifica se siamo in modalità simulazione
         is_dry_run = self.schedule_dry_run.get()
         training_plan_id = self.training_plan.get().strip()
         
-        # Cerchiamo il file YAML per verificare se contiene una data della gara predefinita
-        yaml_path = self.find_yaml_for_plan(training_plan_id)
-        yaml_race_day = None
-        
-        if yaml_path:
-            self.log(f"Analisi del file YAML: {yaml_path}")
-            try:
-                with open(yaml_path, 'r') as f:
-                    plan_data = yaml.safe_load(f)
-                    
-                    # Controlla se esiste una configurazione race_day nel file YAML
-                    if 'config' in plan_data and 'race_day' in plan_data['config']:
-                        yaml_race_day_str = plan_data['config']['race_day']
-                        try:
-                            yaml_race_day = datetime.strptime(yaml_race_day_str, "%Y-%m-%d").date()
-                            self.log(f"Trovata data della gara nel file YAML: {yaml_race_day}")
-                            
-                            # Chiedi all'utente se vuole utilizzare la data dal file YAML
-                            if yaml_race_day != race_date:
-                                use_yaml_date = messagebox.askyesno("Data gara dal YAML", 
-                                                                  f"Nel file YAML è già definita una data della gara ({yaml_race_day_str}).\n\n"
-                                                                  f"Vuoi utilizzare questa data invece di quella inserita ({self.race_day.get()})?")
-                                if use_yaml_date:
-                                    race_date = yaml_race_day
-                                    self.race_day.set(yaml_race_day_str)
-                                    self.log(f"Utilizzo della data della gara dal file YAML: {yaml_race_day_str}")
-                        except ValueError:
-                            self.log(f"Formato data non valido nel file YAML: {yaml_race_day_str}")
-            except Exception as e:
-                self.log(f"Errore nella lettura del file YAML: {str(e)}")
-        
-        # Se siamo in modalità dry-run
+        # Se siamo in modalità dry run, non dobbiamo importare nulla, solo simulare
         if is_dry_run:
+            self.log("Modalità simulazione attivata, nessuna modifica effettiva verrà apportata")
+            
+            # Cerchiamo il file YAML per verificare se contiene una data della gara predefinita
+            yaml_path = self.find_yaml_for_plan(training_plan_id)
+            
             if yaml_path:
                 self.log(f"Simulazione pianificazione usando il file YAML: {yaml_path}")
                 # Pianifica gli allenamenti dal file YAML usando le date calcolate
-                self.plan_yaml_workouts(yaml_path, datetime.strptime(self.start_day.get(), "%Y-%m-%d").date() if self.start_day.get() else None, race_date, selected_days)
+                self.plan_yaml_workouts(yaml_path, 
+                                       datetime.strptime(self.start_day.get(), "%Y-%m-%d").date() if self.start_day.get() else None, 
+                                       race_date, 
+                                       selected_days)
                 return
             
-            # Se siamo in modalità simulazione ma non c'è un file YAML e gli allenamenti non sono importati
-            if not self.plan_imported and not yaml_path:
-                messagebox.showerror("Errore", "File YAML del piano non trovato e nessun allenamento importato. Importa prima gli allenamenti o fornisci un file YAML valido.")
-                return
-            
-            self.log(f"Simulazione pianificazione allenamenti per il piano {training_plan_id}...")
-            self.log(f"Giorni selezionati: {', '.join([self.day_names[d] for d in selected_days])}")
-            self.log(f"Data gara: {self.race_day.get()}")
-            self.log(f"Data inizio calcolata: {self.start_day.get() if self.start_day.get() else 'Automatica'}")
-            self.log("(Modalità dry-run - nessuna modifica effettiva verrà apportata)")
+            # Se non abbiamo un file YAML, verifichiamo se gli allenamenti sono stati importati
+            if not self.plan_imported:
+                messagebox.showwarning("Piano non importato", 
+                                     "Il piano di allenamento non risulta importato e non è stato trovato un file YAML.\n"
+                                     "La simulazione potrebbe non riflettere correttamente gli allenamenti reali.")
             
             # Esegui la simulazione
             self._simulate_schedule(selected_days)
-        else:
-            # Non siamo in modalità simulazione, dobbiamo eseguire la pianificazione effettiva
-            # Verifica se gli allenamenti sono già importati in Garmin Connect
-            if not self.plan_imported:
-                self.log("Gli allenamenti non sono ancora importati. Cerco il file YAML...")
+            return
                 
-                # Trova il file YAML corrispondente
-                yaml_path = self.find_yaml_for_plan(training_plan_id)
+        # NON siamo in modalità simulazione - dobbiamo verificare se il piano è già importato
+        self.log("Verifica se il piano è già importato...")
+        self.plan_imported = False  # Reset dello stato di importazione
+        
+        # Controlla nella cache se esistono allenamenti per questo piano
+        self.check_workouts_in_cache(training_plan_id)
+        
+        # Se non è stato importato, dobbiamo importarlo prima di pianificare
+        if not self.plan_imported:
+            self.log("Piano non importato. Ricerca del file YAML...")
+            
+            # Trova il file YAML corrispondente
+            yaml_path = self.find_yaml_for_plan(training_plan_id)
+            
+            if not yaml_path:
+                # Nessun file YAML trovato, chiedi all'utente di specificarne uno
+                yaml_path = filedialog.askopenfilename(
+                    title=f"Seleziona file YAML per il piano '{training_plan_id}'",
+                    filetypes=[("YAML files", "*.yaml *.yml"), ("All files", "*.*")]
+                )
                 
                 if not yaml_path:
-                    # Nessun file YAML trovato, chiedi all'utente di specificarne uno
-                    yaml_path = filedialog.askopenfilename(
-                        title=f"Seleziona file YAML per il piano '{training_plan_id}'",
-                        filetypes=[("YAML files", "*.yaml *.yml"), ("All files", "*.*")]
-                    )
-                    
-                    if not yaml_path:
-                        self.log("Operazione annullata. Nessun file selezionato.")
-                        return
-                
-                # Chiedi conferma all'utente per l'importazione
-                if not messagebox.askyesno("Conferma importazione", 
-                                         f"Prima di pianificare, gli allenamenti devono essere importati in Garmin Connect.\n\n"
-                                         f"Importare gli allenamenti dal file:\n{yaml_path}?"):
-                    self.log("Operazione annullata dall'utente.")
+                    self.log("Operazione annullata. Nessun file selezionato.")
                     return
-                
-                # Imposta il file di importazione
-                self.import_file.set(yaml_path)
-                self.import_replace.set(True)  # Sostituisci eventuali allenamenti esistenti
-                
-                self.log(f"Importazione degli allenamenti da {yaml_path}...")
-                
-                # Esegui l'importazione e poi la pianificazione
-                threading.Thread(target=lambda: self._do_import_and_schedule(selected_days)).start()
+            
+            # Conferma importazione all'utente
+            if not messagebox.askyesno("Conferma importazione", 
+                                      f"Prima di pianificare, gli allenamenti devono essere importati in Garmin Connect.\n\n"
+                                      f"Importare gli allenamenti dal file:\n{yaml_path}?"):
+                self.log("Operazione annullata dall'utente.")
+                return
+            
+            # Imposta il file di importazione e opzioni
+            self.import_file.set(yaml_path)
+            self.import_replace.set(True)  # Sostituisci eventuali allenamenti esistenti
+            
+            self.log(f"Importazione degli allenamenti da {yaml_path}...")
+            
+            # Esegui l'importazione e verifica che abbia avuto successo
+            import_success = self._do_import_for_schedule()
+            
+            if not import_success:
+                self.log("Impossibile procedere con la pianificazione a causa di errori nell'importazione.")
+                messagebox.showerror("Errore", "La pianificazione è stata annullata a causa di problemi durante l'importazione.")
+                return
             else:
-                # Gli allenamenti sono già importati, procedi direttamente con la pianificazione
-                self.log(f"Pianificazione allenamenti per il piano {training_plan_id}...")
-                self.log(f"Data di gara: {self.race_day.get()}")
-                
-                # Esegui la pianificazione
-                threading.Thread(target=lambda: self._do_schedule(selected_days, False)).start()
+                # Imposta il flag di piano importato
+                self.plan_imported = True
+                self.log("Importazione completata con successo. Procedo con la pianificazione.")
+        else:
+            self.log("Piano già importato in Garmin Connect. Procedo con la pianificazione.")
+        
+        # Ora che siamo sicuri che il piano sia importato, procedi con la pianificazione
+        self.log(f"Pianificazione allenamenti per il piano {training_plan_id}...")
+        self.log(f"Data di gara: {self.race_day.get()}")
+        self.log(f"Giorni selezionati: {[self.day_names[d] for d in selected_days]}")
+        
+        # Esegui la pianificazione
+        self._do_schedule(selected_days, False)
 
 
     def check_workouts_in_cache(self, training_plan_id):
@@ -3230,6 +3214,7 @@ class GarminPlannerGUI(tk.Tk):
 
             
     def _do_schedule(self, selected_days, is_dry_run=False):
+        """Esegue il comando di pianificazione degli allenamenti"""
         # Assicurati che la cartella OAuth esista
         oauth_folder = self.oauth_folder.get()
         if not os.path.exists(oauth_folder):
@@ -3246,35 +3231,52 @@ class GarminPlannerGUI(tk.Tk):
             return
                     
         try:
+            # Costruisci il comando base
             cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
                    "--oauth-folder", self.oauth_folder.get(),
                    "--log-level", self.log_level.get()]
             
+            # Aggiungi i parametri di pianificazione
             cmd.extend(["schedule",
                       "--training-plan", self.training_plan.get(),
-                      "--race-day", self.race_day.get(),
-                      "--start-day", self.start_day.get()])  # Aggiungi la data di inizio
+                      "--race-day", self.race_day.get()])
             
-            # Add selected days if any
+            # Aggiungi la data di inizio solo se specificata
+            if self.start_day.get():
+                cmd.extend(["--start-day", self.start_day.get()])
+            
+            # CORREZIONE CRITICA: Converti gli interi in stringhe prima di unirli
             if selected_days:
                 cmd.extend(["--workout-days", ",".join(map(str, selected_days))])
             
+            # Log del comando completo per debug
             self.log(f"Esecuzione comando: {' '.join(cmd)}")
+            
+            # Esegui il comando
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             stdout, stderr = process.communicate()
             
+            # Gestisci l'output
             if process.returncode != 0:
                 self.log(f"Errore durante la pianificazione: {stderr}")
                 messagebox.showerror("Errore", f"Errore durante la pianificazione: {stderr}")
             else:
                 self.log("Pianificazione completata con successo")
+                
+                # Log dettagliato dell'output per debug
+                if stdout.strip():
+                    self.log(f"Output del comando: {stdout.strip()}")
+                
+                # Mostra messaggio di successo
                 messagebox.showinfo("Successo", "Pianificazione completata con successo")
                 
-                # Refresh the calendar
+                # Aggiorna il calendario
                 self.refresh_calendar()
             
         except Exception as e:
             self.log(f"Errore durante la pianificazione: {str(e)}")
+            import traceback
+            self.log(traceback.format_exc())
             messagebox.showerror("Errore", f"Errore durante la pianificazione: {str(e)}")
             
     def _parse_schedule_output(self, output):

@@ -14,222 +14,205 @@ from planner.garmin_client import GarminClient
 
 def cmd_schedule_workouts(args):
     """
-    Schedule workouts in a training plan.
-    
-    Args:
-        args: Command line arguments with the following attributes:
-            - training_plan: ID of the training plan (common prefix of workouts)
-            - race_day: Date of the race (format: YYYY-MM-DD)
-            - start_day: Optional start date (format: YYYY-MM-DD)
-            - workout_days: Optional comma-separated list of day indices (0=Monday, 6=Sunday)
-            - oauth_folder: Path to the OAuth folder
-            - dry_run: If True, only show what would be scheduled without making changes
-            
-    Returns:
-        None
+    Pianifica gli allenamenti in Garmin Connect.
+    Questa versione usa la stessa logica della simulazione per calcolare le date.
     """
     training_sessions = {}
     client = GarminClient(args.oauth_folder)
-    
-    logging.info(f'Getting list of workouts.')
+    logging.info(f'getting list of workouts.')
     workouts_list = client.list_workouts()
-    
-    # Create mapping from workout ID to name
     wid_to_name = {}
-    
-    # Find workouts matching the training plan
     for workout in workouts_list:
         workout_name = workout['workoutName']
         workout_id = workout["workoutId"]
         wid_to_name[workout_id] = workout_name
-        
         if re.search(args.training_plan, workout['workoutName']):
-            logging.info(f'Found workout named "{workout_name}" with ID {workout_id}.')
+            logging.info(f'found workout named "{workout_name}" with ID {workout_id}.')
             training_sessions[workout_id] = workout_name
 
-    # Organize workouts by week and session
-    week_sessions = {}  # Structure: {week: {session: workout_id}}
-    workout_infos = {}  # Structure: {workout_id: (week, session)}
+    # Organizziamo gli allenamenti per settimana e sessione
+    training_plan = {}
+    week_ids = []
+    workout_infos = {}
     
     for workout_id, name in training_sessions.items():
         match = re.search(r'\s(W\d\d)S(\d\d)\s', name)
-        if not match:
-            logging.warning(f'Workout "{name}" does not match the expected pattern WxxSxx. Skipping.')
-            continue
-        
-        week_id = match.group(1)
-        session_id = int(match.group(2))
-        
-        # Initialize data structures if needed
-        if week_id not in week_sessions:
-            week_sessions[week_id] = {}
-        week_sessions[week_id][session_id] = workout_id
-        workout_infos[workout_id] = (week_id, session_id)
-        
-    # Check if there are any defined weeks
-    if not week_sessions:
+        if match:
+            week_id = match.group(1)
+            session_id = int(match.group(2))
+            week_num = int(week_id[1:])
+            
+            if week_id not in training_plan:
+                training_plan[week_id] = {}
+            if session_id not in training_plan[week_id]:
+                training_plan[week_id][session_id] = []
+            
+            training_plan[week_id][session_id].append(workout_id)
+            
+            if week_id not in week_ids:
+                week_ids.append(week_id)
+            
+            # Salva info per debug
+            workout_infos[workout_id] = (week_id, session_id, name)
+
+    if not training_plan:
         logging.warning('No valid workouts found for planning.')
         return None
+
+    # Controlla se l'attributo reverse_order esiste, altrimenti usa False di default
+    reverse_order = getattr(args, 'reverse_order', False)
     
-    # Get the ordered list of weeks
-    weeks = sorted(week_sessions.keys())
+    # Ordina le settimane in ordine decrescente (dall'ultima alla prima)
+    week_ids = sorted(week_ids, reverse=reverse_order)
     
-    # Get current date and race date
-    today = datetime.datetime.today().date()
-    try:
-        race_day = datetime.datetime.strptime(args.race_day, '%Y-%m-%d').date()
-    except ValueError:
-        logging.error(f'Invalid race day format: {args.race_day}. Use YYYY-MM-DD format.')
-        return None
+    # Ottieni la data della gara
+    race_day = datetime.datetime.strptime(args.race_day, '%Y-%m-%d')
+    today = datetime.datetime.today()
     
-    # Check that race day is in the future
-    if race_day < today:
-        logging.warning(f'Race day {race_day} is in the past. Please set a future date.')
-        return None
+    logging.info(f'Race day: {race_day.strftime("%Y-%m-%d")} (weekday: {race_day.weekday()})')
     
-    # Calculate start date if specified
-    start_date = today
-    if args.start_day:
+    # Trova la settimana massima per calcolare correttamente gli offset
+    max_week = max([int(w[1:]) for w in week_ids])
+    logging.info(f'Max week: W{max_week:02d}, Total weeks: {len(week_ids)}')
+    
+    # Trova il lunedì della settimana della gara
+    days_to_monday = race_day.weekday()  # 0=lunedì, 1=martedì, ecc.
+    race_week_monday = race_day - datetime.timedelta(days=days_to_monday)
+    logging.info(f'Monday of race week: {race_week_monday.strftime("%Y-%m-%d")}')
+    
+    # Ottieni i giorni della settimana selezionati
+    selected_days = []
+    if hasattr(args, 'workout_days') and args.workout_days:
         try:
-            start_date = datetime.datetime.strptime(args.start_day, '%Y-%m-%d').date()
-            # Check that start date is not in the past
-            if start_date < today:
-                logging.warning(f'Start date {start_date} is in the past. Using today instead.')
-                start_date = today
-            elif start_date > race_day:
-                logging.warning(f'Start date {start_date} is after race day {race_day}. Using today instead.')
-                start_date = today
-            logging.info(f'Using custom start date: {start_date}')
-        except ValueError:
-            logging.warning(f'Invalid start date format: {args.start_day}. Using today instead.')
-    
-    # Get custom days
-    custom_days = []
-    if args.workout_days:
-        try:
-            custom_days = [int(d) for d in args.workout_days.split(',')]
-            # Check that days are valid (0-6)
-            for day in custom_days:
-                if day < 0 or day > 6:
-                    logging.warning(f'Invalid day index: {day}. Must be 0-6 (Monday-Sunday).')
-                    return None
-            logging.info(f'Using custom days: {[calendar.day_name[d] for d in custom_days]}')
-        except ValueError:
-            logging.warning(f'Invalid workout days specified: {args.workout_days}. Must be comma-separated integers (0-6).')
+            selected_days = [int(d) for d in args.workout_days.split(',')]
+            selected_days = sorted(selected_days)  # Ordina i giorni
+            day_names = ['lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato', 'domenica']
+            logging.info(f'Selected days: {", ".join([day_names[d] for d in selected_days])}')
+        except Exception as e:
+            logging.error(f'Error parsing workout_days: {str(e)}')
             return None
     
-    # Calculate the Monday of the week to start planning
-    if start_date.weekday() == 0:  # 0 = Monday
-        next_monday = start_date
-    else:
-        days_until_monday = (7 - start_date.weekday()) % 7
-        next_monday = start_date + datetime.timedelta(days=days_until_monday)
+    # Se non ci sono giorni selezionati, usa i giorni predefiniti
+    if not selected_days:
+        logging.info('No days selected, using default days')
+        # Imposta giorni predefiniti in base al numero massimo di sessioni per settimana
+        max_sessions = max([len(week_sessions) for week_sessions in training_plan.values()])
+        if max_sessions == 1:
+            selected_days = [2]  # Mercoledì
+        elif max_sessions == 2:
+            selected_days = [1, 4]  # Martedì, Venerdì
+        elif max_sessions == 3:
+            selected_days = [1, 3, 6]  # Martedì, Giovedì, Domenica
+        elif max_sessions == 4:
+            selected_days = [1, 3, 5, 6]  # Martedì, Giovedì, Sabato, Domenica
+        elif max_sessions >= 5:
+            selected_days = [0, 1, 3, 4, 6]  # Lunedì, Martedì, Giovedì, Venerdì, Domenica
     
-    logging.info(f'Starting planning from Monday {next_monday}')
+    # Pianifica gli allenamenti
+    scheduled_plan = {}
+    used_dates = set()
     
-    # Plan the workouts
-    scheduled_workouts = {}  # {date: workout_id}
-    dates_used = set()  # Set to track dates already used
-    
-    for week_index, week_id in enumerate(weeks):
-        week_start = next_monday + datetime.timedelta(weeks=week_index)
+    # Per ogni settimana
+    for week_id in week_ids:
+        # Estrai il numero della settimana
+        week_num = int(week_id[1:])
         
-        # Skip weeks that would be after the race
-        if week_start > race_day:
-            logging.warning(f'Week {week_id} would be after race day. Skipping.')
-            continue
+        # Calcola l'offset rispetto alla settimana massima
+        week_offset = max_week - week_num
         
-        sessions = week_sessions[week_id]
-        session_ids = sorted(sessions.keys())
+        # Calcola il lunedì di questa settimana
+        week_monday = race_week_monday - datetime.timedelta(weeks=week_offset)
+        logging.info(f'Planning week {week_id}: starts on {week_monday.strftime("%Y-%m-%d")} (Monday)')
         
-        # Check if specified days are enough
-        if custom_days and len(custom_days) < len(session_ids):
-            logging.warning(f'Not enough days specified for week {week_id}. Need {len(session_ids)}, got {len(custom_days)}.')
-            logging.warning('Using available days and cycling through them.')
-        
-        # Assign workouts to specified days
-        for i, session_id in enumerate(session_ids):
-            workout_id = sessions[session_id]
+        # Ottieni le sessioni per questa settimana, ordinate
+        if week_id in training_plan:
+            sessions = sorted(training_plan[week_id].keys())
             
-            # Determine the day of the week
-            if custom_days:
-                # Use custom days, cycling if necessary
-                day_index = custom_days[i % len(custom_days)]
-            else:
-                # Default distribution based on number of sessions
-                if len(session_ids) == 1:
-                    day_index = 2  # Wednesday
-                elif len(session_ids) == 2:
-                    day_index = [1, 4][i]  # Tuesday, Friday
-                elif len(session_ids) == 3:
-                    day_index = [1, 3, 5][i]  # Tuesday, Thursday, Saturday
-                elif len(session_ids) == 4:
-                    day_index = [1, 3, 5, 6][i]  # Tuesday, Thursday, Saturday, Sunday
-                elif len(session_ids) == 5:
-                    day_index = [0, 1, 3, 4, 6][i]  # Monday, Tuesday, Thursday, Friday, Sunday
-                elif len(session_ids) == 6:
-                    day_index = [0, 1, 2, 3, 4, 6][i]  # M, T, W, T, F, S
-                else:
-                    day_index = i % 7
-            
-            # Calculate the specific date
-            workout_date = week_start + datetime.timedelta(days=day_index)
-            date_str = workout_date.strftime('%Y-%m-%d')
-            
-            # Check that it's not in the past
-            if workout_date < today:
-                logging.warning(f'Workout {week_id}S{session_id:02d} would be scheduled in the past ({date_str}). Skipping.')
-                continue
+            # Assegna ogni sessione a un giorno della settimana
+            for session_idx, session_id in enumerate(sessions):
+                workout_ids = training_plan[week_id][session_id]
                 
-            # Check that it's not after the race day
-            if workout_date > race_day:
-                logging.warning(f'Workout {week_id}S{session_id:02d} would be scheduled after race day ({date_str}). Skipping.')
-                continue
-            
-            # Check if this date is already used for another workout
-            if date_str in scheduled_workouts:
-                # If this date is already scheduled, check if the workout is different
-                if workout_id != scheduled_workouts[date_str]:
-                    # Look for an alternative date
-                    logging.warning(f"Date {date_str} already scheduled with another workout. Looking for alternative...")
-                    alternative_found = False
-                    for offset in range(1, 7):
-                        alt_date = workout_date + datetime.timedelta(days=offset)
-                        alt_date_str = alt_date.strftime('%Y-%m-%d')
+                # Determina il giorno della settimana
+                if session_idx < len(selected_days):
+                    day_idx = selected_days[session_idx]
+                else:
+                    # Se ci sono più sessioni che giorni selezionati, cicla
+                    day_idx = selected_days[session_idx % len(selected_days)]
+                
+                # Calcola la data
+                workout_date = week_monday + datetime.timedelta(days=day_idx)
+                date_str = workout_date.strftime("%Y-%m-%d")
+                
+                # Verifica se coincide con il giorno della gara
+                if workout_date.date() == race_day.date():
+                    logging.info(f'Workout {week_id}S{session_id:02d} would be on race day ({date_str}). Skipping.')
+                    continue
+                
+                # Verifica se è nel passato
+                if workout_date < today:
+                    logging.info(f'Workout {week_id}S{session_id:02d} would be in the past ({date_str}). Skipping.')
+                    continue
+                
+                # Verifica se è dopo la gara
+                if workout_date > race_day:
+                    logging.info(f'Workout {week_id}S{session_id:02d} would be after race day ({date_str}). Skipping.')
+                    continue
+                
+                # Verifica se la data è già utilizzata
+                if date_str in used_dates:
+                    # Cerca una data alternativa
+                    logging.info(f'Date {date_str} already used. Looking for alternative...')
+                    found_alternative = False
+                    
+                    for alt_day in [d for d in selected_days if d != day_idx]:
+                        alt_date = week_monday + datetime.timedelta(days=alt_day)
+                        alt_date_str = alt_date.strftime("%Y-%m-%d")
                         
-                        # Check that the alternative date is valid and not occupied
-                        if alt_date <= race_day and alt_date_str not in scheduled_workouts:
+                        # Verifica che l'alternativa sia valida
+                        if (alt_date.date() != race_day.date() and
+                            alt_date <= race_day and
+                            alt_date >= today and
+                            alt_date_str not in used_dates):
                             workout_date = alt_date
                             date_str = alt_date_str
-                            alternative_found = True
-                            logging.info(f'Found alternative date {date_str} for {week_id}S{session_id:02d}')
+                            found_alternative = True
+                            logging.info(f'Found alternative date: {date_str}')
                             break
-                            
-                    if not alternative_found:
-                        logging.warning(f'Could not find an alternative date for {week_id}S{session_id:02d}. Skipping.')
+                    
+                    if not found_alternative:
+                        logging.info(f'No alternative date available for {week_id}S{session_id:02d}. Skipping.')
                         continue
-                else:
-                    # This is the same workout already scheduled for this date, skip it
-                    logging.warning(f'Workout {week_id}S{session_id:02d} already scheduled for {date_str}. Skipping duplicate.')
-                    continue
-            
-            # Add to schedule
-            scheduled_workouts[date_str] = workout_id
-            dates_used.add(date_str)
-            logging.info(f'Scheduled {week_id}S{session_id:02d} for {calendar.day_name[workout_date.weekday()]} {date_str}')
+                
+                # Aggiungi alla pianificazione
+                used_dates.add(date_str)
+                if date_str not in scheduled_plan:
+                    scheduled_plan[date_str] = []
+                
+                # Aggiungi tutti gli allenamenti di questa sessione
+                scheduled_plan[date_str].extend(workout_ids)
+                
+                # Log per ogni allenamento
+                for workout_id in workout_ids:
+                    if workout_id in workout_infos:
+                        logging.info(f'Scheduling workout {workout_infos[workout_id][2]} ({workout_id}) on {date_str}')
     
-    # Sort the schedule by date
-    scheduled_workouts = dict(sorted(scheduled_workouts.items()))
+    # Ordina la pianificazione per data
+    scheduled_plan = dict(sorted(scheduled_plan.items()))
     
-    # Perform the actual scheduling
-    for date, workout_id in scheduled_workouts.items():
-        workout_name = wid_to_name[workout_id]
-        week_id, session_id = workout_infos[workout_id]
-        logging.info(f'Scheduling workout {workout_name} ({workout_id}) on {date}')
-        
-        if not args.dry_run:
-            client.schedule_workout(workout_id, date)
+    # Pianifica effettivamente gli allenamenti in Garmin Connect
+    workouts_scheduled = 0
     
+    for date_str, workout_ids in scheduled_plan.items():
+        for workout_id in workout_ids:
+            try:
+                logging.info(f'Scheduling workout {wid_to_name[workout_id]} ({workout_id}) on {date_str}')
+                if not args.dry_run:
+                    client.schedule_workout(workout_id, date_str)
+                workouts_scheduled += 1
+            except Exception as e:
+                logging.error(f'Error scheduling workout {workout_id} on {date_str}: {str(e)}')
+    
+    logging.info(f'Scheduled {workouts_scheduled} workouts')
     return None
 
 
