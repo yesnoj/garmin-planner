@@ -36,6 +36,7 @@ WORKOUTS_CACHE_FILE = os.path.join(CACHE_DIR, "workouts_cache.json")
 
 class GarminPlannerGUI(tk.Tk):
     def __init__(self):
+        """Inizializzazione dell'applicazione (con supporto per l'icona nella taskbar di Windows)"""
         super().__init__()
         
         # Assicurati che la cartella cache esista
@@ -64,6 +65,24 @@ class GarminPlannerGUI(tk.Tk):
         # Status bar variable
         self.status_var = tk.StringVar(value="Pronto")
         
+        # Imposta l'icona personalizzata - usando wm_iconbitmap per Windows
+        try:
+            # Percorso dell'icona - modifica con il percorso alla tua icona
+            icon_path = os.path.join(SCRIPT_DIR, "assets", "garmin_planner_icon.ico")
+            
+            # Per Windows: usa wm_iconbitmap (metodo specifico per l'icona nella taskbar)
+            if os.name == 'nt':
+                self.wm_iconbitmap(icon_path)
+            # Per macOS o Linux
+            else:
+                icon_img = tk.PhotoImage(file=icon_path)
+                self.iconphoto(True, icon_img)
+                
+            logger.info(f"Icona dell'applicazione caricata da {icon_path}")
+        except Exception as e:
+            # Se l'icona non può essere caricata, logga l'errore ma continua
+            logger.error(f"Impossibile caricare l'icona: {str(e)}")
+        
         # Crea uno stile personalizzato per i pulsanti di accento
         self.style = ttk.Style()
         self.style.configure("Accent.TButton", 
@@ -80,7 +99,7 @@ class GarminPlannerGUI(tk.Tk):
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # Create tabs (spostando Log all'ultimo posto)
+        # Create tabs
         self.create_login_tab()
         self.create_import_tab()
         self.create_export_tab()
@@ -92,14 +111,23 @@ class GarminPlannerGUI(tk.Tk):
         
         # Crea la tab Log per ultima
         self.create_log_tab()
-
-        # Common settings frame
-        self.create_settings_frame()
         
         # Status bar
         self.status_bar = ttk.Label(self, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
+        # Questa è una soluzione alternativa che a volte è necessaria in Windows
+        # per forzare l'aggiornamento dell'icona nella taskbar
+        if os.name == 'nt':
+            try:
+                # Importa la libreria win32gui se disponibile
+                import win32gui
+                # Ottiene l'handle della finestra
+                hwnd = self.winfo_id()
+                # Forza l'aggiornamento
+                win32gui.SendMessage(hwnd, 0x0080, 0, 0)
+            except ImportError:
+                logger.debug("win32gui non disponibile, impossibile forzare l'aggiornamento dell'icona")
 
 
 
@@ -346,19 +374,15 @@ class GarminPlannerGUI(tk.Tk):
                              f"Puoi selezionare al massimo {self.max_sessions} giorni per questo piano di allenamento.")
 
     def create_settings_frame(self):
+        """Frame per le impostazioni comuni (versione aggiornata senza OAuth)"""
         settings_frame = ttk.LabelFrame(self, text="Impostazioni comuni")
         settings_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        # OAuth folder
-        ttk.Label(settings_frame, text="Cartella OAuth:").grid(row=0, column=0, padx=5, pady=5)
-        ttk.Entry(settings_frame, textvariable=self.oauth_folder, width=30).grid(row=0, column=1, padx=5, pady=5)
-        ttk.Button(settings_frame, text="Sfoglia", command=self.browse_oauth_folder).grid(row=0, column=2, padx=5, pady=5)
+        # Rimuovo le impostazioni della cartella OAuth poiché sono già nella tab Login
         
-        # Log level
-        ttk.Label(settings_frame, text="Livello di log:").grid(row=0, column=3, padx=5, pady=5)
-        log_level_combo = ttk.Combobox(settings_frame, textvariable=self.log_level, values=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
-        log_level_combo.grid(row=0, column=4, padx=5, pady=5)
-        log_level_combo.current(1)  # Default to INFO
+        # Per mantenere il layout, lasciamo uno spazio vuoto o un messaggio informativo
+        info_label = ttk.Label(settings_frame, text="Usa la tab Login per gestire le impostazioni di autenticazione")
+        info_label.pack(padx=10, pady=10)
 
     def browse_oauth_folder(self):
         folder = filedialog.askdirectory(initialdir=self.oauth_folder.get())
@@ -1196,8 +1220,19 @@ class GarminPlannerGUI(tk.Tk):
 
 
     def create_log_tab(self):
+        """Crea la tab Log (aggiornata con l'opzione per il livello di log)"""
         log_frame = ttk.Frame(self.notebook)
         self.notebook.add(log_frame, text="Log")
+        
+        # Aggiungiamo le impostazioni del livello di log qui
+        log_settings_frame = ttk.Frame(log_frame)
+        log_settings_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        ttk.Label(log_settings_frame, text="Livello di log:").pack(side=tk.LEFT, padx=5)
+        log_level_combo = ttk.Combobox(log_settings_frame, textvariable=self.log_level, 
+                                      values=["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"])
+        log_level_combo.pack(side=tk.LEFT, padx=5)
+        log_level_combo.current(1)  # Default to INFO
         
         # Log text widget
         self.log_text = tk.Text(log_frame, wrap=tk.WORD, height=20)
@@ -1211,7 +1246,9 @@ class GarminPlannerGUI(tk.Tk):
         logging.getLogger().addHandler(self.log_handler)
         
         # Clear button
-        ttk.Button(log_frame, text="Pulisci log", command=self.clear_log).pack(pady=5)
+        button_frame = ttk.Frame(log_frame)
+        button_frame.pack(fill=tk.X, padx=5, pady=5)
+        ttk.Button(button_frame, text="Pulisci log", command=self.clear_log).pack(side=tk.RIGHT)
 
 
     def create_excel_tools_tab(self):
