@@ -802,7 +802,6 @@ class GarminPlannerGUI(tk.Tk):
             messagebox.showerror("Errore", f"Errore durante l'esportazione: {str(e)}")
 
 
-
     def create_schedule_tab(self):
         schedule_frame = ttk.Frame(self.notebook)
         self.notebook.add(schedule_frame, text="Pianifica")
@@ -880,8 +879,9 @@ class GarminPlannerGUI(tk.Tk):
         button_frame = ttk.Frame(schedule_frame)
         button_frame.pack(fill=tk.X, padx=10, pady=10)
         
-        # Solo il bottone "Pianifica" (rimosso il bottone "Rimuovi pianificazione")
-        ttk.Button(button_frame, text="Pianifica", command=self.perform_schedule).pack(pady=5)
+        # Aggiungi entrambi i pulsanti: "Pianifica" e "Rimuovi pianificazione"
+        ttk.Button(button_frame, text="Pianifica", command=self.perform_schedule).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Rimuovi pianificazione", command=self.perform_unschedule).pack(side=tk.LEFT, padx=5)
         
         # Calendar view
         ttk.Label(schedule_frame, text="Calendario allenamenti pianificati").pack(pady=5)
@@ -903,6 +903,62 @@ class GarminPlannerGUI(tk.Tk):
         
         # Analizza il piano all'inizio
         self.analyze_training_plan()
+
+
+    def perform_unschedule(self):
+        """Rimuove gli allenamenti pianificati per il piano selezionato"""
+        # Verifica che sia selezionato un piano
+        if not self.training_plan.get():
+            messagebox.showerror("Errore", "Seleziona un piano di allenamento")
+            return
+        
+        # Chiedi conferma prima di procedere
+        if not messagebox.askyesno("Conferma", 
+                                 f"Stai per rimuovere tutti gli allenamenti pianificati per il piano '{self.training_plan.get()}'.\n\n"
+                                 f"Vuoi procedere?"):
+            return
+        
+        # Costruisci e esegui il comando
+        try:
+            cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
+                   "--oauth-folder", self.oauth_folder.get(),
+                   "--log-level", self.log_level.get(),
+                   "unschedule", 
+                   "--training-plan", self.training_plan.get()]
+            
+            # Aggiungi l'opzione dry-run se selezionata
+            if self.schedule_dry_run.get():
+                cmd.append("--dry-run")
+                self.log("Modalità simulazione attivata - nessuna modifica verrà apportata")
+            
+            self.log(f"Rimozione pianificazione per '{self.training_plan.get()}'...")
+            self.log(f"Esecuzione comando: {' '.join(cmd)}")
+            
+            # Esegui il comando
+            process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+            stdout, stderr = process.communicate()
+            
+            # Gestisci il risultato
+            if process.returncode != 0:
+                self.log(f"Errore durante la rimozione della pianificazione: {stderr}")
+                messagebox.showerror("Errore", f"Errore durante la rimozione della pianificazione: {stderr}")
+            else:
+                self.log("Rimozione pianificazione completata con successo")
+                
+                # Log dettagliato dell'output
+                if stdout.strip():
+                    self.log(f"Output del comando: {stdout}")
+                
+                messagebox.showinfo("Successo", "Rimozione pianificazione completata con successo")
+                
+                # Aggiorna il calendario
+                self.refresh_calendar()
+                
+        except Exception as e:
+            self.log(f"Errore durante la rimozione della pianificazione: {str(e)}")
+            import traceback
+            self.log(traceback.format_exc())
+            messagebox.showerror("Errore", f"Errore durante la rimozione della pianificazione: {str(e)}")
 
     
     def on_excel_day_checkbox_clicked(self, day_index):
