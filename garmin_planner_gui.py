@@ -38,7 +38,7 @@ class GarminPlannerGUI(tk.Tk):
     def __init__(self):
         """Inizializzazione dell'applicazione (con supporto per l'icona nella taskbar di Windows)"""
         super().__init__()
-        
+        self.initialize_directories()
         # Assicurati che la cartella cache esista
         if not os.path.exists(CACHE_DIR):
             os.makedirs(CACHE_DIR, exist_ok=True)
