@@ -1303,12 +1303,13 @@ class GarminPlannerGUI(tk.Tk):
                 3: "Giovedì", 4: "Venerdì", 5: "Sabato", 6: "Domenica"
             }
             
-            selected_day_names = [day_names[day] for day in selected_days]
+            selected_day_names = [day_names[day] for day in sorted(selected_days)]
             self.log(f"Giorni selezionati: {', '.join(selected_day_names)}")
             self.log(f"Data della gara: {race_date.strftime('%d/%m/%Y')} ({day_names[race_date.weekday()]})")
             
-            # Raccogli tutti gli allenamenti
-            all_workouts = []
+            # Raccogli allenamenti per settimana
+            workouts_by_week = {}
+            max_week = 0
             
             for row in range(3, ws.max_row + 1):
                 week_cell = ws.cell(row=row, column=week_col)
@@ -1333,108 +1334,144 @@ class GarminPlannerGUI(tk.Tk):
                     except ValueError:
                         continue
                 
+                max_week = max(max_week, week)
+                
                 # Ottieni il colore per la formattazione
                 color = None
                 if week_cell.fill and week_cell.fill.start_color and week_cell.fill.start_color.index:
                     color = week_cell.fill.start_color.index
                 
                 # Aggiungi alle informazioni
-                all_workouts.append({
-                    'week': week,
-                    'session': session,
+                if week not in workouts_by_week:
+                    workouts_by_week[week] = {}
+                
+                workouts_by_week[week][session] = {
                     'row': row,
                     'color': color
-                })
+                }
             
-            if not all_workouts:
+            if not workouts_by_week:
                 messagebox.showerror("Errore", "Nessun allenamento trovato nel file Excel.")
                 return
             
-            # Ordina gli allenamenti: prima per week decrescente, poi per session decrescente
-            all_workouts.sort(key=lambda x: (-x['week'], -x['session']))
+            self.log(f"Trovate {len(workouts_by_week)} settimane di allenamenti, settimana massima: {max_week}")
             
-            self.log(f"Raccolti {len(all_workouts)} allenamenti, ordinati dall'ultimo al primo")
-            
-            # Data corrente
+            # Data corrente e lunedì della settimana della gara
             today = datetime.today().date()
             
-            # Genera una lista di date valide prima della gara
-            valid_dates = []
-            current_date = race_date - timedelta(days=1)  # Inizia dal giorno prima della gara
+            # Trova il lunedì della settimana della gara
+            days_to_monday = race_date.weekday()  # 0=lunedì, 1=martedì, ecc.
+            race_week_monday = race_date - timedelta(days=days_to_monday)
             
-            # Genera abbastanza date a ritroso (max 60 giorni dovrebbe essere più che sufficiente)
-            while current_date >= today and len(valid_dates) < 60:
-                if current_date.weekday() in selected_days:
-                    valid_dates.append(current_date)
-                current_date -= timedelta(days=1)
+            self.log(f"Lunedì della settimana della gara: {race_week_monday.strftime('%d/%m/%Y')}")
             
-            # Se non abbiamo trovato abbastanza date, potremmo dover utilizzare anche date prima di oggi
-            if len(valid_dates) < len(all_workouts):
-                self.log(f"Attenzione: alcuni allenamenti potrebbero non essere pianificati perché non ci sono abbastanza date disponibili.")
+            # Ordina selected_days
+            selected_days = sorted(selected_days)
             
-            # Pianifica gli allenamenti
+            # Pianifica gli allenamenti per ogni settimana
             assigned_dates = set()
             
-            for i, workout in enumerate(all_workouts):
-                # Salta se abbiamo più allenamenti che date disponibili
-                if i >= len(valid_dates):
-                    self.log(f"Allenamento W{workout['week']}S{workout['session']} non pianificato per mancanza di date disponibili.")
-                    continue
+            # Conta le settimane a ritroso
+            week_offset = 0
+            
+            # Procedi a ritroso dalla settimana più alta (quella della gara) verso la settimana 1
+            for week in sorted(workouts_by_week.keys(), reverse=True):
+                # Calcola inizio di questa settimana
+                week_monday = race_week_monday - timedelta(weeks=week_offset)
+                self.log(f"Pianificazione settimana W{week}: inizia {week_monday.strftime('%d/%m/%Y')} (Lunedì)")
                 
-                # Prendi la data corrispondente
-                workout_date = valid_dates[i]
+                # Assegna le sessioni ai giorni selezionati in questa settimana
+                # Ordina le sessioni in ordine decrescente (S3, S2, S1)
+                sessions = sorted(workouts_by_week[week].keys(), reverse=True)
                 
-                # Verifica che non sia la data della gara (per sicurezza)
-                if workout_date == race_date:
-                    self.log(f"Allenamento W{workout['week']}S{workout['session']} coinciderebbe con il giorno della gara. Saltato.")
-                    continue
+                # Assegna date alle sessioni
+                for i, session in enumerate(sessions):
+                    if i >= len(selected_days):
+                        self.log(f"Attenzione: più sessioni che giorni selezionati nella settimana W{week}")
+                        continue
+                    
+                    # Calcola la data per questa sessione
+                    day_idx = selected_days[i]
+                    workout_date = week_monday + timedelta(days=day_idx)
+                    
+                    # Verifica che non sia la data della gara
+                    if workout_date == race_date:
+                        self.log(f"Allenamento W{week}S{session} coinciderebbe con il giorno della gara. Saltato.")
+                        continue
+                    
+                    # Verifica che la data non sia già assegnata (in caso di più sessioni che giorni)
+                    date_str = workout_date.strftime("%Y-%m-%d")
+                    if date_str in assigned_dates:
+                        self.log(f"Data {workout_date.strftime('%d/%m/%Y')} già assegnata. Cercando alternativa.")
+                        # Cerca una data alternativa in questa settimana
+                        found = False
+                        for alt_day in [d for d in selected_days if d != day_idx]:
+                            alt_date = week_monday + timedelta(days=alt_day)
+                            alt_str = alt_date.strftime("%Y-%m-%d")
+                            if alt_date != race_date and alt_str not in assigned_dates:
+                                workout_date = alt_date
+                                date_str = alt_str
+                                found = True
+                                self.log(f"Data alternativa: {workout_date.strftime('%d/%m/%Y')} ({day_names[workout_date.weekday()]})")
+                                break
+                        
+                        if not found:
+                            self.log(f"Nessuna data alternativa disponibile per W{week}S{session}. Saltato.")
+                            continue
+                    
+                    # Verifica che non sia nel passato
+                    if workout_date < today:
+                        self.log(f"Allenamento W{week}S{session} cadrebbe nel passato ({workout_date.strftime('%d/%m/%Y')}). Saltato.")
+                        continue
+                    
+                    # Registra la data
+                    assigned_dates.add(date_str)
+                    
+                    # Aggiorna la cella
+                    row = workouts_by_week[week][session]['row']
+                    date_cell = ws.cell(row=row, column=date_col)
+                    date_cell.value = workout_date
+                    date_cell.number_format = "DD/MM/YYYY"
+                    
+                    # Aggiungi anche il giorno della settimana nella cella accanto se c'è spazio
+                    if "Session" in col_indices:
+                        try:
+                            day_cell = ws.cell(row=row, column=col_indices["Session"])
+                            # Salva la sessione originale se c'è
+                            orig_session = day_cell.value
+                            # Imposta il giorno della settimana
+                            day_cell.value = day_names[workout_date.weekday()]
+                        except:
+                            pass  # Se c'è un errore, non aggiungere il giorno
+                    
+                    # Formattazione
+                    date_cell.alignment = openpyxl.styles.Alignment(
+                        horizontal="center", 
+                        vertical="center"
+                    )
+                    
+                    # Applica lo stile
+                    if workouts_by_week[week][session]['color']:
+                        try:
+                            date_cell.fill = openpyxl.styles.PatternFill(
+                                fill_type="solid",
+                                start_color=workouts_by_week[week][session]['color'],
+                                end_color=workouts_by_week[week][session]['color']
+                            )
+                        except:
+                            pass  # Ignora errori di formattazione
+                    
+                    date_cell.border = openpyxl.styles.Border(
+                        left=openpyxl.styles.Side(style="thin"),
+                        right=openpyxl.styles.Side(style="thin"),
+                        top=openpyxl.styles.Side(style="thin"),
+                        bottom=openpyxl.styles.Side(style="thin")
+                    )
+                    
+                    self.log(f"Allenamento W{week}S{session} pianificato per {workout_date.strftime('%d/%m/%Y')} ({day_names[workout_date.weekday()]})")
                 
-                # Assegna la data
-                date_str = workout_date.strftime("%Y-%m-%d")
-                assigned_dates.add(date_str)
-                
-                # Aggiorna la cella
-                row = workout['row']
-                date_cell = ws.cell(row=row, column=date_col)
-                date_cell.value = workout_date
-                date_cell.number_format = "DD/MM/YYYY"
-                
-                # Aggiungi anche il giorno della settimana nella cella accanto se c'è spazio
-                if "Session" in col_indices:
-                    try:
-                        day_cell = ws.cell(row=row, column=col_indices["Session"])
-                        # Salva la sessione originale se c'è
-                        orig_session = day_cell.value
-                        # Imposta il giorno della settimana
-                        day_cell.value = day_names[workout_date.weekday()]
-                    except:
-                        pass  # Se c'è un errore, non aggiungere il giorno
-                
-                # Formattazione
-                date_cell.alignment = openpyxl.styles.Alignment(
-                    horizontal="center", 
-                    vertical="center"
-                )
-                
-                # Applica lo stile
-                if workout['color']:
-                    try:
-                        date_cell.fill = openpyxl.styles.PatternFill(
-                            fill_type="solid",
-                            start_color=workout['color'],
-                            end_color=workout['color']
-                        )
-                    except:
-                        pass  # Ignora errori di formattazione
-                
-                date_cell.border = openpyxl.styles.Border(
-                    left=openpyxl.styles.Side(style="thin"),
-                    right=openpyxl.styles.Side(style="thin"),
-                    top=openpyxl.styles.Side(style="thin"),
-                    bottom=openpyxl.styles.Side(style="thin")
-                )
-                
-                self.log(f"Allenamento W{workout['week']}S{workout['session']} pianificato per {workout_date.strftime('%d/%m/%Y')} ({day_names[workout_date.weekday()]})")
+                # Passa alla settimana precedente
+                week_offset += 1
             
             # Adatta la larghezza della colonna Date
             date_col_letter = openpyxl.utils.get_column_letter(date_col)
