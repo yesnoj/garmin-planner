@@ -101,6 +101,8 @@ class GarminPlannerGUI(tk.Tk):
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
 
 
+
+
     def run_command_with_live_output(self, cmd):
         """Esegue un comando catturando l'output in tempo reale"""
         self.log(f"Esecuzione comando: {' '.join(cmd)}")
@@ -315,6 +317,33 @@ class GarminPlannerGUI(tk.Tk):
                 json.dump(config, f)
         except Exception as e:
             logger.error(f"Errore nel salvataggio della configurazione: {str(e)}")
+
+
+    def on_day_selection_change(self, day_index):
+        """Gestisce la limitazione del numero di giorni selezionabili"""
+        print(f"Controllo giorni selezionati - Giorno cliccato: {self.day_names[day_index]}")
+        print(f"Limite massimo: {self.max_sessions}")
+        
+        # Aggiungi questo controllo per evitare di applicare limitazioni quando max_sessions è 0
+        if not hasattr(self, 'max_sessions') or self.max_sessions <= 0:
+            print("Nessun limite di sessioni impostato, permettendo qualsiasi selezione")
+            return True
+        
+        # Conta quanti giorni sono attualmente selezionati
+        selected_count = sum(var.get() for var in self.day_selections)
+        print(f"Giorni attualmente selezionati: {selected_count}")
+        
+        # Se stiamo superando il limite, deseleziona l'ultimo checkbox selezionato
+        if selected_count > self.max_sessions:
+            print(f"Limite superato! Deseleziono {self.day_names[day_index]}")
+            self.day_selections[day_index].set(0)
+            messagebox.showinfo("Limite raggiunto", 
+                             f"Puoi selezionare al massimo {self.max_sessions} giorni per questo piano di allenamento.")
+            return False
+        
+        print(f"Selezione accettata, ora ci sono {selected_count} giorni selezionati")
+        return True
+
 
     def create_settings_frame(self):
         settings_frame = ttk.LabelFrame(self, text="Impostazioni comuni")
@@ -773,7 +802,6 @@ class GarminPlannerGUI(tk.Tk):
             messagebox.showerror("Errore", f"Errore durante l'esportazione: {str(e)}")
 
 
-# Modifica al metodo create_schedule_tab in garmin_planner_gui.py
 
     def create_schedule_tab(self):
         schedule_frame = ttk.Frame(self.notebook)
@@ -833,10 +861,14 @@ class GarminPlannerGUI(tk.Tk):
                                      font=("", 9, "italic"))
         self.day_info_label.grid(row=0, column=0, columnspan=7, padx=5, pady=5, sticky=tk.W)
         
-        # Crea checkbox per ogni giorno della settimana
+        # Crea checkbox per ogni giorno della settimana con callback di limitazione
         self.day_checkbuttons = []
         for i, day_name in enumerate(self.day_names):
-            cb = ttk.Checkbutton(days_frame, text=day_name, variable=self.day_selections[i])
+            var = self.day_selections[i]
+            # Traccia i cambiamenti alla variabile
+            var.trace_add("write", lambda *args, i=i: self.on_day_selection_change(i))
+            
+            cb = ttk.Checkbutton(days_frame, text=day_name, variable=var)
             cb.grid(row=1, column=i, padx=5, pady=5)
             self.day_checkbuttons.append(cb)
         
@@ -868,8 +900,12 @@ class GarminPlannerGUI(tk.Tk):
         # Aggiungi listener per aggiornare le informazioni quando cambia il piano
         self.training_plan.trace("w", lambda name, index, mode: self.analyze_training_plan())
         
+        # Inizializza la variabile max_sessions
+        self.max_sessions = 0
+        
         # Analizza il piano all'inizio
         self.analyze_training_plan()
+
     
     def create_custom_date_picker(self, parent, date_var):
         """Create a custom date picker with separate widgets for year, month, and day"""
@@ -957,19 +993,45 @@ class GarminPlannerGUI(tk.Tk):
             if not training_plan_id:
                 self.training_plan_info.set("Nessun piano selezionato")
                 self.plan_imported = False
+                # Reset max_sessions quando non c'è piano selezionato
+                self.max_sessions = 0
                 return
-                
+                    
+            # Aggiungi log di debug approfonditi
+            self.log(f"Analisi del piano: '{training_plan_id}'")
+            self.log(f"DEBUG: Formato dell'ID piano: '{training_plan_id}'")
+            self.log(f"DEBUG: Lunghezza ID piano: {len(training_plan_id)} caratteri")
+            self.log(f"DEBUG: Caratteri in esadecimale: {' '.join([hex(ord(c)) for c in training_plan_id])}")
+
+            # Se il piano è AM18W115K, controlla specificamente
+            if "AM18W115K" in training_plan_id:
+                self.log(f"DEBUG: Il piano contiene 'AM18W115K', verificheremo match esatti")
+            
+            # Prima verifichiamo se esiste un file YAML corrispondente e lo analizziamo
+            yaml_path = self.find_yaml_for_plan(training_plan_id)
+            if yaml_path:
+                self.log(f"Trovato file YAML per il piano: {yaml_path}")
+                self.analyze_yaml_plan(yaml_path)
+                return
+                    
             # Inizializza i contatori
             total_workouts = 0
             sessions_per_week = {}
-            
-            # Aggiornamento log
-            self.log(f"Analisi del piano: '{training_plan_id}'")
             
             # Cerca nella cache degli allenamenti
             if os.path.exists(WORKOUTS_CACHE_FILE):
                 with open(WORKOUTS_CACHE_FILE, 'r') as f:
                     workouts = json.load(f)
+                    
+                    # Stampa info della cache
+                    self.log(f"DEBUG: Trovati {len(workouts)} allenamenti nella cache")
+                    workout_names = [w.get('workoutName', '') for w in workouts]
+                    unique_prefixes = set()
+                    for name in workout_names:
+                        parts = name.split()
+                        if parts:
+                            unique_prefixes.add(parts[0])
+                    self.log(f"DEBUG: Prefissi unici trovati: {unique_prefixes}")
                     
                     # Debug: stampa i primi allenamenti per vedere il formato
                     for i, workout in enumerate(workouts[:5]):
@@ -1002,7 +1064,7 @@ class GarminPlannerGUI(tk.Tk):
                         if clean_plan_id and clean_plan_id in clean_workout_name:
                             is_match = True
                             self.log(f"Corrispondenza con ID pulito: '{clean_workout_name}' contiene '{clean_plan_id}'")
-                            
+                                
                         # Se c'è una corrispondenza, conta l'allenamento
                         if is_match:
                             total_workouts += 1
@@ -1023,6 +1085,9 @@ class GarminPlannerGUI(tk.Tk):
                 weeks = len(sessions_per_week)
                 max_sessions = max(sessions_per_week.values()) if sessions_per_week else 0
                 
+                # Salva il numero massimo di sessioni come attributo della classe
+                self.max_sessions = max_sessions
+                
                 info_text = f"Piano: {total_workouts} allenamenti, {weeks} settimane"
                 if sessions_per_week:
                     info_text += f"\nAllenamenti per settimana: "
@@ -1033,9 +1098,12 @@ class GarminPlannerGUI(tk.Tk):
                 
                 # Aggiorna il testo informativo sui giorni
                 if max_sessions > 0:
-                    self.day_info_label.config(text=f"Si suggerisce di selezionare {max_sessions} giorni per settimana")
+                    self.day_info_label.config(text=f"Devi selezionare esattamente {max_sessions} giorni per settimana")
                 else:
                     self.day_info_label.config(text="Seleziona i giorni preferiti per gli allenamenti")
+                    
+                # Preseleziona i giorni in base al numero di sessioni
+                self.preselect_days(max_sessions)
                     
                 # Imposta il flag di piano importato
                 self.plan_imported = True
@@ -1045,12 +1113,15 @@ class GarminPlannerGUI(tk.Tk):
                 self.day_info_label.config(text="Seleziona i giorni preferiti per gli allenamenti")
                 # Imposta il flag di piano non importato
                 self.plan_imported = False
+                # Resetta max_sessions se non ci sono allenamenti
+                self.max_sessions = 0
                 self.log(f"Nessun allenamento trovato per il piano '{training_plan_id}'")
-                
+                    
         except Exception as e:
             self.log(f"Errore nell'analisi del piano: {str(e)}")
             self.training_plan_info.set("Errore nell'analisi del piano")
             self.plan_imported = False
+            self.max_sessions = 0
 
 
     def create_log_tab(self):
@@ -1149,7 +1220,7 @@ class GarminPlannerGUI(tk.Tk):
         days_container = ttk.Frame(dates_days_frame)
         days_container.grid(row=1, column=1, padx=5, pady=5, sticky=tk.W)
         
-        day_names = ["Lu", "Ma", "Me", "Gi", "Ve", "Sa", "Do"]
+        day_names = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
         for i, day_name in enumerate(day_names):
             cb = ttk.Checkbutton(days_container, text=day_name, variable=self.excel_day_selections[i])
             cb.grid(row=0, column=i, padx=2)
@@ -2046,7 +2117,7 @@ class GarminPlannerGUI(tk.Tk):
                 plan_data = yaml.safe_load(f)
                 
                 # Rimuovi la sezione config se presente
-                config = plan_data.pop('config', {})
+                config = plan_data.pop('config', {}) if 'config' in plan_data else {}
                 
                 # Conta gli allenamenti (escludendo la configurazione)
                 workout_count = len(plan_data)
@@ -2066,9 +2137,21 @@ class GarminPlannerGUI(tk.Tk):
                             weeks[week_id] = 0
                         weeks[week_id] += 1
                 
+                # Stampa informazioni di debug
+                self.log(f"DEBUG: Sessioni per settimana trovate: {weeks}")
+                
                 # Costruisci il testo informativo
                 num_weeks = len(weeks)
                 max_sessions = max(weeks.values()) if weeks else 0
+                
+                # Stampa informazione di debug sul numero massimo di sessioni
+                self.log(f"DEBUG: Numero massimo di sessioni trovate: {max_sessions}")
+                
+                # Salva il numero massimo di sessioni come attributo della classe
+                self.max_sessions = max_sessions
+                
+                # Stampa verifica
+                self.log(f"DEBUG: self.max_sessions impostato a: {self.max_sessions}")
                 
                 info_text = f"Piano da file YAML: {workout_count} allenamenti, {num_weeks} settimane"
                 if weeks:
@@ -2081,7 +2164,7 @@ class GarminPlannerGUI(tk.Tk):
                 
                 # Aggiorna il testo informativo sui giorni
                 if max_sessions > 0:
-                    self.day_info_label.config(text=f"Si suggerisce di selezionare {max_sessions} giorni per settimana")
+                    self.day_info_label.config(text=f"Devi selezionare esattamente {max_sessions} giorni per settimana")
                 else:
                     self.day_info_label.config(text="Seleziona i giorni preferiti per gli allenamenti")
                 
@@ -2095,8 +2178,12 @@ class GarminPlannerGUI(tk.Tk):
                 
         except Exception as e:
             self.log(f"Errore nell'analisi del piano YAML: {str(e)}")
+            import traceback
+            self.log(traceback.format_exc())
             self.training_plan_info.set(f"Errore nell'analisi del piano YAML: {str(e)}")
             self.plan_imported = False
+            self.max_sessions = 0
+
 
     def preselect_days(self, sessions_per_week):
         """Preseleziona i giorni della settimana in base al numero di sessioni"""
@@ -2322,6 +2409,15 @@ class GarminPlannerGUI(tk.Tk):
                                   "Non hai selezionato nessun giorno per gli allenamenti.\n"
                                   "Per favore, seleziona almeno un giorno della settimana.")
             return
+        
+        # Verifica che il numero di giorni selezionati sia corretto
+        if hasattr(self, 'max_sessions') and self.max_sessions > 0:
+            if len(selected_days) != self.max_sessions:
+                messagebox.showwarning("Numero errato di giorni", 
+                                      f"Questo piano richiede esattamente {self.max_sessions} giorni di allenamento a settimana.\n"
+                                      f"Hai selezionato {len(selected_days)} giorni.\n\n"
+                                      f"Seleziona esattamente {self.max_sessions} giorni per continuare.")
+                return
         
         # DEBUG: Stampa le informazioni prima di procedere
         self.log(f"DEBUG: Pianificazione con i seguenti parametri:")
