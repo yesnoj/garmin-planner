@@ -17,6 +17,8 @@ import copy
 from datetime import datetime
 import argparse
 import logging
+import random
+import string
 
 # Configure logging
 logging.basicConfig(
@@ -35,104 +37,226 @@ VALID_STEP_TYPES = {"warmup", "cooldown", "interval", "recovery", "rest", "repea
 
 def excel_to_yaml(excel_file, output_file=None):
     """
-    Convert a structured Excel file to a YAML file compatible with garmin-planner.
+    Converte un file Excel strutturato in un file YAML compatibile con garmin-planner.
+    Include supporto per estrarre la data della gara (l'ultima data presente).
     
     Args:
-        excel_file: Path to the input Excel file
-        output_file: Path to the output YAML file (optional)
-        
-    Returns:
-        Dictionary containing the parsed workout plan
-        
-    Raises:
-        ValueError: If the Excel file has invalid structure
+        excel_file: Percorso del file Excel di input
+        output_file: Percorso del file YAML di output (opzionale)
     """
-    # Create output file name if not specified
+    # Se non viene specificato un file di output, creiamo uno con lo stesso nome ma estensione .yaml
     if output_file is None:
         output_file = os.path.splitext(excel_file)[0] + '.yaml'
     
-    logging.info(f"Converting {excel_file} to {output_file}...")
+    print(f"Convertendo {excel_file} in {output_file}...")
     
-    # Load the Excel file
+    # Carica il file Excel
     try:
-        # Try to read with headers in the second row
+        # Leggi esplicitamente con le intestazioni nella seconda riga (header=1)
         df = pd.read_excel(excel_file, sheet_name='Workouts', header=1)
         
-        # Verify required columns exist
+        # Verifica che ci siano le colonne richieste
         required_cols = ['Week', 'Session', 'Description', 'Steps']
-        if are_required_columns_present(df, required_cols):
-            logging.info("'Workouts' sheet found with headers in the second row.")
+        if all(col in df.columns for col in required_cols):
+            print("Foglio 'Workouts' trovato con intestazioni nella seconda riga.")
         else:
-            # Try alternative header positions or handle missing columns
-            df = handle_missing_columns(excel_file, required_cols)
+            # Verifica se le colonne esistono ma con case diverso
+            df_cols_lower = [col.lower() for col in df.columns]
+            missing = []
+            
+            for req_col in required_cols:
+                if req_col.lower() not in df_cols_lower:
+                    missing.append(req_col)
+            
+            if missing:
+                raise ValueError(f"Colonne mancanti nel foglio 'Workouts': {', '.join(missing)}")
+            else:
+                # Rinomina le colonne per uniformarle
+                rename_map = {}
+                for col in df.columns:
+                    for req_col in required_cols:
+                        if col.lower() == req_col.lower():
+                            rename_map[col] = req_col
+                
+                df = df.rename(columns=rename_map)
+                print("Colonne rinominate per uniformità.")
         
-        # Get the ExcelFile object for reading other sheets
+        # Ora puoi continuare con la lettura del resto del file
         xls = pd.ExcelFile(excel_file)
         
     except Exception as e:
-        raise ValueError(f"Error loading 'Workouts' sheet: {str(e)}")
+        raise ValueError(f"Errore nel caricamento del foglio 'Workouts': {str(e)}")
     
-    # Dictionary to hold the complete plan
-    plan = {
-        'config': {
-            'heart_rates': {},
-            'paces': {},
-            'margins': {
-                'faster': '0:03',
-                'slower': '0:03',
-                'hr_up': 5,
-                'hr_down': 5
-            },
-            'name_prefix': ''
-        }
-    }
+    # Dizionario che conterrà il piano completo
+    plan = {'config': {
+        'heart_rates': {},
+        'paces': {},
+        'margins': {
+            'faster': '0:03',
+            'slower': '0:03',
+            'hr_up': 5,
+            'hr_down': 5
+        },
+        'name_prefix': ''
+    }}
     
-    # Extract configuration information
-    plan = extract_config(xls, plan)
+    # Estrai il nome atleta dalla prima riga se presente
+    try:
+        athlete_row = pd.read_excel(excel_file, sheet_name='Workouts', header=None, nrows=1)
+        athlete_text = str(athlete_row.iloc[0, 0])
+        
+        if athlete_text and athlete_text.strip().startswith("Atleta:"):
+            athlete_name = athlete_text.replace("Atleta:", "").strip()
+            if athlete_name:
+                # Aggiungi il nome dell'atleta alla configurazione
+                plan['config']['athlete_name'] = athlete_name
+                print(f"Nome atleta estratto: {athlete_name}")
+    except Exception as e:
+        print(f"Nota: impossibile estrarre il nome dell'atleta: {str(e)}")
     
-    # Extract paces
-    plan = extract_paces(xls, plan)
+    # Verifica se c'è una colonna Date e cerca di determinare la data della gara
+    race_day = None
+    last_date = None
     
-    # Extract heart rates
-    plan = extract_heart_rates(xls, plan)
+    if 'Date' in df.columns:
+        # Filtra per date valide
+        valid_dates = []
+        for date in df['Date'].dropna():
+            try:
+                if isinstance(date, str):
+                    date_obj = datetime.strptime(date, "%Y-%m-%d").date()
+                else:
+                    # Se è già un oggetto datetime, estrai solo la data
+                    date_obj = date.date() if hasattr(date, 'date') else date
+                valid_dates.append(date_obj)
+            except (ValueError, AttributeError, TypeError):
+                pass
+                
+        if valid_dates:
+            # La data più recente è probabilmente il giorno della gara
+            last_date = max(valid_dates)
+            race_day = last_date.strftime("%Y-%m-%d")
+            # Assicurati che questa riga sia presente:
+            plan['config']['race_day'] = race_day
+            print(f"Data della gara estratta: {race_day}")
+    
+    # Cerca informazioni dalla data della gara anche usando altre strategie
+    if not race_day:
+        # Cerca una riga con la descrizione che contiene "gara", "maratona", "race", ecc.
+        race_keywords = ["gara", "maratona", "maratonina", "marathon", "race", "competition", "competizione", "evento"]
+        
+        for _, row in df.iterrows():
+            if pd.notna(row['Description']):
+                desc = row['Description'].lower()
+                if any(keyword in desc for keyword in race_keywords):
+                    if 'Date' in df.columns and pd.notna(row['Date']):
+                        try:
+                            if isinstance(row['Date'], str):
+                                race_obj = datetime.strptime(row['Date'], "%Y-%m-%d").date()
+                            else:
+                                race_obj = row['Date'].date() if hasattr(row['Date'], 'date') else row['Date']
+                            race_day = race_obj.strftime("%Y-%m-%d")
+                            print(f"Data gara trovata da descrizione: {race_day}")
+                            plan['config']['race_day'] = race_day
+                            break
+                        except (ValueError, AttributeError, TypeError):
+                            pass
+    
+    # Estrai le informazioni di configurazione
+    if 'Config' in xls.sheet_names:
+        config_df = pd.read_excel(xls, 'Config', header=0)
+        
+        # Estrai il prefisso del nome (se presente)
+        name_prefix_rows = config_df[config_df.iloc[:, 0] == 'name_prefix']
+        if not name_prefix_rows.empty:
+            # Assicurati che il prefisso termini con uno spazio
+            prefix = str(name_prefix_rows.iloc[0, 1]).strip()
+            # Aggiungi uno spazio alla fine se non c'è già
+            if not prefix.endswith(' '):
+                prefix = prefix + ' '
+            plan['config']['name_prefix'] = prefix
+        
+        # Estrai i margini (se presenti)
+        margins_rows = config_df[config_df.iloc[:, 0] == 'margins']
+        if not margins_rows.empty:
+            # Controlla se ci sono valori per i margini
+            if pd.notna(margins_rows.iloc[0, 1]):
+                plan['config']['margins']['faster'] = str(margins_rows.iloc[0, 1]).strip()
+            if pd.notna(margins_rows.iloc[0, 2]):
+                plan['config']['margins']['slower'] = str(margins_rows.iloc[0, 2]).strip()
+            if pd.notna(margins_rows.iloc[0, 3]):
+                plan['config']['margins']['hr_up'] = int(margins_rows.iloc[0, 3])
+            if pd.notna(margins_rows.iloc[0, 4]):
+                plan['config']['margins']['hr_down'] = int(margins_rows.iloc[0, 4])
+    
+    # Estrai i ritmi
+    if 'Paces' in xls.sheet_names:
+        paces_df = pd.read_excel(xls, 'Paces', header=0)
+        
+        for _, row in paces_df.iterrows():
+            # Assicurati che ci siano sia il nome che il valore
+            if pd.notna(row.iloc[0]) and pd.notna(row.iloc[1]):
+                name = str(row.iloc[0]).strip()
+                value = str(row.iloc[1]).strip()
+                plan['config']['paces'][name] = value
+    
+    # Estrai le frequenze cardiache
+    if 'HeartRates' in xls.sheet_names:
+        hr_df = pd.read_excel(xls, 'HeartRates', header=0)
+        
+        for _, row in hr_df.iterrows():
+            # Assicurati che ci siano sia il nome che il valore
+            if pd.notna(row.iloc[0]) and pd.notna(row.iloc[1]):
+                name = str(row.iloc[0]).strip()
+                value = row.iloc[1]
+                
+                # Converti i valori numerici in interi
+                if isinstance(value, (int, float)) and not pd.isna(value):
+                    value = int(value)
+                elif isinstance(value, str) and value.strip().isdigit():
+                    value = int(value.strip())
+                else:
+                    value = str(value).strip()
+                    
+                plan['config']['heart_rates'][name] = value
     
     # Dictionary to store workout descriptions for comments
     workout_descriptions = {}
     
-    # Process workouts from the DataFrame
+    # Processa gli allenamenti dal DataFrame
     for _, row in df.iterrows():
-        # Skip rows with missing required data
+        # Verifica che ci siano i dati necessari
         if pd.isna(row['Week']) or pd.isna(row['Session']) or pd.isna(row['Description']) or pd.isna(row['Steps']):
             continue
         
-        # Extract data
-        week = str(int(row['Week'])).zfill(2)  # Format as 01, 02, etc.
+        # Estrai i dati
+        week = str(int(row['Week'])).zfill(2)  # Formatta come 01, 02, ecc.
         session = str(int(row['Session'])).zfill(2)
         description = str(row['Description']).strip()
         
-        # Create the full workout name (without date information)
+        # Crea il nome completo dell'allenamento (senza includere la data)
         full_name = f"W{week}S{session} {description}"
         
-        # Store the description for comments
+        # Memorizza la descrizione per i commenti
         workout_descriptions[full_name] = description
         
-        # Extract workout steps
+        # Estrai i passi dell'allenamento
         steps_str = str(row['Steps']).strip()
         
-        # Parse workout steps
+        # Prepara la lista dei passi
         workout_steps = parse_workout_steps(steps_str, full_name)
         
-        # Add the workout to the plan (without date in the name)
+        # Aggiungi l'allenamento al piano (senza la data nel nome)
         plan[full_name] = workout_steps
     
-    # Save the plan as YAML
+    # Salva il piano in formato YAML
     with open(output_file, 'w', encoding='utf-8') as f:
-        # Use NoAliasDumper to avoid YAML references
+        # Usa NoAliasDumper per evitare riferimenti YAML
         yaml.dump(plan, f, default_flow_style=False, sort_keys=False, Dumper=NoAliasDumper)
     
-    logging.info(f"Conversion completed! YAML file saved to: {output_file}")
+    print(f"Conversione completata! File YAML salvato in: {output_file}")
     
-    # Add comments to the YAML file for workout descriptions
+    # Ora aggiungi i commenti al file
     add_comments_to_yaml(output_file, workout_descriptions)
     
     return plan
@@ -491,6 +615,9 @@ def create_sample_excel(output_file='sample_training_plan.xlsx'):
         top=Side(style='thin'),
         bottom=Side(style='thin')
     )
+
+    random_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    prefix = f"MYRUN_{random_suffix}_"
     
     # Config sheet
     config_sheet = wb.active
@@ -505,7 +632,7 @@ def create_sample_excel(output_file='sample_training_plan.xlsx'):
     
     # Config sheet values
     config_sheet['A2'] = 'name_prefix'
-    config_sheet['B2'] = 'MYRUN_'
+    config_sheet['B2'] = prefix
     
     config_sheet['A3'] = 'margins'
     config_sheet['B3'] = '0:03'  # faster

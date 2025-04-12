@@ -1401,227 +1401,228 @@ class WorkoutEditor(tk.Toplevel):
     
 
     def draw_workout(self, highlight_index=None, drag_from=None, drag_to=None, event_x=None, event_y=None):
-        """Draw a visual representation of the workout on the canvas"""
-        self.canvas.delete("all")
-        
-        # Canvas dimensions
-        width = self.canvas.winfo_width()
-        height = self.canvas.winfo_height()
-        
-        if width <= 1 or height <= 1:  # Canvas not yet realized
-            self.canvas.update_idletasks()
+            """Draw a visual representation of the workout on the canvas with visible separators between steps"""
+            self.canvas.delete("all")
+            
+            # Canvas dimensions
             width = self.canvas.winfo_width()
             height = self.canvas.winfo_height()
             
-            # If still not realized, use default dimensions
-            if width <= 1:
-                width = 700
-            if height <= 1:
-                height = 150
-        
-        # Margin
-        margin = 5
-        
-        # Available drawing area
-        draw_width = width - 2 * margin
-        draw_height = height - 2 * margin
-        
-        # Lista degli step visibili
-        visible_steps = self.workout_steps
-        
-        # Calcola la larghezza totale disponibile
-        total_width = draw_width
-        
-        # Larghezza di base per ogni step
-        base_width = total_width / max(1, len(visible_steps))
-        
-        # Current x position
-        x = margin
-        y = height // 2
-        
-        # Numerazione progressiva degli step
-        step_number = 1
-        
-        # Se stiamo trascinando, disegna un indicatore per la posizione target
-        if drag_from is not None and drag_to is not None:
-            # Calcola la posizione x dell'indicatore di trascinamento
-            indicator_x = margin + drag_to * base_width
+            if width <= 1 or height <= 1:  # Canvas not yet realized
+                self.canvas.update_idletasks()
+                width = self.canvas.winfo_width()
+                height = self.canvas.winfo_height()
+                
+                # If still not realized, use default dimensions
+                if width <= 1:
+                    width = 700
+                if height <= 1:
+                    height = 150
             
-            # Disegna una linea verticale per indicare dove verrà inserito l'elemento
-            self.canvas.create_line(
-                indicator_x, y - 30, 
-                indicator_x, y + 30,
-                fill=COLORS["accent"], width=2, dash=(6, 4)
-            )
-        
-        # Draw representation
-        for i, step in enumerate(visible_steps):
-            try:
-                # Calcola se questo step deve essere evidenziato
-                is_highlighted = (i == highlight_index)
+            # Margin
+            margin = 5
+            
+            # Available drawing area
+            draw_width = width - 2 * margin
+            draw_height = height - 2 * margin
+            
+            # Lista degli step visibili
+            visible_steps = self.workout_steps
+            
+            # Calcola la larghezza totale disponibile
+            total_width = draw_width
+            
+            # Larghezza di base per ogni step
+            base_width = total_width / max(1, len(visible_steps))
+            
+            # Current x position
+            x = margin
+            y = height // 2
+            
+            # Numerazione progressiva degli step
+            step_number = 1
+            
+            # Se stiamo trascinando, disegna un indicatore per la posizione target
+            if drag_from is not None and drag_to is not None:
+                # Calcola la posizione x dell'indicatore di trascinamento
+                indicator_x = margin + drag_to * base_width
                 
-                # Salta temporaneamente il disegno dell'elemento che stiamo trascinando
-                if i == drag_from and event_x is not None and event_y is not None:
-                    x += base_width  # Salta avanti
-                    continue  # Non disegnare questo elemento nella sua posizione originale
-                
-                outline_width = 2 if is_highlighted else 0
-                outline_color = COLORS["accent"] if is_highlighted else ""
-                
-                if 'repeat' in step and 'steps' in step:
-                    # Repeat step
-                    iterations = step['repeat']
-                    substeps = step['steps']
+                # Disegna una linea verticale per indicare dove verrà inserito l'elemento
+                self.canvas.create_line(
+                    indicator_x, y - 30, 
+                    indicator_x, y + 30,
+                    fill=COLORS["accent"], width=2, dash=(6, 4)
+                )
+            
+            # Draw representation
+            for i, step in enumerate(visible_steps):
+                try:
+                    # Calcola se questo step deve essere evidenziato
+                    is_highlighted = (i == highlight_index)
                     
-                    # Larghezza per ogni ripetizione
-                    repeat_width = base_width
+                    # Salta temporaneamente il disegno dell'elemento che stiamo trascinando
+                    if i == drag_from and event_x is not None and event_y is not None:
+                        x += base_width  # Salta avanti
+                        continue  # Non disegnare questo elemento nella sua posizione originale
                     
-                    # Draw repeat box
-                    repeat_x = x
-                    repeat_y = y - 30
-                    self.canvas.create_rectangle(
-                        repeat_x, repeat_y, 
-                        repeat_x + repeat_width, repeat_y + 60,
-                        outline=COLORS["repeat"], width=2, dash=(5, 2)
-                    )
+                    outline_width = 2 if is_highlighted else 0
+                    outline_color = COLORS["accent"] if is_highlighted else ""
                     
-                    # Draw repeat label
-                    self.canvas.create_text(
-                        repeat_x + 10, repeat_y - 10,
-                        text=f"{STEP_ICONS['repeat']} {iterations}x",
-                        fill=COLORS["repeat"], 
-                        font=("Arial", 10, "bold"),
-                        anchor=tk.W
-                    )
-                    
-                    # Draw substeps
-                    sub_width = repeat_width / max(1, len(substeps)) # Distribuisci uniformemente
-                    sub_x = x
-                    sub_number = 1  # Numerazione dei substep all'interno della ripetizione
-                    
-                    for substep in substeps:
-                        if isinstance(substep, dict):
-                            substep_type = list(substep.keys())[0]
-                            
-                            # Color for this type
-                            color = COLORS.get(substep_type, COLORS["other"])
-                            
-                            # Draw box
-                            self.canvas.create_rectangle(
-                                sub_x, y - 20, sub_x + sub_width, y + 20,
-                                fill=color, outline=outline_color, width=outline_width
-                            )
-                            
-                            # Draw text
-                            self.canvas.create_text(
-                                sub_x + sub_width // 2, y,
-                                text=f"{STEP_ICONS.get(substep_type, '📝')} {sub_number}",
-                                fill=COLORS["text_light"],
-                                font=("Arial", 9, "bold")
-                            )
-                            
-                            # Disegna un separatore (linea verticale) tra i substep
-                            if sub_number < len(substeps):
-                                self.canvas.create_line(
-                                    sub_x + sub_width, y - 20,
-                                    sub_x + sub_width, y + 20,
-                                    fill="black", width=1
+                    if 'repeat' in step and 'steps' in step:
+                        # Repeat step
+                        iterations = step['repeat']
+                        substeps = step['steps']
+                        
+                        # Larghezza per ogni ripetizione
+                        repeat_width = base_width
+                        
+                        # Draw repeat box
+                        repeat_x = x
+                        repeat_y = y - 30
+                        self.canvas.create_rectangle(
+                            repeat_x, repeat_y, 
+                            repeat_x + repeat_width, repeat_y + 60,
+                            outline=COLORS["repeat"], width=2, dash=(5, 2)
+                        )
+                        
+                        # Draw repeat label
+                        self.canvas.create_text(
+                            repeat_x + 10, repeat_y - 10,
+                            text=f"{STEP_ICONS['repeat']} {iterations}x",
+                            fill=COLORS["repeat"], 
+                            font=("Arial", 10, "bold"),
+                            anchor=tk.W
+                        )
+                        
+                        # Draw substeps
+                        sub_width = repeat_width / max(1, len(substeps)) # Distribuisci uniformemente
+                        sub_x = x
+                        sub_number = 1  # Numerazione dei substep all'interno della ripetizione
+                        
+                        for substep in substeps:
+                            if isinstance(substep, dict):
+                                substep_type = list(substep.keys())[0]
+                                
+                                # Color for this type
+                                color = COLORS.get(substep_type, COLORS["other"])
+                                
+                                # Draw box
+                                self.canvas.create_rectangle(
+                                    sub_x, y - 20, sub_x + sub_width, y + 20,
+                                    fill=color, outline=outline_color, width=outline_width
                                 )
-                            
-                            # Move to next position
-                            sub_x += sub_width
-                            sub_number += 1
-                    
-                    # Aggiorna la posizione x per il prossimo step principale
-                    x += repeat_width
-                    step_number += 1
-                    
-                else:
-                    # Regular step
-                    step_type = list(step.keys())[0]
-                    
-                    # Calculate width based on base_width
+                                
+                                # Draw text
+                                self.canvas.create_text(
+                                    sub_x + sub_width // 2, y,
+                                    text=f"{STEP_ICONS.get(substep_type, '📝')} {sub_number}",
+                                    fill=COLORS["text_light"],
+                                    font=("Arial", 9, "bold")
+                                )
+                                
+                                # Disegna separatore tra substep (eccetto l'ultimo)
+                                if sub_number < len(substeps):
+                                    self.canvas.create_line(
+                                        sub_x + sub_width, y - 20,
+                                        sub_x + sub_width, y + 20,
+                                        fill="white", width=1
+                                    )
+                                
+                                # Move to next position
+                                sub_x += sub_width
+                                sub_number += 1
+                        
+                        # Aggiorna la posizione x per il prossimo step principale
+                        x += repeat_width
+                        step_number += 1
+                        
+                    else:
+                        # Regular step
+                        step_type = list(step.keys())[0]
+                        
+                        # Calculate width based on base_width
+                        step_width = base_width
+                        
+                        # Color for this type
+                        color = COLORS.get(step_type, COLORS["other"])
+                        
+                        # Draw box
+                        self.canvas.create_rectangle(
+                            x, y - 20, x + step_width, y + 20,
+                            fill=color, outline=outline_color, width=outline_width
+                        )
+                        
+                        # Draw text
+                        self.canvas.create_text(
+                            x + step_width // 2, y,
+                            text=f"{STEP_ICONS.get(step_type, '📝')} {step_number}",
+                            fill=COLORS["text_light"],
+                            font=("Arial", 9, "bold")
+                        )
+                        
+                        # Move to next position
+                        x += step_width
+                        step_number += 1
+                        
+                except Exception as e:
+                    # Skip drawing problematic steps
                     step_width = base_width
-                    
-                    # Color for this type
-                    color = COLORS.get(step_type, COLORS["other"])
-                    
-                    # Draw box
                     self.canvas.create_rectangle(
                         x, y - 20, x + step_width, y + 20,
-                        fill=color, outline=outline_color, width=outline_width
+                        fill=COLORS["other"], outline=outline_color, width=outline_width
                     )
                     
-                    # Draw text
                     self.canvas.create_text(
                         x + step_width // 2, y,
-                        text=f"{STEP_ICONS.get(step_type, '📝')} {step_number}",
+                        text=f"[?]",
                         fill=COLORS["text_light"],
-                        font=("Arial", 9, "bold")
+                        font=("Arial", 9)
                     )
                     
-                    # Move to next position
                     x += step_width
                     step_number += 1
                     
-                    # Disegna un separatore (linea verticale) tra gli step principali
-                    if i < len(visible_steps) - 1:
-                        self.canvas.create_line(
-                            x, y - 20,
-                            x, y + 20,
-                            fill="black", width=1
-                        )
-                    
-            except Exception as e:
-                # Skip drawing problematic steps
-                step_width = base_width
+                # Disegna separatori tra step principali (linea verticale)
+                if i < len(visible_steps) - 1:  # Non disegnare dopo l'ultimo step
+                    self.canvas.create_line(
+                        x, y - 22,  # Leggermente oltre il bordo del rettangolo
+                        x, y + 22,
+                        fill="#333333", width=1, dash=(2, 2)  # Linea tratteggiata grigia
+                    )
+            
+            # Se stiamo trascinando, disegna l'elemento trascinato sotto il cursore
+            if drag_from is not None and event_x is not None and event_y is not None and 'type' in self.canvas_drag_data:
+                block_width = base_width
+                block_height = 40
+                
+                # Disegna un rettangolo semitrasparente che rappresenta l'elemento trascinato
+                element_type = self.canvas_drag_data["type"]
+                color = self.canvas_drag_data["color"]
+                
+                # Per ottenere un effetto semitrasparente, usiamo un colore leggermente più chiaro
+                # Questo non è vera trasparenza (richiederebbe il supporto alpha), ma è un buon sostituto
+                light_color = self.lighten_color(color)
+                
+                # Disegna il rettangolo centrato sul cursore
                 self.canvas.create_rectangle(
-                    x, y - 20, x + step_width, y + 20,
-                    fill=COLORS["other"], outline=outline_color, width=outline_width
+                    event_x - block_width/2, event_y - block_height/2,
+                    event_x + block_width/2, event_y + block_height/2,
+                    fill=light_color, outline=COLORS["accent"], width=2
                 )
+                
+                # Aggiunge anche un'icona o un numero all'elemento trascinato
+                if element_type == "repeat":
+                    icon = STEP_ICONS["repeat"]
+                else:
+                    icon = STEP_ICONS.get(element_type, '📝')
                 
                 self.canvas.create_text(
-                    x + step_width // 2, y,
-                    text=f"[?]",
-                    fill=COLORS["text_light"],
-                    font=("Arial", 9)
+                    event_x, event_y,
+                    text=f"{icon} {drag_from + 1}",
+                    fill=COLORS["text_dark"],
+                    font=("Arial", 9, "bold")
                 )
-                
-                x += step_width
-                step_number += 1
-        
-        # Se stiamo trascinando, disegna l'elemento trascinato sotto il cursore
-        if drag_from is not None and event_x is not None and event_y is not None and 'type' in self.canvas_drag_data:
-            block_width = base_width
-            block_height = 40
-            
-            # Disegna un rettangolo semitrasparente che rappresenta l'elemento trascinato
-            element_type = self.canvas_drag_data["type"]
-            color = self.canvas_drag_data["color"]
-            
-            # Per ottenere un effetto semitrasparente, usiamo un colore leggermente più chiaro
-            # Questo non è vera trasparenza (richiederebbe il supporto alpha), ma è un buon sostituto
-            light_color = self.lighten_color(color)
-            
-            # Disegna il rettangolo centrato sul cursore
-            self.canvas.create_rectangle(
-                event_x - block_width/2, event_y - block_height/2,
-                event_x + block_width/2, event_y + block_height/2,
-                fill=light_color, outline=COLORS["accent"], width=2
-            )
-            
-            # Aggiunge anche un'icona o un numero all'elemento trascinato
-            if element_type == "repeat":
-                icon = STEP_ICONS["repeat"]
-            else:
-                icon = STEP_ICONS.get(element_type, '📝')
-            
-            self.canvas.create_text(
-                event_x, event_y,
-                text=f"{icon} {drag_from + 1}",
-                fill=COLORS["text_dark"],
-                font=("Arial", 9, "bold")
-            )
+
 
     def lighten_color(self, hex_color):
         """Rende più chiaro un colore hexadecimale mescolandolo con bianco"""
