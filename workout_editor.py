@@ -1520,6 +1520,14 @@ class WorkoutEditor(tk.Toplevel):
                                 font=("Arial", 9, "bold")
                             )
                             
+                            # Disegna un separatore (linea verticale) tra i substep
+                            if sub_number < len(substeps):
+                                self.canvas.create_line(
+                                    sub_x + sub_width, y - 20,
+                                    sub_x + sub_width, y + 20,
+                                    fill="black", width=1
+                                )
+                            
                             # Move to next position
                             sub_x += sub_width
                             sub_number += 1
@@ -1555,6 +1563,14 @@ class WorkoutEditor(tk.Toplevel):
                     # Move to next position
                     x += step_width
                     step_number += 1
+                    
+                    # Disegna un separatore (linea verticale) tra gli step principali
+                    if i < len(visible_steps) - 1:
+                        self.canvas.create_line(
+                            x, y - 20,
+                            x, y + 20,
+                            fill="black", width=1
+                        )
                     
             except Exception as e:
                 # Skip drawing problematic steps

@@ -578,7 +578,7 @@ class GarminPlannerGUI(tk.Tk):
         
         # Variables
         self.export_file = tk.StringVar()
-        self.export_format = tk.StringVar(value="YAML")
+        # Rimossa variabile format: self.export_format = tk.StringVar(value="YAML")
         self.export_clean = tk.BooleanVar(value=True)
         
         # Widgets
@@ -594,11 +594,10 @@ class GarminPlannerGUI(tk.Tk):
         options_frame = ttk.Frame(export_frame)
         options_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        ttk.Label(options_frame, text="Formato:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-        ttk.Combobox(options_frame, textvariable=self.export_format, values=["YAML", "JSON"]).grid(row=0, column=1, padx=5, pady=5)
-        ttk.Checkbutton(options_frame, text="Pulisci dati", variable=self.export_clean).grid(row=0, column=2, padx=5, pady=5, sticky=tk.W)
+        # Rimosso il combobox per il formato
+        ttk.Checkbutton(options_frame, text="Pulisci dati", variable=self.export_clean).pack(side=tk.LEFT, padx=5, pady=5)
         
-        # Bottoni per l'esportazione - solo il bottone "Esporta Selezionati"
+        # Bottoni per l'esportazione
         export_buttons_frame = ttk.Frame(export_frame)
         export_buttons_frame.pack(fill=tk.X, padx=10, pady=5)
         ttk.Button(export_buttons_frame, text="Esporta Selezionati", command=self.export_selected_workouts).pack(side=tk.LEFT, padx=5)
@@ -619,6 +618,7 @@ class GarminPlannerGUI(tk.Tk):
         
         # Bottone per aggiornare la lista
         ttk.Button(export_frame, text="Aggiorna lista", command=self.refresh_workouts).pack(pady=5)
+
 
 
     def delete_selected_workouts(self):
@@ -736,19 +736,26 @@ class GarminPlannerGUI(tk.Tk):
             if not os.path.exists(oauth_folder):
                 os.makedirs(oauth_folder, exist_ok=True)
                 self.log(f"Creata cartella OAuth: {oauth_folder}")
-                
+                    
             # Costruisci il comando
             cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
                    "--oauth-folder", oauth_folder,
                    "--log-level", self.log_level.get(),
-                   "export",
+                   "export", 
                    "--export-file", self.export_file.get(),
                    "--workout-ids", ",".join(selected_ids)]
             
+            # Aggiungi l'opzione clean se selezionata
             if self.export_clean.get():
                 cmd.append("--clean")
-                
-            cmd.extend(["--format", self.export_format.get()])
+            
+            # Determina il formato dall'estensione del file
+            file_extension = os.path.splitext(self.export_file.get())[1].lower()
+            if file_extension == '.json':
+                cmd.extend(["--format", "JSON"])
+            else:
+                # Default to YAML for other extensions
+                cmd.extend(["--format", "YAML"])
             
             self.log(f"Esecuzione comando: {' '.join(cmd)}")
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
@@ -1573,6 +1580,8 @@ class GarminPlannerGUI(tk.Tk):
         )
         if filename:
             self.export_file.set(filename)
+            self.log(f"File di esportazione impostato: {filename}")
+            self.log(f"Il formato sarà determinato dall'estensione del file (.yaml per YAML, .json per JSON)")
     
     def load_training_plans(self):
         """Load available training plans from the training_plans directory"""
@@ -1929,7 +1938,7 @@ class GarminPlannerGUI(tk.Tk):
         if not self.race_day.get():
             messagebox.showerror("Errore", "Inserisci la data della gara")
             return
-            
+                
         if not self.start_day.get():
             messagebox.showerror("Errore", "Inserisci la data di inizio")
             return
@@ -1943,7 +1952,7 @@ class GarminPlannerGUI(tk.Tk):
             if race_date < today:
                 messagebox.showerror("Errore", "La data della gara deve essere nel futuro")
                 return
-                
+                    
             if start_date >= race_date:
                 messagebox.showerror("Errore", "La data di inizio deve essere precedente alla data della gara")
                 return
@@ -1993,55 +2002,65 @@ class GarminPlannerGUI(tk.Tk):
             selected_days_str = [str(d) for d in selected_days]
             
             # Esegui la simulazione
-            threading.Thread(target=lambda: self._do_schedule(selected_days_str, is_dry_run)).start()
+            threading.Thread(target=lambda: self._simulate_schedule(selected_days_str)).start()
         else:
             # Non siamo in modalità simulazione, dobbiamo eseguire la pianificazione effettiva
-            # Verifica se gli allenamenti sono già importati in Garmin Connect
-            if not self.plan_imported:
-                self.log("Gli allenamenti non sono ancora importati. Cerco il file YAML...")
+            
+            # Prima verifica nella cache se gli allenamenti sono già presenti su Garmin Connect
+            self.check_workouts_in_cache(training_plan_id)
+            
+            # Chiedi conferma prima di procedere
+            if not messagebox.askyesno("Conferma pianificazione", 
+                                     "Stai per pianificare gli allenamenti su Garmin Connect.\n\n"
+                                     "Assicurati che gli allenamenti siano stati importati correttamente.\n"
+                                     "Vuoi procedere con la pianificazione?"):
+                return
                 
-                # Trova il file YAML corrispondente
+            # Converti selected_days in stringhe per _do_schedule
+            selected_days_str = [str(d) for d in selected_days]
+            
+            # Esegui la pianificazione
+            threading.Thread(target=lambda: self._do_schedule(selected_days_str, False)).start()
+
+    def check_workouts_in_cache(self, training_plan_id):
+        """Verifica se gli allenamenti del piano sono presenti nella cache di Garmin Connect."""
+        # Aggiorna la cache se necessario
+        if not os.path.exists(WORKOUTS_CACHE_FILE):
+            self.log("La cache degli allenamenti non esiste. Aggiornamento in corso...")
+            self.refresh_workouts()
+            return
+        
+        try:
+            with open(WORKOUTS_CACHE_FILE, 'r') as f:
+                cache = json.load(f)
+                
+            # Cerca allenamenti che corrispondono al piano
+            matching_workouts = []
+            for workout in cache:
+                if training_plan_id in workout.get('workoutName', ''):
+                    matching_workouts.append(workout)
+            
+            if matching_workouts:
+                self.log(f"Trovati {len(matching_workouts)} allenamenti per il piano {training_plan_id} in Garmin Connect")
+                self.plan_imported = True
+            else:
+                self.log(f"Non sono stati trovati allenamenti per il piano {training_plan_id} in Garmin Connect")
+                
+                # Chiedi all'utente se vuole importare gli allenamenti
                 yaml_path = self.find_yaml_for_plan(training_plan_id)
                 
-                if not yaml_path:
-                    # Nessun file YAML trovato, chiedi all'utente di specificarne uno
-                    yaml_path = filedialog.askopenfilename(
-                        title=f"Seleziona file YAML per il piano '{training_plan_id}'",
-                        filetypes=[("YAML files", "*.yaml *.yml"), ("All files", "*.*")]
-                    )
+                if yaml_path and messagebox.askyesno("Importazione necessaria", 
+                                              f"Non sono stati trovati allenamenti per il piano {training_plan_id} in Garmin Connect.\n\n"
+                                              f"Vuoi importare gli allenamenti dal file {yaml_path} prima di pianificarli?"):
+                    self.log(f"Importazione degli allenamenti da {yaml_path}...")
+                    self.import_file.set(yaml_path)
+                    self.import_replace.set(True)  # Sostituisci eventuali allenamenti esistenti
                     
-                    if not yaml_path:
-                        self.log("Operazione annullata. Nessun file selezionato.")
-                        return
-                
-                # Chiedi conferma all'utente per l'importazione
-                if not messagebox.askyesno("Conferma importazione", 
-                                         f"Prima di pianificare, gli allenamenti devono essere importati in Garmin Connect.\n\n"
-                                         f"Importare gli allenamenti dal file:\n{yaml_path}?"):
-                    self.log("Operazione annullata dall'utente.")
-                    return
-                
-                # Imposta il file di importazione
-                self.import_file.set(yaml_path)
-                self.import_replace.set(True)  # Sostituisci eventuali allenamenti esistenti
-                
-                self.log(f"Importazione degli allenamenti da {yaml_path}...")
-                
-                # Converti selected_days in stringhe per _do_import_and_schedule
-                selected_days_str = [str(d) for d in selected_days]
-                
-                # Esegui l'importazione e poi la pianificazione
-                threading.Thread(target=lambda: self._do_import_and_schedule(selected_days_str)).start()
-            else:
-                # Gli allenamenti sono già importati, procedi direttamente con la pianificazione
-                self.log(f"Pianificazione allenamenti per il piano {training_plan_id}...")
-                
-                # Converti selected_days in stringhe per _do_schedule
-                selected_days_str = [str(d) for d in selected_days]
-                
-                # Esegui la pianificazione
-                threading.Thread(target=lambda: self._do_schedule(selected_days_str, False)).start()
-
+                    # Eseguiamo l'importazione e attendiamo il completamento
+                    self._do_import_for_schedule()
+                    self.plan_imported = True
+        except Exception as e:
+            self.log(f"Errore durante il controllo della cache: {str(e)}")
 
     def _do_import_and_schedule(self, selected_days):
         """Importa gli allenamenti e poi pianifica"""
@@ -2568,21 +2587,20 @@ class GarminPlannerGUI(tk.Tk):
                 self.log(f"Errore nella visualizzazione degli allenamenti simulati: {str(e)}")
 
 
-    def _do_import_for_schedule(self, selected_days):
-        """Importa gli allenamenti e poi pianifica"""
+    def _do_import_for_schedule(self):
+        """Esegue l'importazione degli allenamenti e attende il completamento."""
+        self.log("Importazione degli allenamenti in corso...")
+        
         # Assicurati che la cartella OAuth esista
         oauth_folder = self.oauth_folder.get()
         if not os.path.exists(oauth_folder):
-            try:
-                os.makedirs(oauth_folder, exist_ok=True)
-                self.log(f"Creata cartella OAuth: {oauth_folder}")
-            except Exception as e:
-                self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
-                return
-                    
+            os.makedirs(oauth_folder, exist_ok=True)
+            self.log(f"Creata cartella OAuth: {oauth_folder}")
+        
         try:
+            # Costruisci il comando per l'importazione
             cmd = ["python", os.path.join(SCRIPT_DIR, "garmin_planner.py"),
-                   "--oauth-folder", self.oauth_folder.get(),
+                   "--oauth-folder", oauth_folder,
                    "--log-level", self.log_level.get(),
                    "import", 
                    "--workouts-file", self.import_file.get()]
@@ -2590,28 +2608,29 @@ class GarminPlannerGUI(tk.Tk):
             if self.import_replace.get():
                 cmd.append("--replace")
             
-            self.log(f"Esecuzione comando: {' '.join(cmd)}")
+            self.log(f"Esecuzione comando di importazione: {' '.join(cmd)}")
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
             stdout, stderr = process.communicate()
             
             if process.returncode != 0:
                 self.log(f"Errore durante l'importazione: {stderr}")
                 messagebox.showerror("Errore", f"Errore durante l'importazione: {stderr}")
-            else:
-                self.log("Importazione completata con successo")
-                
-                # Aggiorna la lista degli allenamenti in background
-                refresh_thread = threading.Thread(target=self._refresh_workouts_silent)
-                refresh_thread.start()
-                refresh_thread.join()  # Attendi il completamento
-                
-                # Ora procedi con la pianificazione
-                self.log(f"Ora procedo con la pianificazione...")
-                self._do_schedule(selected_days, False)  # False = non è dry run
-                
+                return False
+            
+            self.log("Importazione completata con successo")
+            
+            # Aggiorna la lista degli allenamenti
+            self.refresh_workouts()
+            
+            messagebox.showinfo("Importazione completata", 
+                              "Gli allenamenti sono stati importati con successo.\n"
+                              "Ora puoi procedere con la pianificazione.")
+            
+            return True
         except Exception as e:
             self.log(f"Errore durante l'importazione: {str(e)}")
             messagebox.showerror("Errore", f"Errore durante l'importazione: {str(e)}")
+            return False
 
 
     def _refresh_workouts_silent(self):

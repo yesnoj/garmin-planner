@@ -1,16 +1,41 @@
+"""
+Import and export functionality for Garmin workouts.
+
+This module provides functionality to import workouts from YAML files
+and export workouts to YAML or JSON files.
+"""
+
 import yaml
 import re
 import logging
 import json
+import os
+import copy
 
 from .utils import ms_to_pace, dist_time_to_ms, get_pace_range, pace_to_ms
 from .workout import Target, Workout, WorkoutStep
 from planner.garmin_client import GarminClient
 
+# Keys to remove when cleaning workout data for export
 CLEAN_KEYS = ['author', 'createdDate', 'ownerId', 'shared', 'updatedDate']
 
+# Global configuration
+config = {}
+
 def cmd_import_workouts(args):
-    logging.info('importing workouts from ' + args.workouts_file)
+    """
+    Import workouts from a YAML file to Garmin Connect.
+    
+    Args:
+        args: Command line arguments with the following attributes:
+            - workouts_file: Path to the YAML file
+            - name_filter: Optional regex to filter workout names
+            - oauth_folder: Path to the OAuth folder
+            - dry_run: If True, only show what would be imported
+            - replace: If True, replace existing workouts with the same name
+            - treadmill: If True, convert distance end conditions to time
+    """
+    logging.info('Importing workouts from ' + args.workouts_file)
     existing_workouts = []
 
     client = GarminClient(args.oauth_folder)
@@ -25,14 +50,14 @@ def cmd_import_workouts(args):
         if args.dry_run:
             print(json.dumps(workout.garminconnect_json()))
         else:
-            logging.info('creating workout: ' + workout.workout_name)
+            logging.info('Creating workout: ' + workout.workout_name)
             workouts_to_delete = []
             id_to_replace = None
             if args.replace:
                 for wo in existing_workouts:
                     if wo['workoutName'] == workout.workout_name:
                         id_to_replace = wo['workoutId']
-            if id_to_replace != None:
+            if id_to_replace is not None:
                 client.update_workout(id_to_replace, workout)
             else:
                 client.add_workout(workout)
@@ -40,23 +65,18 @@ def cmd_import_workouts(args):
     return None
 
 def cmd_export_workouts(args):
-
-    def clean(wo_dict):
-        if isinstance(wo_dict, list):
-            for ldict in wo_dict:
-                clean(ldict)
-        elif isinstance(wo_dict, dict):
-            keys = list(wo_dict.keys())
-            for k in keys:
-                v = wo_dict[k]
-                if k in CLEAN_KEYS or v == None or v == 'null':
-                    del wo_dict[k]
-                elif isinstance(v, dict) or isinstance(v, list):
-                    final_size = clean(v)
-                    if final_size == 0:
-                        del wo_dict[k]
-        return len(wo_dict)
-
+    """
+    Export workouts from Garmin Connect to a file.
+    
+    Args:
+        args: Command line arguments with the following attributes:
+            - export_file: Path to the output file
+            - format: Output format (JSON or YAML)
+            - clean: If True, remove unnecessary data
+            - name_filter: Optional regex to filter workout names
+            - workout_ids: Optional comma-separated list of workout IDs
+            - oauth_folder: Path to the OAuth folder
+    """
     client = GarminClient(args.oauth_folder)
     all_workouts = client.list_workouts()
     workout_ids = all_workouts  # Default to all workouts
@@ -84,36 +104,49 @@ def cmd_export_workouts(args):
     for wid in workout_ids:
         workout = client.get_workout(wid['workoutId'])
         if args.clean:
-            clean(workout)
+            clean_workout_data(workout)
         workouts.append(workout)
 
-    formatted_output = ''
+    # Determine output format
     export_format = args.format
 
-    # If export format was not indicated in the command line, the file extension can decide it
-    file_extension = args.export_file.split('.')[-1].upper() if '.' in args.export_file else None
-    if not export_format and file_extension:        
+    # If export format was not specified in the command line, use file extension
+    if not export_format and args.export_file:
+        file_extension = args.export_file.split('.')[-1].upper() if '.' in args.export_file else None
         if file_extension in ['JSON', 'JSN']:
             export_format = 'JSON'
         elif file_extension in ['YAML', 'YML']:
             export_format = 'YAML'
 
+    # Format the output
     if not export_format or export_format == 'JSON':
         formatted_output = json.dumps(workouts, indent=2)
     elif export_format == 'YAML':
         formatted_output = yaml.dump(workouts)
+    else:
+        logging.warning(f'Unknown export format: {export_format}. Using JSON.')
+        formatted_output = json.dumps(workouts, indent=2)
 
-    if args.export_file != '':
-        print('exporting workouts to file '+ args.export_file)
-        f = open(args.export_file, 'w')
-        f.write(formatted_output)
-        f.close()
+    # Write to file or stdout
+    if args.export_file:
+        logging.info('Exporting workouts to file '+ args.export_file)
+        with open(args.export_file, 'w') as f:
+            f.write(formatted_output)
     else:
         print(formatted_output)
 
     return None
 
 def cmd_delete_workouts(args):
+    """
+    Delete workouts from Garmin Connect.
+    
+    Args:
+        args: Command line arguments with the following attributes:
+            - workout_ids: Optional comma-separated list of workout IDs
+            - name_filter: Optional regex to filter workout names
+            - oauth_folder: Path to the OAuth folder
+    """
     valid_ids = []
     client = GarminClient(args.oauth_folder)
     if args.workout_ids:
@@ -122,33 +155,70 @@ def cmd_delete_workouts(args):
         else:
             workout_ids = [args.workout_ids]
 
-        # filter out invalid workout IDs
+        # Filter out invalid workout IDs
         for workout_id in workout_ids:
             if not re.match(r'^\d{9,10}$', workout_id):
-                logging.warning(f'ignoring invalid workout id "{workout_id}". Must be 9 or 10 digit number.')
+                logging.warning(f'Ignoring invalid workout id "{workout_id}". Must be 9 or 10 digit number.')
             else:
                 valid_ids.append(workout_id)
 
     if args.name_filter:
-        logging.info(f'getting list of workouts.')
+        logging.info(f'Getting list of workouts.')
         workouts_list = client.list_workouts()
         for workout in workouts_list:
             if re.search(args.name_filter, workout['workoutName']):
-                logging.info(f'found workout named "{workout["workoutName"]}" with ID {workout["workoutId"]}.')
+                logging.info(f'Found workout named "{workout["workoutName"]}" with ID {workout["workoutId"]}.')
                 valid_ids.append(str(workout['workoutId']))
 
-    elif len(valid_ids) == 0:
-        logging.warning('couldn\'t find any valid workout ID.')
+    if len(valid_ids) == 0:
+        logging.warning('Could not find any valid workout ID.')
         return
 
     for workout_id in valid_ids:
         res = client.delete_workout(workout_id)
+        if res:
+            logging.info(f'Successfully deleted workout {workout_id}')
+        else:
+            logging.warning(f'Failed to delete workout {workout_id}')
 
     return None
 
-config = {}
+def clean_workout_data(wo_dict):
+    """
+    Clean workout data by removing unnecessary fields.
+    
+    Args:
+        wo_dict: Workout dictionary to clean
+        
+    Returns:
+        Number of items remaining in the dictionary
+    """
+    if isinstance(wo_dict, list):
+        for ldict in wo_dict:
+            clean_workout_data(ldict)
+    elif isinstance(wo_dict, dict):
+        keys = list(wo_dict.keys())
+        for k in keys:
+            v = wo_dict[k]
+            if k in CLEAN_KEYS or v is None or v == 'null':
+                del wo_dict[k]
+            elif isinstance(v, dict) or isinstance(v, list):
+                final_size = clean_workout_data(v)
+                if final_size == 0:
+                    del wo_dict[k]
+    return len(wo_dict)
 
 def import_workouts(plan_file, name_filter=None):
+    """
+    Import workouts from a YAML file.
+    
+    Args:
+        plan_file: Path to the YAML file
+        name_filter: Optional regex to filter workout names
+        
+    Returns:
+        List of Workout objects
+    """
     # Load the file to get workout descriptions (added as comments in the YAML file)
     descriptions = {}
     with open(plan_file, 'r', encoding='utf-8') as yfile:
@@ -164,11 +234,11 @@ def import_workouts(plan_file, name_filter=None):
         workouts = []
         import_json = yaml.safe_load(file)
 
-        # remove the config entry, if present
+        # Remove the config entry, if present
         global config
         config = import_json.pop('config', {})
 
-        # Correggi la configurazione prima di espanderla
+        # Fix the configuration before expanding it
         fix_config(config)
         expand_config(config)
 
@@ -176,21 +246,21 @@ def import_workouts(plan_file, name_filter=None):
             if name_filter and not re.search(name_filter, name):
                 continue
 
-            # Rimuovi eventuali informazioni sulla data dal nome
+            # Remove any date information from the name
             name = re.sub(r'\s+\(Data:.*\)', '', name)
 
-            # Correzione dei passi di repeat prima di creare il workout
+            # Fix repeat steps before creating the workout
             fix_steps(steps)
 
             w = Workout("running", config.get('name_prefix', '') + name, descriptions.get(name, None))
             for step in steps:
                 for k, v in step.items():
                     if k == 'repeat':
-                        # Gestisci la struttura repeat in modo corretto
+                        # Handle repeat structure correctly
                         iterations = v
                         substeps = step.get('steps', [])
                         
-                        # Crea il passo di repeat
+                        # Create the repeat step
                         ws = WorkoutStep(
                             0,
                             'repeat',
@@ -199,7 +269,7 @@ def import_workouts(plan_file, name_filter=None):
                             end_condition_value=iterations
                         )
                         
-                        # Aggiungi i sottostep
+                        # Add substeps
                         for substep in substeps:
                             for sk, sv in substep.items():
                                 sub_end_condition = get_end_condition(sv)
@@ -233,8 +303,11 @@ def import_workouts(plan_file, name_filter=None):
 
 def fix_config(config):
     """
-    Corregge la configurazione prima di espanderla.
-    Assicura che i valori numerici siano effettivamente numerici.
+    Fix configuration values before expanding.
+    Ensures that numeric values are actually numeric.
+    
+    Args:
+        config: Configuration dictionary to fix
     """
     if 'heart_rates' in config:
         for key, value in config['heart_rates'].items():
@@ -243,10 +316,10 @@ def fix_config(config):
 
 def fix_steps(steps):
     """
-    Corregge la struttura dei passi di un allenamento.
+    Fix the structure of workout steps.
     
     Args:
-        steps: Lista dei passi dell'allenamento
+        steps: List of workout steps to fix
     """
     if not isinstance(steps, list):
         return
@@ -255,21 +328,31 @@ def fix_steps(steps):
         if not isinstance(step, dict):
             continue
             
-        # Controlla se c'è una chiave che inizia con 'repeat '
+        # Check for keys starting with 'repeat '
         for key in list(step.keys()):
             repeat_match = re.match(r'^repeat\s+(\d+)$', key)
             if repeat_match:
                 iterations = int(repeat_match.group(1))
-                substeps = step.pop(key)  # Rimuovi la vecchia chiave
+                substeps = step.pop(key)  # Remove the old key
                 
-                # Crea la nuova struttura di ripetizione
+                # Create the new repeat structure
                 step['repeat'] = iterations
                 step['steps'] = substeps
                 
-                # Correggi anche i substeps ricorsivamente
+                # Recursively fix substeps
                 fix_steps(substeps)
 
 def get_description(step_txt, target=None):
+    """
+    Extract a description from a step text.
+    
+    Args:
+        step_txt: Text describing the step
+        target: Optional Target object
+        
+    Returns:
+        Description string
+    """
     description = None
     if ' -- ' in step_txt:
         description = step_txt[step_txt.find(' -- ') + 4:].strip()
@@ -284,10 +367,20 @@ def get_description(step_txt, target=None):
     return description
 
 def get_end_condition(step_txt):
+    """
+    Determine the end condition from a step text.
+    
+    Args:
+        step_txt: Text describing the step
+        
+    Returns:
+        End condition string
+    """
     step_txt = clean_step(step_txt)
     p_distance = re.compile(r'^\d+(m|km)\s?')
     p_time = re.compile(r'^\d+(min|h|s)\s?')
     p_iterations = re.compile(r'^\d+$')
+    
     if p_time.match(step_txt):
         return 'time'
     elif p_distance.match(step_txt):
@@ -297,6 +390,16 @@ def get_end_condition(step_txt):
     return 'lap.button'
 
 def get_end_condition_value(step_txt, condition_type=None):
+    """
+    Extract the end condition value from a step text.
+    
+    Args:
+        step_txt: Text describing the step
+        condition_type: Type of end condition
+        
+    Returns:
+        End condition value
+    """
     step_txt = clean_step(step_txt)
 
     if not condition_type:
@@ -311,9 +414,6 @@ def get_end_condition_value(step_txt, condition_type=None):
             cv = cv * 60 * 60
         elif tu == 'min':
             cv = cv * 60
-        elif tu == 's':
-            cv = cv
-
         return str(cv)
     elif condition_type == 'distance':
         p = re.compile(r'^(\d+)((m|km))\s?')
@@ -326,6 +426,16 @@ def get_end_condition_value(step_txt, condition_type=None):
     return None
 
 def get_target(step_txt, verbose=False):
+    """
+    Extract a target from a step text.
+    
+    Args:
+        step_txt: Text describing the step
+        verbose: If True, print verbose information
+        
+    Returns:
+        Target object
+    """
     step_txt = clean_step(step_txt)
     target_type = None
     target = None
@@ -341,7 +451,7 @@ def get_target(step_txt, verbose=False):
         target = parts[1]
 
         if re.compile(r'^\d{1,2}:\d{1,2}(?:-\d{1,2}:\d{1,2})?').match(target):
-            target = target
+            pass  # Target is already in the correct format
         else:
             while not re.compile(r'^\d{1,2}:\d{1,2}(?:-\d{1,2}:\d{1,2})?').match(target):
                 # Check if the target is of type 75% marathon_pace
@@ -355,7 +465,7 @@ def get_target(step_txt, verbose=False):
                     target = tm.group(2).strip()
 
                 # Check if the target is found in the paces config block
-                if target in config['paces']:
+                if target in config.get('paces', {}):
                     target = config['paces'][target]
                 else:
                     raise ValueError(f'Cannot find pace target \'{target}\' in workout step \'{step_txt}\'')
@@ -363,7 +473,7 @@ def get_target(step_txt, verbose=False):
         target_type = 'heart.rate.zone'
         parts = [p.strip() for p in step_txt.split(' @hr ')]
         target = parts[1]
-        if target in config['heart_rates']:
+        if target in config.get('heart_rates', {}):
             target = config['heart_rates'][target]
 
         if isinstance(target, int):
@@ -385,34 +495,47 @@ def get_target(step_txt, verbose=False):
         
     raise ValueError('Invalid step description: ' + step_txt)
 
-def get_hr_range(step_txt):
-    return None
-
 def clean_step(step_txt):
-    # remove description, if any
+    """
+    Remove description from a step text.
+    
+    Args:
+        step_txt: Text describing the step
+        
+    Returns:
+        Cleaned step text
+    """
+    # Remove description, if any
     if ' -- ' in step_txt:
         step_txt = step_txt[:step_txt.find(' -- ')].strip()
     return step_txt    
 
 def expand_config(config):
+    """
+    Expand configuration values.
+    
+    Args:
+        config: Configuration dictionary to expand
+    """
+    # Expand paces
     paces = config.get('paces', {})
-    # If we find paces in <distance> in <time> format, convert them to mm:ss
     for pk, pv in paces.items():
         if isinstance(pv, str) and re.compile('^.+ in .+$').match(pv.strip()):
             paces[pk] = ms_to_pace(dist_time_to_ms(pv))
     
+    # Expand heart rates
     heart_rates = config.get('heart_rates', {})
     for hrk, hrv in list(heart_rates.items()):
         # If we get an integer, this is a fixed hr. We leave it as it is.
         if isinstance(hrv, int):
             continue
 
-        # Assicuriamoci che i valori numerici siano effettivamente numerici
+        # Make sure numeric values are actually numeric
         if isinstance(hrv, str) and hrv.isdigit():
             heart_rates[hrk] = int(hrv)
             continue
 
-        # Gestione per riferimenti percentuali
+        # Handle percentage references
         if isinstance(hrv, str):
             m = re.compile(r'^\s*(\d+(?:-\d+)?)%\s*(.+)\s*$').match(hrv)
             if m:
@@ -420,26 +543,26 @@ def expand_config(config):
                 if ref_hr_key in heart_rates:
                     ref_hr = heart_rates[ref_hr_key]
                     
-                    # Assicuriamoci che ref_hr sia un numero
+                    # Make sure ref_hr is a number
                     if isinstance(ref_hr, str):
                         try:
                             ref_hr = int(ref_hr)
-                            heart_rates[ref_hr_key] = ref_hr  # Aggiorniamo anche il valore di riferimento
+                            heart_rates[ref_hr_key] = ref_hr  # Update the reference value
                         except ValueError:
-                            logging.warning(f"Impossibile convertire '{ref_hr_key}' in numero: {ref_hr}")
+                            logging.warning(f"Cannot convert '{ref_hr_key}' to number: {ref_hr}")
                             continue
                     
                     hr_range_str = m.group(1)
                     hr_range = hr_range_str.split('-')
                     
-                    # Con una singola percentuale
+                    # With a single percentage
                     if len(hr_range) == 1:
                         try:
                             percent = float(hr_range[0]) / 100
                             heart_rates[hrk] = int(ref_hr * percent)
                         except (ValueError, TypeError) as e:
-                            logging.warning(f"Errore nella conversione percentuale HR: {hr_range[0]} - {str(e)}")
-                    # Con un intervallo di percentuali
+                            logging.warning(f"Error in HR percentage conversion: {hr_range[0]} - {str(e)}")
+                    # With a percentage range
                     else:
                         try:
                             low_percent = float(hr_range[0]) / 100
@@ -448,8 +571,8 @@ def expand_config(config):
                             high_hr = int(ref_hr * high_percent)
                             heart_rates[hrk] = f"{low_hr}-{high_hr}"
                         except (ValueError, TypeError) as e:
-                            logging.warning(f"Errore nella conversione intervallo percentuale HR: {hr_range} - {str(e)}")
+                            logging.warning(f"Error in HR percentage range conversion: {hr_range} - {str(e)}")
                 else:
-                    logging.warning(f"Errore: riferimento HR '{ref_hr_key}' non trovato per '{hrk}'")
+                    logging.warning(f"Error: HR reference '{ref_hr_key}' not found for '{hrk}'")
     
-    return
+    return config
