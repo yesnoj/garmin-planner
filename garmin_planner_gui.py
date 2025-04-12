@@ -3257,7 +3257,7 @@ class GarminPlannerGUI(tk.Tk):
             
             # Add selected days if any
             if selected_days:
-                cmd.extend(["--workout-days", ",".join(selected_days)])
+                cmd.extend(["--workout-days", ",".join(map(str, selected_days))])
             
             self.log(f"Esecuzione comando: {' '.join(cmd)}")
             process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)

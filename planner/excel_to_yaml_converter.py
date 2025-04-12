@@ -465,6 +465,9 @@ def parse_workout_steps(steps_str, workout_name):
     workout_steps = []
     
     # Replace semicolons with newlines for uniform processing
+    # Ma prima correggi il formato "repeat X:" se è seguito da altre istruzioni sulla stessa riga
+    steps_str = re.sub(r'(repeat\s+\d+):(.*?);', r'\1:\n\2;', steps_str)
+    steps_str = re.sub(r';(\s*repeat\s+\d+:)', r';\n\1', steps_str)
     steps_str = steps_str.replace(';', '\n')
     
     # Split steps by lines
@@ -478,27 +481,8 @@ def parse_workout_steps(steps_str, workout_name):
             i += 1
             continue
         
-        # Identify step type and details
-        step_parts = step_str.split(':')
-        if len(step_parts) < 2:
-            logging.warning(f"Invalid step format in {workout_name}: {step_str}")
-            i += 1
-            continue
-        
-        step_type = step_parts[0].strip().lower()
-        step_details = ':'.join(step_parts[1:]).strip()
-        
-        # Verify step type is valid for garmin-planner
-        if step_type not in VALID_STEP_TYPES:
-            if step_type == "steady":
-                logging.warning(f"'steady' is not supported in garmin-planner. Converted to 'interval' in {workout_name}")
-                step_type = "interval"
-            else:
-                logging.warning(f"Step type '{step_type}' not recognized in {workout_name}, converted to 'other'")
-                step_type = "other"
-        
-        # Check if this is a repeat step
-        repeat_match = re.match(r'^repeat\s+(\d+)$', step_type)
+        # Check specifically for repeat pattern
+        repeat_match = re.match(r'^repeat\s+(\d+):?$', step_str)
         if repeat_match:
             iterations = int(repeat_match.group(1))
             
@@ -513,52 +497,78 @@ def parse_workout_steps(steps_str, workout_name):
                     i += 1
                     continue
                 
-                # If the line doesn't start with spaces or tabs, it's not part of the repeat
-                if not step_lines[i].startswith((' ', '\t')):
+                # If line doesn't look like a main step (doesn't contain a colon or is indented),
+                # consider it part of the repeat block
+                if not re.match(r'^(warmup|cooldown|interval|recovery|rest|repeat|other):', substep_str) or step_lines[i].startswith((' ', '\t')):
+                    # Identify the substep type and details
+                    substep_parts = substep_str.split(':')
+                    if len(substep_parts) < 2:
+                        logging.warning(f"Invalid substep format in {workout_name}: {substep_str}")
+                        i += 1
+                        continue
+                    
+                    substep_type = substep_parts[0].strip().lower()
+                    substep_details = ':'.join(substep_parts[1:]).strip()
+                    
+                    # Verify substep type is valid
+                    if substep_type not in VALID_STEP_TYPES:
+                        if substep_type == "steady":
+                            logging.warning(f"'steady' not supported in garmin-planner. Converted to 'interval' in {workout_name}")
+                            substep_type = "interval"
+                        else:
+                            logging.warning(f"Substep type '{substep_type}' not recognized in {workout_name}, converted to 'other'")
+                            substep_type = "other"
+                    
+                    # Handle cooldown inside repeat (likely an error)
+                    if substep_type == "cooldown":
+                        logging.warning(f"'cooldown' found inside a repeat in {workout_name}. Moved outside.")
+                        # Save the cooldown for later
+                        cooldown_details = substep_details
+                        i += 1
+                        # Add the repeat step with its substeps
+                        # Correct format for garmin-planner: 'repeat' key and iterations value
+                        repeat_step = {"repeat": iterations, "steps": copy.deepcopy(substeps)}
+                        workout_steps.append(repeat_step)
+                        # Add the cooldown as a separate step
+                        workout_steps.append({"cooldown": cooldown_details})
+                        break  # Exit the substep loop
+                    
+                    substeps.append({substep_type: substep_details})
+                    i += 1
+                else:
+                    # This is a new main step, exit the repeat substeps loop
                     break
-                
-                # Identify the substep type and details
-                substep_parts = substep_str.split(':')
-                if len(substep_parts) < 2:
-                    logging.warning(f"Invalid substep format in {workout_name}: {substep_str}")
-                    i += 1
-                    continue
-                
-                substep_type = substep_parts[0].strip().lower()
-                substep_details = ':'.join(substep_parts[1:]).strip()
-                
-                # Verify substep type is valid
-                if substep_type not in VALID_STEP_TYPES:
-                    if substep_type == "steady":
-                        logging.warning(f"'steady' not supported in garmin-planner. Converted to 'interval' in {workout_name}")
-                        substep_type = "interval"
-                    else:
-                        logging.warning(f"Substep type '{substep_type}' not recognized in {workout_name}, converted to 'other'")
-                        substep_type = "other"
-                
-                # Handle cooldown inside repeat (likely an error)
-                if substep_type == "cooldown":
-                    logging.warning(f"'cooldown' found inside a repeat in {workout_name}. Moved outside.")
-                    # Save the cooldown for later
-                    cooldown_details = substep_details
-                    i += 1
-                    # Add the repeat step with its substeps
-                    # Correct format for garmin-planner: 'repeat' key and iterations value
-                    repeat_step = {"repeat": iterations, "steps": copy.deepcopy(substeps)}
-                    workout_steps.append(repeat_step)
-                    # Add the cooldown as a separate step
-                    workout_steps.append({"cooldown": cooldown_details})
-                    break  # Exit the substep loop
-                
-                substeps.append({substep_type: substep_details})
-                i += 1
             
-            # If the loop ended normally, add the repeat step
-            if i >= len(step_lines) or not step_lines[i].startswith((' ', '\t')):
+            # If we collected substeps, add the repeat step
+            if substeps:
                 # Correct format for garmin-planner: 'repeat' key and iterations value
                 repeat_step = {"repeat": iterations, "steps": copy.deepcopy(substeps)}
                 workout_steps.append(repeat_step)
+            else:
+                # If no substeps were found, add a simple repeat
+                workout_steps.append({"repeat": iterations, "steps": []})
+                logging.warning(f"No substeps found for repeat in {workout_name}")
         else:
+            # If not a repeat, it's a normal step
+            # Identify step type and details
+            step_parts = step_str.split(':')
+            if len(step_parts) < 2:
+                logging.warning(f"Invalid step format in {workout_name}: {step_str}")
+                i += 1
+                continue
+            
+            step_type = step_parts[0].strip().lower()
+            step_details = ':'.join(step_parts[1:]).strip()
+            
+            # Verify step type is valid for garmin-planner
+            if step_type not in VALID_STEP_TYPES:
+                if step_type == "steady":
+                    logging.warning(f"'steady' is not supported in garmin-planner. Converted to 'interval' in {workout_name}")
+                    step_type = "interval"
+                else:
+                    logging.warning(f"Step type '{step_type}' not recognized in {workout_name}, converted to 'other'")
+                    step_type = "other"
+            
             # Add a normal step
             workout_steps.append({step_type: step_details})
             i += 1
@@ -732,12 +742,12 @@ def create_sample_excel(output_file='sample_training_plan.xlsx'):
     # Add some example workouts (using ONLY supported step types)
     workouts = [
         # Week, Session, Description, Steps
-        (1, 1, 'Easy run', 'warmup: 10min @ Z1; interval: 30min @ Z2; cooldown: 5min @ Z1'),
-        (1, 2, 'Short intervals', 'warmup: 15min @ Z1; repeat 5:\n  interval: 400m @ Z5\n  recovery: 2min @ Z1; cooldown: 10min @ Z1'),
-        (1, 3, 'Long slow run', 'warmup: 10min @ Z1; interval: 45min @ Z2; cooldown: 5min @ Z1'),
+        (1, 1, 'Easy run', 'warmup: 10min @ Z1\ninterval: 30min @ Z2\ncooldown: 5min @ Z1'),
+        (1, 2, 'Short intervals', 'warmup: 15min @ Z1\nrepeat 5:\n  interval: 400m @ Z5\n  recovery: 2min @ Z1\ncooldown: 10min @ Z1'),
+        (1, 3, 'Long slow run', 'warmup: 10min @ Z1\ninterval: 45min @ Z2\ncooldown: 5min @ Z1'),
         (2, 1, 'Recovery run', 'interval: 30min @ Z1'),
-        (2, 2, 'Threshold run', 'warmup: 15min @ Z1; interval: 20min @ Z4; cooldown: 10min @ Z1'),
-        (2, 3, 'Progressive long run', 'warmup: 10min @ Z1; interval: 30min @ Z2; interval: 20min @ Z3; cooldown: 10min @ Z1')
+        (2, 2, 'Threshold run', 'warmup: 15min @ Z1\ninterval: 20min @ Z4\ncooldown: 10min @ Z1'),
+        (2, 3, 'Progressive long run', 'warmup: 10min @ Z1\ninterval: 30min @ Z2\ninterval: 20min @ Z3\ncooldown: 10min @ Z1')
     ]
     
     # Define alternating colors for weeks
@@ -793,7 +803,7 @@ def create_sample_excel(output_file='sample_training_plan.xlsx'):
                 num_lines += lines_after_repeat - 1  # -1 because the line with 'repeat' is already counted
         
         # Minimum height plus height for each line of text (about 15 points per line)
-        row_height = max(15, 12 * num_lines)
+        row_height = max(20, 15 * num_lines)  # Increased minimum height
         workouts_sheet.row_dimensions[i].height = row_height
     
     # Set column widths
