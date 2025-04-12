@@ -129,7 +129,35 @@ class GarminPlannerGUI(tk.Tk):
             except ImportError:
                 logger.debug("win32gui non disponibile, impossibile forzare l'aggiornamento dell'icona")
 
-
+    def initialize_directories(self):
+        """
+        Verifica che tutte le cartelle necessarie esistano e le crea se necessario.
+        Da chiamare durante l'inizializzazione dell'applicazione.
+        """
+        # Lista di tutte le cartelle necessarie all'applicazione
+        required_dirs = [
+            CACHE_DIR,                                # Cartella per la cache
+            os.path.join(SCRIPT_DIR, "oauth"),        # Cartella per i token OAuth
+            os.path.join(SCRIPT_DIR, "training_plans"),  # Cartella per i piani di allenamento
+            # Rimuoviamo assets perché l'icona è già incorporata nell'eseguibile
+        ]
+        
+        # Crea sottocartelle standard in training_plans senza "frank"
+        training_subdirs = [
+            "5K", "10K", "half_marathon", "marathon", "custom"
+        ]
+        
+        for subdir in training_subdirs:
+            required_dirs.append(os.path.join(SCRIPT_DIR, "training_plans", subdir))
+        
+        # Verifica e crea ogni cartella
+        for directory in required_dirs:
+            if not os.path.exists(directory):
+                try:
+                    os.makedirs(directory, exist_ok=True)
+                    logger.info(f"Cartella creata: {directory}")
+                except Exception as e:
+                    logger.error(f"Impossibile creare la cartella {directory}: {str(e)}")
 
     def run_command_with_live_output(self, cmd):
         """Esegue un comando catturando l'output in tempo reale"""
