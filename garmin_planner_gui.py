@@ -27,12 +27,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger("GarminPlannerGUI")
 
-# Paths
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Determina la directory di base in modo diverso tra script e eseguibile
+if getattr(sys, 'frozen', False):
+    # Se in esecuzione come eseguibile compilato (PyInstaller)
+    SCRIPT_DIR = os.path.dirname(sys.executable)
+else:
+    # Se in esecuzione come script Python normale
+    SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Definisci gli altri percorsi basati su SCRIPT_DIR
 DEFAULT_OAUTH_FOLDER = os.path.join(SCRIPT_DIR, "oauth")
 CONFIG_FILE = os.path.join(SCRIPT_DIR, "config.json")
 CACHE_DIR = os.path.join(SCRIPT_DIR, "cache")
 WORKOUTS_CACHE_FILE = os.path.join(CACHE_DIR, "workouts_cache.json")
+
+
 
 class GarminPlannerGUI(tk.Tk):
     def __init__(self):
@@ -65,14 +75,25 @@ class GarminPlannerGUI(tk.Tk):
         # Status bar variable
         self.status_var = tk.StringVar(value="Pronto")
         
-        # Imposta l'icona personalizzata - usando wm_iconbitmap per Windows
+        # Imposta l'icona personalizzata
         try:
-            # Percorso dell'icona - modifica con il percorso alla tua icona
+            # Percorso dell'icona
             icon_path = os.path.join(SCRIPT_DIR, "assets", "garmin_planner_icon.ico")
             
-            # Per Windows: usa wm_iconbitmap (metodo specifico per l'icona nella taskbar)
+            # Controlla se il file esiste in questo percorso
+            if os.path.exists(icon_path):
+                # Usa il percorso normale
+                pass
+            elif getattr(sys, 'frozen', False):
+                # Se siamo in un eseguibile compilato, l'icona potrebbe essere in una posizione diversa
+                # PyInstaller potrebbe mettere le risorse in una cartella temporanea
+                base_path = getattr(sys, '_MEIPASS', SCRIPT_DIR)
+                icon_path = os.path.join(base_path, "assets", "garmin_planner_icon.ico")
+            
+            # Per Windows: usa entrambi i metodi per massimizzare le possibilità di successo
             if os.name == 'nt':
                 self.wm_iconbitmap(icon_path)
+                self.iconbitmap(icon_path)
             # Per macOS o Linux
             else:
                 icon_img = tk.PhotoImage(file=icon_path)
@@ -132,17 +153,19 @@ class GarminPlannerGUI(tk.Tk):
     def initialize_directories(self):
         """
         Verifica che tutte le cartelle necessarie esistano e le crea se necessario.
-        Da chiamare durante l'inizializzazione dell'applicazione.
         """
+        # Debug: mostra il percorso base per verificare
+        logger.info(f"Directory base dell'applicazione: {SCRIPT_DIR}")
+        logger.info(f"È un eseguibile compilato: {getattr(sys, 'frozen', False)}")
+        
         # Lista di tutte le cartelle necessarie all'applicazione
         required_dirs = [
             CACHE_DIR,                                # Cartella per la cache
             os.path.join(SCRIPT_DIR, "oauth"),        # Cartella per i token OAuth
             os.path.join(SCRIPT_DIR, "training_plans"),  # Cartella per i piani di allenamento
-            # Rimuoviamo assets perché l'icona è già incorporata nell'eseguibile
         ]
         
-        # Crea sottocartelle standard in training_plans senza "frank"
+        # Crea sottocartelle standard in training_plans
         training_subdirs = [
             "5K", "10K", "half_marathon", "marathon", "custom"
         ]
@@ -158,6 +181,8 @@ class GarminPlannerGUI(tk.Tk):
                     logger.info(f"Cartella creata: {directory}")
                 except Exception as e:
                     logger.error(f"Impossibile creare la cartella {directory}: {str(e)}")
+                    # Tenta di mostrare più informazioni sull'errore
+                    logger.error(f"Dettagli errore: {type(e).__name__}, Permessi: {os.access(os.path.dirname(directory), os.W_OK)}")
 
     def run_command_with_live_output(self, cmd):
         """Esegue un comando catturando l'output in tempo reale"""
