@@ -1,0 +1,1 @@
+pyinstaller garmin_planner_gui.spec

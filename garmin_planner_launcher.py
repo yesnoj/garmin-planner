@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import os
 import sys
-import subprocess
+import importlib
 import tkinter as tk
 from tkinter import messagebox
 
@@ -21,9 +21,12 @@ def check_dependencies():
     if missing_packages:
         print(f"Installazione dei pacchetti mancanti: {', '.join(missing_packages)}")
         try:
-            subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing_packages)
+            import pip
+            for package in missing_packages:
+                print(f"Installazione di {package}...")
+                pip.main(['install', package])
             print("Installazione completata con successo.")
-        except subprocess.CalledProcessError as e:
+        except Exception as e:
             print(f"Errore durante l'installazione: {e}")
             return False
     
@@ -57,9 +60,34 @@ def main():
         )
         return
     
-    # Avvia l'interfaccia grafica
+    # Avvia l'interfaccia grafica importando il modulo direttamente
     print("Avvio dell'interfaccia grafica...")
-    subprocess.call([sys.executable, gui_path])
+    
+    # Aggiungi la directory corrente al path di Python
+    sys.path.append(script_dir)
+    
+    try:
+        # Opzione 1: Importa e inizializza direttamente
+        import garmin_planner_gui
+        app = garmin_planner_gui.GarminPlannerGUI()
+        app.mainloop()
+    except Exception as e:
+        print(f"Errore durante l'avvio dell'interfaccia grafica: {e}")
+        
+        # Opzione 2: Carica dinamicamente il modulo
+        try:
+            spec = importlib.util.spec_from_file_location("garmin_planner_gui", gui_path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            app = module.GarminPlannerGUI()
+            app.mainloop()
+        except Exception as e2:
+            print(f"Errore durante il caricamento dinamico: {e2}")
+            tk.Tk().withdraw()
+            messagebox.showerror(
+                "Errore", 
+                f"Impossibile avviare l'interfaccia grafica:\n{str(e)}\n\n{str(e2)}"
+            )
 
 if __name__ == "__main__":
     main()
