@@ -36,6 +36,7 @@ class NoAliasDumper(yaml.SafeDumper):
 VALID_STEP_TYPES = {"warmup", "cooldown", "interval", "recovery", "rest", "repeat", "other"}
 
 def excel_to_yaml(excel_file, output_file=None):
+
     """
     Converte un file Excel strutturato in un file YAML compatibile con garmin-planner.
     Include supporto per estrarre la data della gara (l'ultima data presente).

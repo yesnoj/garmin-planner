@@ -18,6 +18,7 @@ from planner.import_export import cmd_import_workouts, cmd_export_workouts, cmd_
 from planner.schedule import cmd_schedule_workouts, cmd_unschedule_workouts
 from planner.manage import cmd_list_scheduled, get_scheduled
 from planner.garmin_client import cmd_login, GarminClient
+from planner.license_manager import LicenseManager
 
 # Disabilita verifica SSL per risolvere problemi di connessione
 os.environ['PYTHONHTTPSVERIFY'] = '0'
@@ -55,7 +56,49 @@ class GarminPlannerGUI(tk.Tk):
     def __init__(self):
         """Inizializzazione dell'applicazione (con supporto per l'icona nella taskbar di Windows)"""
         super().__init__()
+        self.withdraw()
         self.initialize_directories()
+        
+        # Status bar variable
+        self.status_var = tk.StringVar(value="Pronto")
+
+        # Inizializza il license manager
+        self.license_manager = LicenseManager(SCRIPT_DIR)
+        self.features = ["basic"]  # Default features
+        
+        # Verifica licenza - VERSIONE SEMPLIFICATA
+        is_valid, message, features, expiry_date, username = self.license_manager.validate_license()
+        if is_valid:
+            self.features = features
+            self.log(f"Licenza valida con funzionalità: {', '.join(features)}")
+            
+            # Se la licenza è valida ma sta per scadere (entro 30 giorni), mostra un avviso
+            if expiry_date:
+                try:
+                    expiry = datetime.strptime(expiry_date, "%Y-%m-%d").date()
+                    today = datetime.now().date()
+                    days_left = (expiry - today).days
+                    if 0 < days_left < 30:
+                        # Nota: faremo questo dopo che l'interfaccia sarà inizializzata
+                        self.show_expiry_warning = True
+                        self.days_left = days_left
+                    else:
+                        self.show_expiry_warning = False
+                except:
+                    self.show_expiry_warning = False
+            else:
+                self.show_expiry_warning = False
+        else:
+            # SEMPLIFICATO: invece del dialogo di attivazione, mostra solo un messaggio
+            messagebox.showinfo("Licenza non trovata", 
+                             "Garmin Planner funzionerà in modalità limitata.\n\n"
+                             "Per sbloccare tutte le funzionalità, posiziona un file license.dat valido "
+                             "nella cartella dell'applicazione.")
+            
+            # Continua in modalità limitata
+            self.features = ["basic"]
+            self.log("Utilizzo dell'applicazione in modalità limitata")
+        
         # Assicurati che la cartella cache esista
         if not os.path.exists(CACHE_DIR):
             os.makedirs(CACHE_DIR, exist_ok=True)
@@ -78,9 +121,6 @@ class GarminPlannerGUI(tk.Tk):
             
         self.log_level = tk.StringVar(value="INFO")
         self.log_output = []
-        
-        # Status bar variable
-        self.status_var = tk.StringVar(value="Pronto")
         
         # Imposta l'icona personalizzata
         try:
@@ -123,23 +163,35 @@ class GarminPlannerGUI(tk.Tk):
                     background=[('active', '#005486')],  # Più scuro quando attivo/hover
                     foreground=[('active', 'white')])  # Testo rimane bianco
         
+        
         # Create the notebook (tabs)
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         # Create tabs
         self.create_login_tab()
-        self.create_import_tab()
-        self.create_export_tab()
-        self.create_schedule_tab()
-        self.create_excel_tools_tab()
+
+        # Funzionalità disponibili nella versione BASIC
+        if "basic" in self.features:
+            self.create_import_tab()
+            self.create_export_tab()
+
+        # Funzionalità disponibili nella versione PRO
+        if "pro" in self.features:
+            self.create_schedule_tab()
+            self.create_excel_tools_tab()
+
+        # Funzionalità disponibile solo nella versione PREMIUM
+        if "premium" in self.features:
+            workout_editor.add_workout_editor_tab(self.notebook, self)
         
-        # Aggiungi il nuovo tab per l'editor di workout
-        workout_editor.add_workout_editor_tab(self.notebook, self)
         
         # Crea la tab Log per ultima
         self.create_log_tab()
-        
+      
+        # Crea la tab About
+        self.create_about_tab()
+
         # Status bar
         self.status_bar = ttk.Label(self, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
         self.status_bar.pack(side=tk.BOTTOM, fill=tk.X)
@@ -156,6 +208,80 @@ class GarminPlannerGUI(tk.Tk):
                 win32gui.SendMessage(hwnd, 0x0080, 0, 0)
             except ImportError:
                 logger.debug("win32gui non disponibile, impossibile forzare l'aggiornamento dell'icona")
+        
+        self.deiconify()
+
+        # Se la licenza sta per scadere, mostra un avviso
+        if hasattr(self, 'show_expiry_warning') and self.show_expiry_warning:
+            self.after(1000, lambda: messagebox.showwarning(
+                "Licenza in scadenza",
+                f"La tua licenza scadrà tra {self.days_left} giorni.\n"
+                f"Rinnova la licenza per continuare ad utilizzare tutte le funzionalità."
+            ))
+
+
+    def show_license_info(self):
+        """Mostra informazioni sulla licenza"""
+        # Ottieni informazioni sulla licenza
+        is_valid, message, features, expiry_date, username = self.license_manager.validate_license()
+        
+        # Crea una semplice finestra di dialogo con le informazioni
+        dialog = tk.Toplevel(self)
+        dialog.title("Informazioni licenza")
+        dialog.geometry("400x300")
+        dialog.transient(self)
+        dialog.grab_set()
+        
+        # Contenuto
+        frame = ttk.Frame(dialog, padding=20)
+        frame.pack(fill=tk.BOTH, expand=True)
+        
+        if is_valid:
+            ttk.Label(frame, text="Licenza attiva", style="Title.TLabel", font=("Helvetica", 14, "bold"),
+                     foreground="green").pack(pady=(0, 10))
+            
+            # Dettagli licenza
+            details_frame = ttk.Frame(frame)
+            details_frame.pack(fill=tk.X, pady=10)
+            
+            # Username
+            ttk.Label(details_frame, text="Utente:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=2)
+            ttk.Label(details_frame, text=username if username else "Non specificato").grid(
+                row=0, column=1, sticky=tk.W, padx=5, pady=2)
+            
+            # Features
+            ttk.Label(details_frame, text="Funzionalità:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=2)
+            ttk.Label(details_frame, text=", ".join(features)).grid(
+                row=1, column=1, sticky=tk.W, padx=5, pady=2)
+            
+            # Expiry date
+            ttk.Label(details_frame, text="Scadenza:").grid(row=2, column=0, sticky=tk.W, padx=5, pady=2)
+            expiry_text = expiry_date if expiry_date else "Licenza perpetua"
+            ttk.Label(details_frame, text=expiry_text).grid(
+                row=2, column=1, sticky=tk.W, padx=5, pady=2)
+        else:
+            ttk.Label(frame, text="Licenza non trovata", style="Title.TLabel", font=("Helvetica", 14, "bold"),
+                     foreground="red").pack(pady=(0, 10))
+            
+            ttk.Label(frame, text=message, wraplength=350).pack(pady=10)
+            
+            ttk.Label(frame, text="Per attivare Garmin Planner, posiziona un file license.dat valido "
+                                "nella cartella dell'applicazione.", wraplength=350).pack(pady=10)
+        
+        # Pulsante chiudi
+        ttk.Button(frame, text="Chiudi", command=dialog.destroy).pack(pady=20)
+
+
+    def check_feature_access(self, feature_name, show_message=True):
+        """Controlla se una feature è accessibile con la licenza corrente"""
+        if feature_name in self.features:
+            return True
+        
+        if show_message:
+            messagebox.showinfo("Funzionalità non disponibile",
+                             f"La funzionalità '{feature_name}' richiede una licenza superiore.\n"
+                             f"È possibile acquistare una licenza per sbloccare tutte le funzionalità.")
+        return False
 
     def initialize_directories(self):
         """
@@ -743,6 +869,97 @@ class GarminPlannerGUI(tk.Tk):
                 widget.configure(state="normal")
 
 
+    def create_about_tab(self):
+        """Crea la tab About con informazioni sull'applicazione e sulla licenza"""
+        about_frame = ttk.Frame(self.notebook)
+        self.notebook.add(about_frame, text="Info")
+        
+        # Header con logo (se disponibile)
+        header_frame = ttk.Frame(about_frame)
+        header_frame.pack(fill=tk.X, padx=20, pady=20)
+        
+        # Titolo e versione
+        ttk.Label(header_frame, text="Garmin Planner", font=("Helvetica", 20, "bold")).pack()
+        ttk.Label(header_frame, text="Versione 1.1.0").pack()
+        
+        # Descrizione
+        desc_frame = ttk.Frame(about_frame)
+        desc_frame.pack(fill=tk.X, padx=20, pady=10)
+        
+        description = (
+            "Garmin Planner è un'applicazione per la gestione e pianificazione\n"
+            "degli allenamenti su Garmin Connect. Permette di importare, esportare\n"
+            "e pianificare allenamenti in modo semplice ed efficace."
+        )
+        ttk.Label(desc_frame, text=description, justify=tk.CENTER).pack()
+        
+        # Informazioni licenza
+        license_frame = ttk.LabelFrame(about_frame, text="Informazioni licenza")
+        license_frame.pack(fill=tk.X, padx=20, pady=10)
+        
+        # Ottieni informazioni sulla licenza
+        is_valid, message, features, expiry_date, username = self.license_manager.validate_license()
+        
+        if is_valid:
+            license_status = "Licenza attiva"
+            status_color = "green"
+        else:
+            license_status = "Licenza non attiva"
+            status_color = "red"
+        
+        ttk.Label(license_frame, text=license_status, foreground=status_color, font=("Helvetica", 12, "bold")).pack(pady=5)
+        
+        license_details = ttk.Frame(license_frame)
+        license_details.pack(fill=tk.X, padx=10, pady=5)
+        
+        if is_valid:
+            # Username
+            ttk.Label(license_details, text="Utente:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=2)
+            ttk.Label(license_details, text=username if username else "Non specificato").grid(row=0, column=1, sticky=tk.W, padx=5, pady=2)
+            
+            # Features
+            ttk.Label(license_details, text="Funzionalità:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=2)
+            ttk.Label(license_details, text=", ".join(features)).grid(row=1, column=1, sticky=tk.W, padx=5, pady=2)
+            
+            # Expiry date
+            ttk.Label(license_details, text="Scadenza:").grid(row=2, column=0, sticky=tk.W, padx=5, pady=2)
+            expiry_text = expiry_date if expiry_date else "Licenza perpetua"
+            ttk.Label(license_details, text=expiry_text).grid(row=2, column=1, sticky=tk.W, padx=5, pady=2)
+        else:
+            # Per licenza non attiva, mostrare le informazioni dettagliate 
+            # che prima erano mostrate nel popup
+            info_frame = ttk.Frame(license_details)
+            info_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+            
+            ttk.Label(info_frame, text=message, wraplength=500).pack(anchor=tk.W, pady=5)
+            
+            ttk.Label(info_frame, text="Per attivare Garmin Planner, posiziona un file license.dat valido "
+                                  "nella cartella dell'applicazione.", wraplength=500).pack(anchor=tk.W, pady=5)
+            
+            # Aggiungiamo ulteriori informazioni sulla licenza
+            info_text = (
+                "Questo software è disponibile gratuitamente per uso personale ma richiede "
+                "una licenza per l'utilizzo commerciale o in contesti professionali.\n\n"
+                "La versione gratuita include:\n"
+                "• Importazione/esportazione di allenamenti\n"
+                "• Pianificazione di base\n"
+                "• Editor di allenamenti\n\n"
+                "Per informazioni sull'acquisto di una licenza, prochilo.francesco@gmail.com"
+            )
+            
+            ttk.Label(info_frame, text=info_text, wraplength=500, justify=tk.LEFT).pack(anchor=tk.W, pady=10)
+        
+        # Credits e copyright
+        footer_frame = ttk.Frame(about_frame)
+        footer_frame.pack(fill=tk.X, padx=20, pady=20)
+        
+        current_year = datetime.now().year
+        copyright_text = f"© {current_year} Garmin Planner Team. Tutti i diritti riservati."
+        ttk.Label(footer_frame, text=copyright_text).pack()
+        
+        # Contatti
+        contact_text = "Per supporto e informazioni: prochilo.francesco@gmail.com"
+        ttk.Label(footer_frame, text=contact_text).pack()
 
     def create_import_tab(self):
         import_frame = ttk.Frame(self.notebook)
@@ -2032,6 +2249,8 @@ class GarminPlannerGUI(tk.Tk):
 
     def convert_excel_to_yaml(self):
         """Converte il file Excel in formato YAML"""
+        if not self.check_feature_access("premium"):
+            return
         try:
             # Verifica che il file Excel esista
             excel_file = self.excel_input_file.get()

@@ -29,6 +29,7 @@ REQUIRED = [
     'pandas',
     'openpyxl',
     'tkcalendar',
+    'cryptography',
 ]
 
 # Optional dependencies

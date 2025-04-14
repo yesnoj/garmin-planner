@@ -1,0 +1,162 @@
+# planner/license_manager.py
+import os
+import json
+import hashlib
+import datetime
+import base64
+import logging
+from cryptography.fernet import Fernet
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
+from . import hardware_id
+
+# Chiave segreta per la crittografia (dovresti generarla una volta e poi riutilizzarla)
+SECRET_KEY = b'g4rm1n_p1ann3r_s3cr3t_k3y_2024_v1'
+
+class LicenseManager:
+    def __init__(self, app_dir):
+        self.app_dir = app_dir
+        self.license_file = os.path.join(app_dir, "license.dat")
+        self.hwid = hardware_id.generate_hardware_fingerprint()
+        logging.debug(f"LicenseManager initialized with hardware ID: {self.hwid}")
+        
+    def _generate_key(self):
+        """Genera una chiave di crittografia basata sul secret key"""
+        salt = b'garminplannersalt2024'
+        kdf = PBKDF2HMAC(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=100000,
+        )
+        key = base64.urlsafe_b64encode(kdf.derive(SECRET_KEY))
+        return key
+        
+    def _encrypt_data(self, data):
+        """Cripta i dati della licenza"""
+        f = Fernet(self._generate_key())
+        return f.encrypt(json.dumps(data).encode())
+    
+    def _decrypt_data(self, encrypted_data):
+        """Decripta i dati della licenza"""
+        try:
+            f = Fernet(self._generate_key())
+            decrypted = f.decrypt(encrypted_data)
+            return json.loads(decrypted.decode())
+        except Exception as e:
+            logging.debug(f"Error decrypting license data: {str(e)}")
+            return None
+    
+    def create_license(self, license_key, expiry_date=None, features=None, username=""):
+        """
+        Crea un file di licenza per l'hardware corrente
+        
+        Args:
+            license_key: Chiave di licenza da attivare
+            expiry_date: Data di scadenza (YYYY-MM-DD) o None per licenza perpetua
+            features: Lista di feature abilitate dalla licenza
+            username: Nome dell'utente associato alla licenza
+        
+        Returns:
+            True se la licenza è stata creata con successo, False altrimenti
+        """
+        if features is None:
+            features = ["basic"]
+            
+        # Crea i dati della licenza
+        license_data = {
+            "license_key": license_key,
+            "hardware_id": self.hwid,
+            "creation_date": datetime.datetime.now().strftime("%Y-%m-%d"),
+            "expiry_date": expiry_date,
+            "features": features,
+            "username": username
+        }
+        
+        logging.info(f"Creating license with key: {license_key}, features: {features}")
+        
+        # Cripta i dati
+        encrypted_data = self._encrypt_data(license_data)
+        
+        # Salva su file
+        try:
+            with open(self.license_file, 'wb') as f:
+                f.write(encrypted_data)
+            logging.info("License file created successfully")
+            return True
+        except Exception as e:
+            logging.error(f"Error creating license file: {str(e)}")
+            return False
+    
+    def validate_license(self):
+        """
+        Verifica se la licenza è valida per questo hardware
+        
+        Returns:
+            (is_valid, message, features, expiry_date, username) dove:
+            - is_valid: True se la licenza è valida, False altrimenti
+            - message: Messaggio esplicativo
+            - features: Lista di feature abilitate dalla licenza (vuota se non valida)
+            - expiry_date: Data di scadenza o None se perpetua
+            - username: Nome utente associato alla licenza
+        """
+        # Controlla se il file di licenza esiste
+        if not os.path.exists(self.license_file):
+            logging.warning("License file not found")
+            return False, "Licenza non trovata.", [], None, ""
+        
+        # Leggi e decripta il file
+        try:
+            with open(self.license_file, 'rb') as f:
+                encrypted_data = f.read()
+            license_data = self._decrypt_data(encrypted_data)
+            
+            if license_data is None:
+                logging.warning("Invalid or corrupted license data")
+                return False, "Licenza non valida o danneggiata.", [], None, ""
+            
+            # Verifica che la licenza sia per questo hardware
+            stored_hwid = license_data.get("hardware_id", "")
+            if stored_hwid != self.hwid:
+                # Log degli ID hardware per debug
+                logging.warning(f"Hardware ID mismatch: stored={stored_hwid}, current={self.hwid}")
+                return False, "Licenza non valida per questo computer.", [], None, ""
+            
+            # Verifica che la licenza non sia scaduta
+            expiry_date = license_data.get("expiry_date")
+            if expiry_date:
+                today = datetime.datetime.now().strftime("%Y-%m-%d")
+                if today > expiry_date:
+                    logging.warning(f"License expired on {expiry_date}")
+                    return False, f"Licenza scaduta il {expiry_date}.", [], expiry_date, license_data.get("username", "")
+            
+            # Licenza valida!
+            features = license_data.get("features", ["basic"])
+            username = license_data.get("username", "")
+            logging.info(f"Valid license found with features: {features}")
+            return True, "Licenza valida.", features, expiry_date, username
+            
+        except Exception as e:
+            logging.error(f"Error validating license: {str(e)}")
+            return False, f"Errore durante la verifica della licenza: {str(e)}", [], None, ""
+    
+    def get_hardware_id(self):
+        """Restituisce l'ID hardware corrente"""
+        return self.hwid
+    
+    def get_license_info(self):
+        """
+        Ottiene le informazioni sulla licenza attuale
+        
+        Returns:
+            Dizionario con le informazioni sulla licenza o None se non presente/non valida
+        """
+        if not os.path.exists(self.license_file):
+            return None
+        
+        try:
+            with open(self.license_file, 'rb') as f:
+                encrypted_data = f.read()
+            return self._decrypt_data(encrypted_data)
+        except:
+            return None
