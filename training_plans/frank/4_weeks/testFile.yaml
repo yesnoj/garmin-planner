@@ -1,0 +1,48 @@
+config:
+  heart_rates:
+    max_hr: 198
+    Z1: 62-76% max_hr
+    Z2: 76-85% max_hr
+    Z3: 85-91% max_hr
+    Z4: 91-95% max_hr
+    Z5: 95-100% max_hr
+  paces:
+    Z1: '6:30'
+    Z2: '6:20'
+    Z3: '6:00'
+    Z4: '5:20'
+    Z5: '4:50'
+  margins:
+    faster: 0:03
+    slower: 0:03
+    hr_up: 5
+    hr_down: 5
+  name_prefix: 'MYRUN_MVPELU_ '
+  athlete_name: Francesco
+  race_day: '2025-05-22'
+W01S01 Easy run: # Easy run
+- warmup: 10min @ Z1
+- interval: 30min @ Z2
+- cooldown: 5min @ Z1
+W01S02 Short intervals: # Short intervals
+- warmup: 15min @ Z1
+- repeat: 5
+  steps:
+  - interval: 400m @ Z5
+  - recovery: 2min @ Z1
+- cooldown: 10min @ Z1
+W01S03 Long slow run: # Long slow run
+- warmup: 10min @ Z1
+- interval: 45min @ Z2
+- cooldown: 5min @ Z1
+W02S01 Recovery run: # Recovery run
+- interval: 30min @ Z1
+W02S02 Threshold run: # Threshold run
+- warmup: 15min @ Z1
+- interval: 20min @ Z4
+- cooldown: 10min @ Z1
+W02S03 Progressive long run: # Progressive long run
+- warmup: 10min @ Z1
+- interval: 30min @ Z2
+- interval: 20min @ Z3
+- cooldown: 10min @ Z1

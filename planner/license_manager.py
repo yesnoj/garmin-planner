@@ -11,7 +11,7 @@ from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 from . import hardware_id
 
-# Chiave segreta per la crittografia (dovresti generarla una volta e poi riutilizzarla)
+# Chiave segreta per la crittografia
 SECRET_KEY = b'g4rm1n_p1ann3r_s3cr3t_k3y_2024_v1'
 
 class LicenseManager:
@@ -31,7 +31,7 @@ class LicenseManager:
                 cls._instance.app_dir = None
                 cls._instance.license_file = None
                 cls._instance.hwid = None
-                cls._instance.features = []  # Aggiungiamo questo attributo importante
+                cls._instance.features = ["basic"]  # Default a basic features
             else:
                 # Se app_dir è fornito, creiamo l'istanza completa
                 cls._instance = cls(app_dir)
@@ -42,8 +42,11 @@ class LicenseManager:
         self.app_dir = app_dir
         self.license_file = os.path.join(app_dir, "license.dat")
         self.hwid = hardware_id.generate_hardware_fingerprint()
-        self.features = []  # Inizializziamo le feature a lista vuota
+        self.features = ["basic"]  # Inizializziamo le feature a basic
         logging.debug(f"LicenseManager initialized with hardware ID: {self.hwid}")
+        
+        # Controlla subito la licenza durante l'inizializzazione
+        self.validate_license()
     
     def initialize(self, app_dir):
         """
@@ -55,6 +58,9 @@ class LicenseManager:
             self.license_file = os.path.join(app_dir, "license.dat")
             self.hwid = hardware_id.generate_hardware_fingerprint()
             logging.debug(f"LicenseManager initialized with hardware ID: {self.hwid}")
+            
+            # Controlla subito la licenza durante l'inizializzazione
+            self.validate_license()
         return self
         
     def _generate_key(self):
@@ -137,7 +143,35 @@ class LicenseManager:
 
     def check_feature_access(self, feature_name, show_message=True):
         """Controlla se una feature è accessibile con la licenza corrente"""
+        # Definisci la gerarchia delle feature
+        feature_hierarchy = {
+            "basic": ["basic"],
+            "pro": ["basic", "pro"],
+            "premium": ["basic", "pro", "premium"]
+        }
+        
+        # Logging per debug
+        logging.debug(f"Checking access for feature: {feature_name}")
+        logging.debug(f"Current features: {self.features}")
+        
+        # Controlla se l'utente ha accesso alla feature
+        has_access = False
+        
+        # Verifica direttamente se la feature è nella lista
         if feature_name in self.features:
+            has_access = True
+            logging.debug(f"Direct match: {feature_name} found in {self.features}")
+        else:
+            # Controlla se l'utente ha una licenza che include implicitamente la feature
+            for license_level in self.features:
+                if license_level in feature_hierarchy and feature_name in feature_hierarchy[license_level]:
+                    has_access = True
+                    logging.debug(f"Hierarchical match: {feature_name} included in {license_level}")
+                    break
+        
+        logging.debug(f"Access result for {feature_name}: {has_access}")
+        
+        if has_access:
             return True
         
         if show_message:

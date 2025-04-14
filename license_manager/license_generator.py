@@ -171,16 +171,23 @@ class LicenseGenerator(tk.Tk):
         ttk.Checkbutton(features_frame, text="Basic features (Import/Export)", 
                        variable=self.feature_basic, state="disabled").grid(
             row=1, column=0, padx=5, pady=5, sticky=tk.W)
-        
+
+        # Pro checkbox
         self.feature_pro = tk.BooleanVar(value=True)
-        ttk.Checkbutton(features_frame, text="Pro features (Schedule/Excel Tools)", 
-                       variable=self.feature_pro).grid(
-            row=1, column=1, padx=5, pady=5, sticky=tk.W)
-        
+        pro_checkbox = ttk.Checkbutton(features_frame, text="Pro features (Schedule/Excel Tools)", 
+                       variable=self.feature_pro, command=self.update_feature_checkboxes)
+        pro_checkbox.grid(row=1, column=1, padx=5, pady=5, sticky=tk.W)
+
+        # Premium checkbox
         self.feature_premium = tk.BooleanVar(value=False)
-        ttk.Checkbutton(features_frame, text="Premium features (Workout Editor)", 
-                       variable=self.feature_premium).grid(
-            row=2, column=0, padx=5, pady=5, sticky=tk.W)
+        premium_checkbox = ttk.Checkbutton(features_frame, text="Premium features (Workout Editor)", 
+                       variable=self.feature_premium, command=self.update_feature_checkboxes)
+        premium_checkbox.grid(row=2, column=0, padx=5, pady=5, sticky=tk.W)
+
+        # Aggiungi anche una nota esplicativa sulla relazione gerarchica
+        ttk.Label(features_frame, text="Note: Premium includes Pro features, Pro includes Basic features", 
+                 font=("", 9, "italic"), foreground="gray").grid(
+            row=3, column=0, columnspan=2, padx=5, pady=5, sticky=tk.W)
         
         # Output section
         output_frame = ttk.LabelFrame(tab, text="License Output", padding="10")
@@ -206,6 +213,12 @@ class LicenseGenerator(tk.Tk):
         ttk.Button(button_frame, text="Preview License", command=self.preview_license,
                  width=20).pack(side=tk.RIGHT, padx=5)
     
+
+    def update_feature_checkboxes(self):
+        """Update checkboxes based on hierarchy - if premium is selected, pro must be selected"""
+        if self.feature_premium.get():
+            self.feature_pro.set(True)  # Premium implicitly includes Pro
+
     def create_manager_tab(self, notebook):
         """Create the license management tab"""
         tab = ttk.Frame(notebook, padding="10")
@@ -379,14 +392,18 @@ i9j0k1l2m3n4o5p6,Jane Smith,,basic;pro;premium
         """Get the enabled features list"""
         features = []
         
-        if self.feature_basic.get():
-            features.append("basic")
+        # Basic is always included
+        features.append("basic")
         
-        if self.feature_pro.get():
-            features.append("pro")
-                
+        # Logic for hierarchical licenses:
+        # If premium is selected, pro is automatically included
+        # If pro is selected, basic is already included above
+        
         if self.feature_premium.get():
+            features.append("pro")
             features.append("premium")
+        elif self.feature_pro.get():
+            features.append("pro")
         
         return features
     

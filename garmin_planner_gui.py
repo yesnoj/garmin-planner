@@ -63,7 +63,7 @@ class GarminPlannerGUI(tk.Tk):
         self.status_var = tk.StringVar(value="Pronto")
 
         # Inizializza il license manager
-        self.license_manager = LicenseManager(SCRIPT_DIR)
+        self.license_manager = LicenseManager.get_instance(SCRIPT_DIR)
         self.features = ["basic"]  # Default features
         
         # Verifica licenza - VERSIONE SEMPLIFICATA
@@ -216,6 +216,8 @@ class GarminPlannerGUI(tk.Tk):
                 f"Rinnova la licenza per continuare ad utilizzare tutte le funzionalità."
             ))
 
+        lm = LicenseManager.get_instance()
+        print(f"Features all'avvio: {lm.features}")
 
     def show_license_info(self):
         """Mostra informazioni sulla licenza"""
@@ -2751,16 +2753,30 @@ class GarminPlannerGUI(tk.Tk):
             with open(yaml_path, 'r') as f:
                 plan_data = yaml.safe_load(f)
                 
-                # Rimuovi la sezione config se presente
-                config = plan_data.pop('config', {})
+                # Estrai la data della gara se presente nella configurazione
+                config = plan_data.get('config', {})
+                if 'race_day' in config:
+                    race_day_str = config['race_day']
+                    self.log(f"Trovata data della gara nel YAML: {race_day_str}")
+                    # Imposta la data della gara nel campo corrispondente
+                    self.race_day.set(race_day_str)
+                    
+                    # Memorizza il valore originale della data gara per confronti futuri
+                    self.original_race_day = race_day_str
+                else:
+                    self.original_race_day = None
+                
+                # Rimuovi la sezione config se presente per continuare l'analisi
+                plan_data_copy = plan_data.copy()
+                plan_data_copy.pop('config', None)
                 
                 # Conta gli allenamenti (escludendo la configurazione)
-                workout_count = len(plan_data)
+                workout_count = len(plan_data_copy)
                 
                 # Analizza le settimane e sessioni
                 weeks = {}
                 
-                for workout_name in plan_data.keys():
+                for workout_name in plan_data_copy.keys():
                     # Cerca il pattern WxxSxx nel nome
                     match = re.search(r'\s*(W\d\d)S(\d\d)\s*', workout_name)
                     if match:
@@ -2779,6 +2795,30 @@ class GarminPlannerGUI(tk.Tk):
                 # Salva il numero massimo di sessioni come attributo della classe
                 self.max_sessions = max_sessions
                 
+                # Estrai anche i giorni preferiti dal YAML se presenti nella configurazione
+                if 'preferred_days' in config:
+                    # Converti l'indice dei giorni da 0-based a giorni della settimana
+                    # Se preferred_days è una lista di interi (0-6)
+                    preferred_days = config['preferred_days']
+                    self.log(f"Trovati giorni preferiti nel YAML: {preferred_days}")
+                    
+                    # Memorizza i giorni originali per confronti futuri
+                    self.original_preferred_days = preferred_days
+                    
+                    # Resetta tutti i checkbox
+                    for i in range(7):
+                        self.day_selections[i].set(0)
+                    
+                    # Imposta i giorni preferiti
+                    for day_index in preferred_days:
+                        if 0 <= day_index < 7:  # Verifica che l'indice sia valido
+                            self.day_selections[day_index].set(1)
+                else:
+                    # Se non ci sono giorni preferiti, preseleziona in base al numero massimo di sessioni
+                    self.preselect_days(max_sessions)
+                    # Non ci sono giorni originali da confrontare
+                    self.original_preferred_days = None
+                
                 info_text = f"Piano da file YAML: {workout_count} allenamenti, {num_weeks} settimane"
                 if weeks:
                     info_text += f"\nAllenamenti per settimana: "
@@ -2788,14 +2828,11 @@ class GarminPlannerGUI(tk.Tk):
                 # Aggiorna l'interfaccia
                 self.training_plan_info.set(info_text)
                 
-                # Non aggiorniamo più la label informativa
-                # self.day_info_label.config(text="...")
-                
-                # Preseleziona i giorni in base al numero di sessioni
-                self.preselect_days(max_sessions)
-                
                 # Imposta il flag di piano caricato
                 self.plan_imported = True
+                
+                # Salva il percorso del YAML come attributo per riferimento futuro
+                self.current_yaml_path = yaml_path
                 
                 self.log(f"Analisi completata: {workout_count} allenamenti in {num_weeks} settimane")
                 
@@ -3044,12 +3081,39 @@ class GarminPlannerGUI(tk.Tk):
         is_dry_run = self.schedule_dry_run.get()
         training_plan_id = self.training_plan.get().strip()
         
+        # Verifica se abbiamo un file YAML caricato
+        yaml_path = None
+        original_race_day = None
+        
+        if hasattr(self, 'current_yaml_path') and self.current_yaml_path:
+            yaml_path = self.current_yaml_path
+            
+            # Carica il file YAML per verificare la data della gara
+            try:
+                with open(yaml_path, 'r') as f:
+                    plan_data = yaml.safe_load(f)
+                    config = plan_data.get('config', {})
+                    if 'race_day' in config:
+                        original_race_day = config['race_day']
+            except Exception as e:
+                self.log(f"Errore nel caricamento del file YAML per verifica: {str(e)}")
+        
+        # Se abbiamo una data originale e la nuova data è diversa, mostra un avviso
+        if original_race_day and original_race_day != self.race_day.get():
+            if not messagebox.askyesno("Attenzione - Data modificata", 
+                                  f"La data della gara nel file YAML è {original_race_day}, ma stai pianificando per {self.race_day.get()}.\n\n"
+                                  f"Vuoi procedere con la nuova data?\n"
+                                  f"Nota: questo potrebbe modificare tutte le date degli allenamenti."):
+                # L'utente ha scelto di non procedere
+                return
+        
         # Se siamo in modalità dry run, non dobbiamo importare nulla, solo simulare
         if is_dry_run:
             self.log("Modalità simulazione attivata, nessuna modifica effettiva verrà apportata")
             
             # Cerchiamo il file YAML per verificare se contiene una data della gara predefinita
-            yaml_path = self.find_yaml_for_plan(training_plan_id)
+            if not yaml_path:
+                yaml_path = self.find_yaml_for_plan(training_plan_id)
             
             if yaml_path:
                 self.log(f"Simulazione pianificazione usando il file YAML: {yaml_path}")
@@ -3082,7 +3146,8 @@ class GarminPlannerGUI(tk.Tk):
             self.log("Piano non importato. Ricerca del file YAML...")
             
             # Trova il file YAML corrispondente
-            yaml_path = self.find_yaml_for_plan(training_plan_id)
+            if not yaml_path:
+                yaml_path = self.find_yaml_for_plan(training_plan_id)
             
             if not yaml_path:
                 # Nessun file YAML trovato, chiedi all'utente di specificarne uno
@@ -3422,7 +3487,6 @@ class GarminPlannerGUI(tk.Tk):
 
 
 
-
     def find_yaml_for_plan(self, plan_id):
         """Cerca il file YAML corrispondente al piano specificato"""
         try:
@@ -3446,6 +3510,16 @@ class GarminPlannerGUI(tk.Tk):
                             self.log(f"Confronto: '{name_prefix}' con '{plan_id_normalized}'")
                             if plan_id_normalized in name_prefix or name_prefix in plan_id_normalized:
                                 self.log(f"Corrispondenza trovata! Usando il file YAML già selezionato: {import_file}")
+                                
+                                # Se c'è una race_day, impostala
+                                if 'race_day' in data['config']:
+                                    race_day_str = data['config']['race_day']
+                                    self.log(f"Trovata data della gara nel YAML: {race_day_str}")
+                                    self.race_day.set(race_day_str)
+                                
+                                # Salva il percorso per riferimento futuro
+                                self.current_yaml_path = import_file
+                                
                                 return import_file
                             else:
                                 self.log(f"Prefisso {name_prefix} non corrisponde a {plan_id_normalized}")
@@ -3482,6 +3556,16 @@ class GarminPlannerGUI(tk.Tk):
                                             self.log(f"Confronto: '{name_prefix}' con '{plan_id_normalized}'")
                                             if plan_id_normalized in name_prefix or name_prefix in plan_id_normalized:
                                                 self.log(f"Corrispondenza trovata! File YAML per il piano '{plan_id}': {file_path}")
+                                                
+                                                # Se c'è una race_day, impostala
+                                                if 'race_day' in data['config']:
+                                                    race_day_str = data['config']['race_day']
+                                                    self.log(f"Trovata data della gara nel YAML: {race_day_str}")
+                                                    self.race_day.set(race_day_str)
+                                                
+                                                # Salva il percorso per riferimento futuro
+                                                self.current_yaml_path = file_path
+                                                
                                                 return file_path
                                             else:
                                                 self.log(f"Prefisso {name_prefix} non corrisponde a {plan_id_normalized}")
@@ -3498,6 +3582,21 @@ class GarminPlannerGUI(tk.Tk):
                 )
                 if file_path:
                     self.log(f"File YAML selezionato manualmente: {file_path}")
+                    
+                    # Verifica se contiene race_day
+                    try:
+                        with open(file_path, 'r', encoding='utf-8') as f:
+                            data = yaml.safe_load(f)
+                            if 'config' in data and 'race_day' in data['config']:
+                                race_day_str = data['config']['race_day']
+                                self.log(f"Trovata data della gara nel YAML: {race_day_str}")
+                                self.race_day.set(race_day_str)
+                    except Exception as e:
+                        self.log(f"Errore nella lettura del file {file_path}: {str(e)}")
+                    
+                    # Salva il percorso per riferimento futuro
+                    self.current_yaml_path = file_path
+                    
                     return file_path
             
             self.log(f"Nessun file YAML trovato per il piano '{plan_id}'")
@@ -3506,6 +3605,7 @@ class GarminPlannerGUI(tk.Tk):
         except Exception as e:
             self.log(f"Errore nella ricerca del file YAML: {str(e)}")
             return None
+
 
 
     def _simulate_schedule(self, selected_days):
