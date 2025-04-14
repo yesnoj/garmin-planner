@@ -172,18 +172,15 @@ class GarminPlannerGUI(tk.Tk):
         self.create_login_tab()
 
         # Funzionalità disponibili nella versione BASIC
-        if "basic" in self.features:
-            self.create_import_tab()
-            self.create_export_tab()
+        self.create_import_tab()
+        self.create_export_tab()
 
         # Funzionalità disponibili nella versione PRO
-        if "pro" in self.features:
-            self.create_schedule_tab()
-            self.create_excel_tools_tab()
+        self.create_schedule_tab()
+        self.create_excel_tools_tab()
 
         # Funzionalità disponibile solo nella versione PREMIUM
-        if "premium" in self.features:
-            workout_editor.add_workout_editor_tab(self.notebook, self)
+        workout_editor.add_workout_editor_tab(self.notebook, self)
         
         
         # Crea la tab Log per ultima
@@ -271,17 +268,6 @@ class GarminPlannerGUI(tk.Tk):
         # Pulsante chiudi
         ttk.Button(frame, text="Chiudi", command=dialog.destroy).pack(pady=20)
 
-
-    def check_feature_access(self, feature_name, show_message=True):
-        """Controlla se una feature è accessibile con la licenza corrente"""
-        if feature_name in self.features:
-            return True
-        
-        if show_message:
-            messagebox.showinfo("Funzionalità non disponibile",
-                             f"La funzionalità '{feature_name}' richiede una licenza superiore.\n"
-                             f"È possibile acquistare una licenza per sbloccare tutte le funzionalità.")
-        return False
 
     def initialize_directories(self):
         """
@@ -925,6 +911,40 @@ class GarminPlannerGUI(tk.Tk):
             ttk.Label(license_details, text="Scadenza:").grid(row=2, column=0, sticky=tk.W, padx=5, pady=2)
             expiry_text = expiry_date if expiry_date else "Licenza perpetua"
             ttk.Label(license_details, text=expiry_text).grid(row=2, column=1, sticky=tk.W, padx=5, pady=2)
+            
+            # Dettagli delle funzionalità disponibili in base al tipo di licenza
+            features_details_frame = ttk.LabelFrame(license_frame, text="Funzionalità disponibili")
+            features_details_frame.pack(fill=tk.X, padx=10, pady=10)
+            
+            # Dettaglio delle funzionalità
+            feature_text = "Con la tua licenza attuale hai accesso a:\n\n"
+            
+            # Funzionalità Basic (sempre disponibili se la licenza è valida)
+            feature_text += "✓ BASIC:\n"
+            feature_text += "   • Importazione/esportazione di allenamenti\n\n"
+            
+            # Funzionalità Pro
+            if "pro" in features:
+                feature_text += "✓ PRO:\n"
+                feature_text += "   • Pianificazione di base\n"
+                feature_text += "   • Pianificazione Excel\n\n"
+            else:
+                feature_text += "✗ PRO: (non disponibile con la licenza attuale)\n"
+                feature_text += "   • Pianificazione di base\n"
+                feature_text += "   • Pianificazione Excel\n\n"
+            
+            # Funzionalità Premium
+            if "premium" in features:
+                feature_text += "✓ PREMIUM:\n"
+                feature_text += "   • Conversione EXCEL a YAML\n"
+                feature_text += "   • Editor di allenamenti\n"
+            else:
+                feature_text += "✗ PREMIUM: (non disponibile con la licenza attuale)\n"
+                feature_text += "   • Conversione EXCEL a YAML\n"
+                feature_text += "   • Editor di allenamenti\n"
+            
+            ttk.Label(features_details_frame, text=feature_text, justify=tk.LEFT, wraplength=500).pack(padx=10, pady=10, anchor=tk.W)
+            
         else:
             # Per licenza non attiva, mostrare le informazioni dettagliate 
             # che prima erano mostrate nel popup
@@ -940,10 +960,13 @@ class GarminPlannerGUI(tk.Tk):
             info_text = (
                 "Questo software è disponibile gratuitamente per uso personale ma richiede "
                 "una licenza per l'utilizzo commerciale o in contesti professionali.\n\n"
-                "La versione gratuita include:\n"
-                "• Importazione/esportazione di allenamenti\n"
-                "• Pianificazione di base\n"
-                "• Editor di allenamenti\n\n"
+                "La versione BASIC include:\n"
+                "   • Importazione/esportazione di allenamenti\n"
+                "La versione PRO include:\n"
+                "   • Pianificazione di base e pianificazione Excel\n"
+                "La versione PREMIUM include:\n"
+                "   • Conversione EXCEL a YAML\n"
+                "   • Editor di allenamenti\n\n"
                 "Per informazioni sull'acquisto di una licenza, prochilo.francesco@gmail.com"
             )
             
@@ -960,6 +983,7 @@ class GarminPlannerGUI(tk.Tk):
         # Contatti
         contact_text = "Per supporto e informazioni: prochilo.francesco@gmail.com"
         ttk.Label(footer_frame, text=contact_text).pack()
+
 
     def create_import_tab(self):
         import_frame = ttk.Frame(self.notebook)
@@ -1746,6 +1770,9 @@ class GarminPlannerGUI(tk.Tk):
 
     def schedule_excel_workouts(self):
         """Pianifica le date degli allenamenti nel file Excel"""
+        if not LicenseManager.get_instance().check_feature_access("pro"):
+            return
+
         try:
             # Verifica che sia stato selezionato un file Excel
             excel_file = self.excel_input_file.get()
@@ -2249,7 +2276,7 @@ class GarminPlannerGUI(tk.Tk):
 
     def convert_excel_to_yaml(self):
         """Converte il file Excel in formato YAML"""
-        if not self.check_feature_access("premium"):
+        if not LicenseManager.get_instance().check_feature_access("premium"):
             return
         try:
             # Verifica che il file Excel esista
@@ -2969,6 +2996,9 @@ class GarminPlannerGUI(tk.Tk):
 
     def perform_schedule(self):
         """Handle Schedule button click"""
+        if not LicenseManager.get_instance().check_feature_access("pro"):
+            return
+
         if not self.training_plan.get():
             messagebox.showerror("Errore", "Inserisci l'ID del piano di allenamento")
             return

@@ -5,6 +5,7 @@ import hashlib
 import datetime
 import base64
 import logging
+import tkinter.messagebox as messagebox
 from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
@@ -14,11 +15,47 @@ from . import hardware_id
 SECRET_KEY = b'g4rm1n_p1ann3r_s3cr3t_k3y_2024_v1'
 
 class LicenseManager:
+    _instance = None
+    
+    @classmethod
+    def get_instance(cls, app_dir=None):
+        """
+        Ottiene l'istanza singleton del LicenseManager
+        Se l'istanza non esiste, la crea
+        """
+        if cls._instance is None:
+            if app_dir is None:
+                # Se app_dir non è fornito ma è necessario creare l'istanza
+                # Inizializziamo con valori di default per poi configurarli dopo
+                cls._instance = cls.__new__(cls)
+                cls._instance.app_dir = None
+                cls._instance.license_file = None
+                cls._instance.hwid = None
+                cls._instance.features = []  # Aggiungiamo questo attributo importante
+            else:
+                # Se app_dir è fornito, creiamo l'istanza completa
+                cls._instance = cls(app_dir)
+        return cls._instance
+
     def __init__(self, app_dir):
+        """Inizializza il gestore delle licenze"""
         self.app_dir = app_dir
         self.license_file = os.path.join(app_dir, "license.dat")
         self.hwid = hardware_id.generate_hardware_fingerprint()
+        self.features = []  # Inizializziamo le feature a lista vuota
         logging.debug(f"LicenseManager initialized with hardware ID: {self.hwid}")
+    
+    def initialize(self, app_dir):
+        """
+        Inizializza il gestore delle licenze dopo la creazione
+        Utile quando get_instance() viene chiamato senza parametri
+        """
+        if self.app_dir is None:  # Inizializza solo se non già inizializzato
+            self.app_dir = app_dir
+            self.license_file = os.path.join(app_dir, "license.dat")
+            self.hwid = hardware_id.generate_hardware_fingerprint()
+            logging.debug(f"LicenseManager initialized with hardware ID: {self.hwid}")
+        return self
         
     def _generate_key(self):
         """Genera una chiave di crittografia basata sul secret key"""
@@ -88,6 +125,27 @@ class LicenseManager:
             logging.error(f"Error creating license file: {str(e)}")
             return False
     
+    def set_features(self, features):
+        """
+        Imposta le feature disponibili nella licenza corrente
+        
+        Args:
+            features: Lista di feature abilitate
+        """
+        self.features = features
+        logging.debug(f"Set license features: {features}")
+
+    def check_feature_access(self, feature_name, show_message=True):
+        """Controlla se una feature è accessibile con la licenza corrente"""
+        if feature_name in self.features:
+            return True
+        
+        if show_message:
+            messagebox.showinfo("Funzionalità non disponibile",
+                             f"La funzionalità '{feature_name}' richiede una licenza superiore.\n"
+                             f"È possibile acquistare una licenza per sbloccare tutte le funzionalità.")
+        return False
+
     def validate_license(self):
         """
         Verifica se la licenza è valida per questo hardware
@@ -133,6 +191,10 @@ class LicenseManager:
             # Licenza valida!
             features = license_data.get("features", ["basic"])
             username = license_data.get("username", "")
+            
+            # Salva le feature nell'istanza per facilitare i controlli futuri
+            self.features = features
+            
             logging.info(f"Valid license found with features: {features}")
             return True, "Licenza valida.", features, expiry_date, username
             

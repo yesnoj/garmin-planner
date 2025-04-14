@@ -30,7 +30,7 @@ class LicenseGenerator(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("Garmin Planner License Generator")
-        self.geometry("800x900")
+        self.geometry("800x850")  # Reduced height since we removed the license type
         self.resizable(True, True)
         
         # Set window icon if available
@@ -124,16 +124,6 @@ class LicenseGenerator(tk.Tk):
         ttk.Entry(user_frame, textvariable=self.username_var, width=40).grid(
             row=0, column=1, padx=5, pady=5, sticky=tk.W)
         
-        # License type
-        type_frame = ttk.Frame(info_frame)
-        type_frame.pack(fill=tk.X, pady=5)
-        
-        ttk.Label(type_frame, text="License Type:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-        self.license_type_var = tk.StringVar(value="PRO")
-        ttk.Combobox(type_frame, textvariable=self.license_type_var, 
-                   values=["BASIC", "PRO", "PREMIUM"], state="readonly", width=15).grid(
-            row=0, column=1, padx=5, pady=5, sticky=tk.W)
-        
         # Expiration options
         expiry_frame = ttk.LabelFrame(tab, text="License Expiration", padding="10")
         expiry_frame.pack(fill=tk.X, padx=5, pady=10)
@@ -171,29 +161,24 @@ class LicenseGenerator(tk.Tk):
         features_frame = ttk.LabelFrame(tab, text="Enabled Features", padding="10")
         features_frame.pack(fill=tk.X, padx=5, pady=10)
         
+        # Feature description
+        ttk.Label(features_frame, text="Select the features to enable in this license:", 
+                 wraplength=550, font=("", 9, "italic")).grid(
+            row=0, column=0, columnspan=3, padx=5, pady=5, sticky=tk.W)
+        
         # Feature checkboxes
         self.feature_basic = tk.BooleanVar(value=True)
-        ttk.Checkbutton(features_frame, text="Basic features", 
+        ttk.Checkbutton(features_frame, text="Basic features (Import/Export)", 
                        variable=self.feature_basic, state="disabled").grid(
-            row=0, column=0, padx=5, pady=5, sticky=tk.W)
-        
-        self.feature_pro = tk.BooleanVar(value=True)
-        ttk.Checkbutton(features_frame, text="Pro features", 
-                       variable=self.feature_pro).grid(
-            row=0, column=1, padx=5, pady=5, sticky=tk.W)
-        
-        self.feature_excel = tk.BooleanVar(value=True)
-        ttk.Checkbutton(features_frame, text="Excel tools", 
-                       variable=self.feature_excel).grid(
             row=1, column=0, padx=5, pady=5, sticky=tk.W)
         
-        self.feature_scheduling = tk.BooleanVar(value=True)
-        ttk.Checkbutton(features_frame, text="Scheduling", 
-                       variable=self.feature_scheduling).grid(
+        self.feature_pro = tk.BooleanVar(value=True)
+        ttk.Checkbutton(features_frame, text="Pro features (Schedule/Excel Tools)", 
+                       variable=self.feature_pro).grid(
             row=1, column=1, padx=5, pady=5, sticky=tk.W)
         
         self.feature_premium = tk.BooleanVar(value=False)
-        ttk.Checkbutton(features_frame, text="Premium features", 
+        ttk.Checkbutton(features_frame, text="Premium features (Workout Editor)", 
                        variable=self.feature_premium).grid(
             row=2, column=0, padx=5, pady=5, sticky=tk.W)
         
@@ -217,7 +202,7 @@ class LicenseGenerator(tk.Tk):
         button_frame.pack(fill=tk.X, pady=20)
         
         ttk.Button(button_frame, text="Generate License", command=self.generate_license,
-                 style="Accent.TButton", width=20).pack(side=tk.RIGHT, padx=5)
+                 width=20).pack(side=tk.RIGHT, padx=5)
         ttk.Button(button_frame, text="Preview License", command=self.preview_license,
                  width=20).pack(side=tk.RIGHT, padx=5)
     
@@ -277,11 +262,11 @@ class LicenseGenerator(tk.Tk):
         
         # CSV format info
         format_text = """CSV file format:
-hardware_id,username,license_type,expiry_date,features
+hardware_id,username,expiry_date,features
 
 Example:
-a1b2c3d4e5f6g7h8,John Doe,PRO,2025-12-31,basic;pro;excel_tools;scheduling
-i9j0k1l2m3n4o5p6,Jane Smith,PREMIUM,,basic;pro;excel_tools;scheduling;premium
+a1b2c3d4e5f6g7h8,John Doe,2025-12-31,basic;pro
+i9j0k1l2m3n4o5p6,Jane Smith,,basic;pro;premium
         """
         ttk.Label(input_frame, text=format_text, justify=tk.LEFT).grid(
             row=1, column=0, columnspan=3, padx=5, pady=5, sticky=tk.W)
@@ -302,7 +287,7 @@ i9j0k1l2m3n4o5p6,Jane Smith,PREMIUM,,basic;pro;excel_tools;scheduling;premium
         self.filename_pattern_var = tk.StringVar(value="license_{username}.dat")
         ttk.Entry(output_frame, textvariable=self.filename_pattern_var, width=40).grid(
             row=1, column=1, padx=5, pady=5, sticky=tk.W)
-        ttk.Label(output_frame, text="{username}, {license_type}, and {hardware_id} will be replaced").grid(
+        ttk.Label(output_frame, text="{username} and {hardware_id} will be replaced").grid(
             row=2, column=0, columnspan=3, padx=5, pady=0, sticky=tk.W)
         
         # Log area
@@ -356,7 +341,6 @@ i9j0k1l2m3n4o5p6,Jane Smith,PREMIUM,,basic;pro;excel_tools;scheduling;premium
     
     def generate_license_key(self):
         """Generate a unique license key"""
-        license_type = self.license_type_var.get()
         current_year = datetime.now().year
         
         # Generate a unique identifier
@@ -365,8 +349,8 @@ i9j0k1l2m3n4o5p6,Jane Smith,PREMIUM,,basic;pro;excel_tools;scheduling;premium
         # Create a random code part
         random_code = os.urandom(4).hex().upper()
         
-        # Format: GPLNR-XXXX-YYYY-TYPE-RANDOMCODE
-        license_key = f"GPLNR-{unique_id}-{current_year}-{license_type}-{random_code}"
+        # Format: GPLNR-XXXX-YYYY-RANDOMCODE
+        license_key = f"GPLNR-{unique_id}-{current_year}-{random_code}"
         
         self.license_key_var.set(license_key)
         self.status_var.set(f"Generated license key: {license_key}")
@@ -400,13 +384,7 @@ i9j0k1l2m3n4o5p6,Jane Smith,PREMIUM,,basic;pro;excel_tools;scheduling;premium
         
         if self.feature_pro.get():
             features.append("pro")
-        
-        if self.feature_excel.get():
-            features.append("excel_tools")
-        
-        if self.feature_scheduling.get():
-            features.append("scheduling")
-        
+                
         if self.feature_premium.get():
             features.append("premium")
         
@@ -770,24 +748,23 @@ i9j0k1l2m3n4o5p6,Jane Smith,PREMIUM,,basic;pro;excel_tools;scheduling;premium
                 
                 for row_idx, row in enumerate(reader, 1):
                     try:
-                        if len(row) < 3:
+                        if len(row) < 2:  # At minimum need hardware_id and username
                             self.log_to_ui(f"Row {row_idx}: Insufficient columns, skipping")
                             error_count += 1
                             continue
                         
                         hardware_id = row[0].strip()
                         username = row[1].strip() if len(row) > 1 else ""
-                        license_type = row[2].strip() if len(row) > 2 else "BASIC"
-                        expiry_date = row[3].strip() if len(row) > 3 else None
+                        expiry_date = row[2].strip() if len(row) > 2 else None
                         
                         # Parse features
                         features = ["basic"]
-                        if len(row) > 4 and row[4].strip():
-                            additional_features = [f.strip() for f in row[4].split(';')]
+                        if len(row) > 3 and row[3].strip():
+                            additional_features = [f.strip() for f in row[3].split(';')]
                             features.extend([f for f in additional_features if f])
                         
-                        # Generate license key if not in CSV
-                        license_key = f"GPLNR-{os.urandom(4).hex().upper()}-{datetime.now().year}-{license_type}-{os.urandom(4).hex().upper()}"
+                        # Generate license key
+                        license_key = f"GPLNR-{os.urandom(4).hex().upper()}-{datetime.now().year}-{os.urandom(4).hex().upper()}"
                         
                         # Create license data
                         license_data = {
@@ -803,7 +780,6 @@ i9j0k1l2m3n4o5p6,Jane Smith,PREMIUM,,basic;pro;excel_tools;scheduling;premium
                         safe_username = ''.join(c if c.isalnum() else '_' for c in username)
                         filename = filename_pattern.format(
                             username=safe_username,
-                            license_type=license_type.lower(),
                             hardware_id=hardware_id
                         )
                         
@@ -857,13 +833,13 @@ i9j0k1l2m3n4o5p6,Jane Smith,PREMIUM,,basic;pro;excel_tools;scheduling;premium
             
             with open(output_file, 'w', newline='', encoding='utf-8') as f:
                 writer = csv.writer(f)
-                writer.writerow(["hardware_id", "username", "license_type", "expiry_date", "features"])
-                writer.writerow(["abcdef1234567890", "John Doe", "PRO", 
+                writer.writerow(["hardware_id", "username", "expiry_date", "features"])
+                writer.writerow(["abcdef1234567890", "John Doe", 
                                (datetime.now() + timedelta(days=365)).strftime("%Y-%m-%d"), 
-                               "basic;pro;excel_tools;scheduling"])
-                writer.writerow(["fedcba0987654321", "Jane Smith", "PREMIUM", 
-                               "", "basic;pro;excel_tools;scheduling;premium"])
-                writer.writerow(["12345abcdef67890", "Bob Johnson", "BASIC", 
+                               "basic;pro"])
+                writer.writerow(["fedcba0987654321", "Jane Smith", 
+                               "", "basic;pro;premium"])
+                writer.writerow(["12345abcdef67890", "Bob Johnson", 
                                (datetime.now() + timedelta(days=30)).strftime("%Y-%m-%d"), 
                                "basic"])
             

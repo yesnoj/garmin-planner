@@ -6,6 +6,7 @@ import yaml
 import re
 import copy
 from functools import partial
+from planner.license_manager import LicenseManager
 
 # Colori moderni (ispirati a Garmin Connect)
 COLORS = {
@@ -1983,6 +1984,8 @@ def add_workout_editor_tab(notebook, parent):
     
     def save_workouts_to_file():
         """Save workouts to a YAML file"""
+        if not LicenseManager.get_instance().check_feature_access("premium"):
+            return
         if not workouts:
             messagebox.showwarning("Attenzione", "Nessun allenamento da salvare", parent=parent)
             return
