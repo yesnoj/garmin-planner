@@ -2039,323 +2039,557 @@ class GarminPlannerGUI(tk.Tk):
             self.log(traceback.format_exc())
             messagebox.showerror("Errore", f"Si è verificato un errore:\n{str(e)}")
 
+    
     def create_custom_excel_plan(self, output_file, sessions_per_week):
-        """
-        Crea un file Excel personalizzato con il numero corretto di sessioni per settimana.
-        
-        Args:
-            output_file: Percorso del file Excel di output
-            sessions_per_week: Numero di sessioni per settimana (giorni selezionati)
-            
-        Returns:
-            Percorso del file Excel creato
-        """
-        try:
-            import openpyxl
-            from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-            from openpyxl.utils import get_column_letter
-            import random
-            import string
-            
-            self.log(f"Creazione piano Excel con {sessions_per_week} sessioni per settimana")
-            
-            wb = openpyxl.Workbook()
-            
-            # Define a thin border style
-            thin_border = Border(
-                left=Side(style='thin'),
-                right=Side(style='thin'),
-                top=Side(style='thin'),
-                bottom=Side(style='thin')
-            )
+       """
+       Crea un file Excel personalizzato con il numero corretto di sessioni per settimana,
+       includendo esempi completi di tutte le possibili definizioni dei campi.
+       
+       Args:
+           output_file: Percorso del file Excel di output
+           sessions_per_week: Numero di sessioni per settimana (giorni selezionati)
+           
+       Returns:
+           Percorso del file Excel creato
+       """
+       try:
+           import openpyxl
+           from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+           from openpyxl.utils import get_column_letter
+           import random
+           import string
+           
+           self.log(f"Creazione piano Excel con {sessions_per_week} sessioni per settimana")
+           
+           wb = openpyxl.Workbook()
+           
+           # Define a thin border style
+           thin_border = Border(
+               left=Side(style='thin'),
+               right=Side(style='thin'),
+               top=Side(style='thin'),
+               bottom=Side(style='thin')
+           )
+           
+           # Definisci stili per commenti ed esempi
+           comment_font = Font(italic=True, color="606060")
+           example_fill = PatternFill(start_color="EBF1DE", end_color="EBF1DE", fill_type="solid")
 
-            random_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-            prefix = f"MYRUN_{random_suffix}_"
-            
-            # Config sheet
-            config_sheet = wb.active
-            config_sheet.title = 'Config'
-            
-            # Config sheet headers
-            config_sheet['A1'] = 'Parameter'
-            config_sheet['B1'] = 'Value'
-            config_sheet['C1'] = 'Slower'
-            config_sheet['D1'] = 'HR Up'
-            config_sheet['E1'] = 'HR Down'
-            
-            # Config sheet values
-            config_sheet['A2'] = 'name_prefix'
-            config_sheet['B2'] = prefix
-            
-            config_sheet['A3'] = 'margins'
-            config_sheet['B3'] = '0:03'  # faster
-            config_sheet['C3'] = '0:03'  # slower
-            config_sheet['D3'] = 5       # hr_up
-            config_sheet['E3'] = 5       # hr_down
-            
-            # Aggiungi la race_day nel foglio Config
-            config_sheet['A4'] = 'race_day'
-            config_sheet['B4'] = datetime.now().strftime("%Y-%m-%d")
-            
-            # Aggiungi i giorni preferiti nel foglio Config
-            selected_days = [i for i, var in enumerate(self.day_selections) if var.get() == 1]
-            config_sheet['A5'] = 'preferred_days'
-            config_sheet['B5'] = str(selected_days)
-            
-            # Format header
-            header_fill = PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid")
-            for col in ['A', 'B', 'C', 'D', 'E']:
-                config_sheet[f'{col}1'].font = Font(bold=True)
-                config_sheet[f'{col}1'].fill = header_fill
-            
-            # Paces sheet (Z1-Z5 zones)
-            paces_sheet = wb.create_sheet(title='Paces')
-            
-            paces_sheet['A1'] = 'Name'
-            paces_sheet['B1'] = 'Value'
-            
-            paces_sheet['A2'] = 'Z1'
-            paces_sheet['B2'] = '6:30'
-            
-            paces_sheet['A3'] = 'Z2'
-            paces_sheet['B3'] = '6:20'
-            
-            paces_sheet['A4'] = 'Z3'
-            paces_sheet['B4'] = '6:00'
-            
-            paces_sheet['A5'] = 'Z4'
-            paces_sheet['B5'] = '5:20'
-            
-            paces_sheet['A6'] = 'Z5'
-            paces_sheet['B6'] = '4:50'
-            
-            # Format header
-            for col in ['A', 'B']:
-                paces_sheet[f'{col}1'].font = Font(bold=True)
-                paces_sheet[f'{col}1'].fill = header_fill
-            
-            # HeartRates sheet (Z1-Z5 zones)
-            hr_sheet = wb.create_sheet(title='HeartRates')
-            
-            hr_sheet['A1'] = 'Name'
-            hr_sheet['B1'] = 'Value'
-            
-            # Example of using max_hr with percentages
-            hr_sheet['A2'] = 'max_hr'
-            hr_sheet['B2'] = 198  # Use an integer instead of a string
-            
-            hr_sheet['A3'] = 'Z1'
-            hr_sheet['B3'] = '62-76% max_hr'
-            
-            hr_sheet['A4'] = 'Z2'
-            hr_sheet['B4'] = '76-85% max_hr'
-            
-            hr_sheet['A5'] = 'Z3'
-            hr_sheet['B5'] = '85-91% max_hr'
-            
-            hr_sheet['A6'] = 'Z4'
-            hr_sheet['B6'] = '91-95% max_hr'
-            
-            hr_sheet['A7'] = 'Z5'
-            hr_sheet['B7'] = '95-100% max_hr'
-            
-            # Format header
-            for col in ['A', 'B']:
-                hr_sheet[f'{col}1'].font = Font(bold=True)
-                hr_sheet[f'{col}1'].fill = header_fill
-            
-            # Single Workouts sheet for all workouts
-            workouts_sheet = wb.create_sheet(title='Workouts')
-            
-            # Add a row for the athlete's name
-            # Create a merged cell for the athlete's name
-            workouts_sheet.merge_cells('A1:E1')
-            athlete_cell = workouts_sheet['A1']
-            athlete_cell.value = "Atleta: "  # Prepared to be filled in
-            athlete_cell.alignment = Alignment(horizontal='center', vertical='center')
-            athlete_cell.font = Font(size=12, bold=True)
-            # Add border to the athlete cell
-            athlete_cell.border = thin_border
+           random_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+           prefix = f"MYRUN_{random_suffix}_"
+           
+           # 1. Config sheet - già attivo come primo foglio
+           config_sheet = wb.active
+           config_sheet.title = 'Config'
+           
+           # Config sheet headers
+           config_sheet['A1'] = 'Parameter'
+           config_sheet['B1'] = 'Value'
+           config_sheet['C1'] = 'Slower'
+           config_sheet['D1'] = 'HR Up'
+           config_sheet['E1'] = 'HR Down'
+           
+           # Format header
+           header_fill = PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid")
+           for col in ['A', 'B', 'C', 'D', 'E']:
+               config_sheet[f'{col}1'].font = Font(bold=True)
+               config_sheet[f'{col}1'].fill = header_fill
+               config_sheet[f'{col}1'].border = thin_border
+           
+           # Config sheet values
+           config_sheet['A2'] = 'name_prefix'
+           config_sheet['B2'] = prefix
+           config_sheet['A2'].comment = openpyxl.comments.Comment(
+               "Prefisso per i nomi degli allenamenti, usato per identificare il piano", "Garmin Planner")
+           
+           config_sheet['A3'] = 'margins'
+           config_sheet['B3'] = '0:03'  # faster
+           config_sheet['C3'] = '0:03'  # slower
+           config_sheet['D3'] = 5       # hr_up
+           config_sheet['E3'] = 5       # hr_down
+           config_sheet['A3'].comment = openpyxl.comments.Comment(
+               "Margini di tolleranza: faster, slower (in secondi), HR up, HR down (in battiti)", "Garmin Planner")
+           
+           # Aggiungi la race_day nel foglio Config
+           config_sheet['A4'] = 'race_day'
+           config_sheet['B4'] = datetime.now().strftime("%Y-%m-%d")
+           config_sheet['A4'].comment = openpyxl.comments.Comment(
+               "Data della gara nel formato YYYY-MM-DD", "Garmin Planner")
+           
+           # Aggiungi i giorni preferiti nel foglio Config
+           selected_days = [i for i, var in enumerate(self.day_selections) if var.get() == 1]
+           config_sheet['A5'] = 'preferred_days'
+           config_sheet['B5'] = str(selected_days)
+           config_sheet['A5'].comment = openpyxl.comments.Comment(
+               "Giorni preferiti: [0=Lunedì, 1=Martedì, ..., 6=Domenica]", "Garmin Planner")
+           
+           # Applica bordi a tutte le celle di dati
+           for row in range(2, 6):
+               for col in ['A', 'B', 'C', 'D', 'E']:
+                   if config_sheet[f'{col}{row}'].value is not None:
+                       config_sheet[f'{col}{row}'].border = thin_border
+           
+           # 2. Paces sheet
+           paces_sheet = wb.create_sheet(title='Paces')
+           
+           paces_sheet['A1'] = 'Name'
+           paces_sheet['B1'] = 'Value'
+           
+           # Format header
+           for col in ['A', 'B']:
+               paces_sheet[f'{col}1'].font = Font(bold=True)
+               paces_sheet[f'{col}1'].fill = header_fill
+               paces_sheet[f'{col}1'].border = thin_border
+               
+           # Aggiunta di una riga di descrizione che sarà ignorata dalla conversione (inizia con #)
+           paces_sheet.merge_cells('A2:B2')
+           paces_sheet['A2'] = '# Definizioni dei ritmi di corsa - modifica secondo le tue necessità'
+           paces_sheet['A2'].font = comment_font
+           
+           # Zone standard di passo
+           pace_zones = [
+               ('Z1', '6:30'),
+               ('Z2', '6:00'),
+               ('Z3', '5:30'),
+               ('Z4', '5:00'),
+               ('Z5', '4:30'),
+               # Aggiungi solo alcune zone avanzate che non creano problemi per l'importazione
+               ('race_pace', '5:10'),  # Ritmo gara
+               ('threshold', '5:20-5:10'),  # Intervallo di ritmi
+               ('marathon', '5:30')  # Per maratona
+           ]
+           
+           # Aggiunta zone standard
+           for i, (name, value) in enumerate(pace_zones, 3):  # Inizia dalla riga 3
+               paces_sheet[f'A{i}'] = name
+               cell = paces_sheet[f'B{i}']
+               cell.value = value
+               cell.number_format = '@'  # Il formato '@' indica "Testo" in Excel
+               cell.border = thin_border
+               paces_sheet[f'A{i}'].border = thin_border
+           
+           # 3. HeartRates sheet
+           hr_sheet = wb.create_sheet(title='HeartRates')
+           
+           hr_sheet['A1'] = 'Name'
+           hr_sheet['B1'] = 'Value'
+           
+           # Format header
+           for col in ['A', 'B']:
+               hr_sheet[f'{col}1'].font = Font(bold=True)
+               hr_sheet[f'{col}1'].fill = header_fill
+               hr_sheet[f'{col}1'].border = thin_border
+               
+           # Aggiungi una riga di descrizione che sarà ignorata dalla conversione (inizia con #)
+           hr_sheet.merge_cells('A2:B2')
+           hr_sheet['A2'] = '# Definizioni delle zone di frequenza cardiaca - modifica secondo le tue necessità'
+           hr_sheet['A2'].font = comment_font
+           
+           # Definizione max_hr e zone standard con _HR in suffisso per distinguerle dalle zone di passo
+           hr_zones = [
+               ('max_hr', '180'),
+               ('Z1_HR', '62-76% max_hr'),
+               ('Z2_HR', '76-85% max_hr'),
+               ('Z3_HR', '85-91% max_hr'),
+               ('Z4_HR', '91-95% max_hr'),
+               ('Z5_HR', '95-100% max_hr')
+           ]
+           
+           # Aggiungi zone standard
+           for i, (name, value) in enumerate(hr_zones, 3):  # Inizia dalla riga 3
+               hr_sheet[f'A{i}'] = name
+               hr_sheet[f'B{i}'] = value
+               hr_sheet[f'A{i}'].border = thin_border
+               hr_sheet[f'B{i}'].border = thin_border
+           
+           # 4. Workouts sheet
+           workouts_sheet = wb.create_sheet(title='Workouts')
+           
+           # Add a row for the athlete's name
+           # Create a merged cell for the athlete's name
+           workouts_sheet.merge_cells('A1:E1')
+           athlete_cell = workouts_sheet['A1']
+           athlete_cell.value = "Atleta: Mario Rossi"  # Esempio di nome atleta
+           athlete_cell.alignment = Alignment(horizontal='center', vertical='center')
+           athlete_cell.font = Font(size=12, bold=True)
+           athlete_cell.border = thin_border
 
-            # Headers in row 2
-            workouts_sheet['A2'] = 'Week'
-            workouts_sheet['B2'] = 'Date'
-            workouts_sheet['C2'] = 'Session'
-            workouts_sheet['D2'] = 'Description'
-            workouts_sheet['E2'] = 'Steps'
+           # Headers in row 2
+           workouts_sheet['A2'] = 'Week'
+           workouts_sheet['B2'] = 'Date'
+           workouts_sheet['C2'] = 'Session'
+           workouts_sheet['D2'] = 'Description'
+           workouts_sheet['E2'] = 'Steps'
 
-            # Format header
-            for col in ['A', 'B', 'C', 'D', 'E']:
-                cell = workouts_sheet[f'{col}2']
-                cell.font = Font(bold=True)
-                cell.fill = header_fill
-                cell.border = thin_border  # Add border to all header cells
-            
-            # Definisci tipi di allenamento basati sul numero di sessioni per settimana
-            if sessions_per_week == 1:
-                # Piano minimo: solo una sessione lunga a settimana
-                workout_types = [
-                    "Long slow run"
-                ]
-            elif sessions_per_week == 2:
-                # Piano base: una sessione lunga e una di intervalli
-                workout_types = [
-                    "Interval training",
-                    "Long slow run"
-                ]
-            elif sessions_per_week == 3:
-                # Piano intermedio: più varietà
-                workout_types = [
-                    "Easy run",
-                    "Interval training",
-                    "Long slow run"
-                ]
-            elif sessions_per_week == 4:
-                # Piano avanzato: aggiunta di un allenamento di recupero
-                workout_types = [
-                    "Recovery run",
-                    "Tempo run",
-                    "Interval training",
-                    "Long slow run"
-                ]
-            elif sessions_per_week == 5:
-                # Piano molto avanzato
-                workout_types = [
-                    "Easy run",
-                    "Recovery run", 
-                    "Tempo run",
-                    "Interval training",
-                    "Long slow run"
-                ]
-            elif sessions_per_week >= 6:
-                # Piano professionale
-                workout_types = [
-                    "Easy run",
-                    "Recovery run", 
-                    "Tempo run",
-                    "Interval training",
-                    "Hill repeats",
-                    "Long slow run"
-                ]
-                # Aggiungi sessioni aggiuntive se necessario
-                while len(workout_types) < sessions_per_week:
-                    workout_types.append("Extra session")
-            
-            # Definisci dettagli degli allenamenti
-            workout_details = {
-                "Easy run": {
-                    "steps": "warmup: 10min @ Z1\ninterval: 30min @ Z2\ncooldown: 5min @ Z1"
-                },
-                "Recovery run": {
-                    "steps": "interval: 30min @ Z1"
-                },
-                "Tempo run": {
-                    "steps": "warmup: 15min @ Z1\ninterval: 20min @ Z4\ncooldown: 10min @ Z1"
-                },
-                "Interval training": {
-                    "steps": "warmup: 15min @ Z1\nrepeat 5:\n  interval: 400m @ Z5\n  recovery: 2min @ Z1\ncooldown: 10min @ Z1"
-                },
-                "Hill repeats": {
-                    "steps": "warmup: 15min @ Z1\nrepeat 6:\n  interval: 1min @ Z5\n  recovery: 2min @ Z1\ncooldown: 10min @ Z1"
-                },
-                "Long slow run": {
-                    "steps": "warmup: 10min @ Z1\ninterval: 45min @ Z2\ncooldown: 5min @ Z1"
-                },
-                "Extra session": {
-                    "steps": "warmup: 10min @ Z1\ninterval: 20min @ Z2\ncooldown: 5min @ Z1"
-                }
-            }
-            
-            # Definisci durate progressive per ciascuna settimana del piano
-            # Per semplicità, generiamo un piano di 8 settimane
-            weeks = 3
-            
-            # Define alternating colors for weeks
-            week_colors = [
-                "FFF2CC",  # Light yellow
-                "DAEEF3",  # Light blue
-                "E2EFDA",  # Light green
-                "FCE4D6",  # Light orange
-                "EAD1DC",  # Light pink
-                "D9D9D9",  # Light gray
-            ]
-            
-            # Aggiungi allenamenti al foglio
-            row_index = 3  # Start from row 3 (after header and athlete row)
-            
-            for week in range(1, weeks + 1):
-                # Determina il colore per questa settimana
-                color_index = (week - 1) % len(week_colors)
-                row_fill = PatternFill(start_color=week_colors[color_index], 
-                                      end_color=week_colors[color_index], 
-                                      fill_type="solid")
-                
-                # Aggiungi ciascuna sessione per questa settimana
-                for session in range(1, sessions_per_week + 1):
-                    # Usa l'indice corretto in base al numero di sessioni
-                    workout_type = workout_types[(session - 1) % len(workout_types)]
-                    
-                    # Se è l'ultima settimana e la prima sessione, rendiamola la gara
-                    if week == weeks and session == 1:
-                        workout_type = "Race day"
-                        workout_details["Race day"] = {
-                            "steps": "warmup: 10min @ Z2\ninterval: 3000m in 13:48\ncooldown: 10min @ Z1"
-                        }
-                    
-                    # Crea la riga per questa sessione
-                    workouts_sheet[f'A{row_index}'] = week
-                    workouts_sheet[f'B{row_index}'] = None  # La data verrà impostata successivamente
-                    workouts_sheet[f'C{row_index}'] = session
-                    workouts_sheet[f'D{row_index}'] = workout_type
-                    workouts_sheet[f'E{row_index}'] = workout_details[workout_type]["steps"]
-                    
-                    # Applica lo stile a tutte le celle della riga
-                    for col in ['A', 'B', 'C', 'D', 'E']:
-                        cell = workouts_sheet[f'{col}{row_index}']
-                        cell.fill = row_fill
-                        cell.border = thin_border
-                        cell.alignment = Alignment(wrapText=True, vertical='top')
-                    
-                    # Calcola altezza appropriata per il contenuto
-                    steps_text = workout_details[workout_type]["steps"]
-                    num_lines = 1 + steps_text.count('\n') + steps_text.count(';')
-                    
-                    # Considera indentazione per i ripetuti
-                    if 'repeat' in steps_text and '\n' in steps_text:
-                        # Conta le righe indentate dopo un repeat
-                        lines_after_repeat = steps_text.split('repeat')[1].count('\n')
-                        if lines_after_repeat > 0:
-                            num_lines += lines_after_repeat - 1  # -1 perché la riga con repeat è già contata
-                    
-                    # Imposta altezza minima più altezza per ogni riga di testo (circa 15 punti per riga)
-                    row_height = max(20, 15 * num_lines)  # Altezza minima aumentata
-                    workouts_sheet.row_dimensions[row_index].height = row_height
-                    
-                    # Passa alla prossima riga
-                    row_index += 1
-            
-            # Set column widths
-            workouts_sheet.column_dimensions['A'].width = 10  # Week
-            workouts_sheet.column_dimensions['B'].width = 15  # Date
-            workouts_sheet.column_dimensions['C'].width = 10  # Session
-            workouts_sheet.column_dimensions['D'].width = 25  # Description
-            workouts_sheet.column_dimensions['E'].width = 60  # Steps
-            
-            # Auto-adjust column widths in Config, Paces, and HR sheets
-            self.auto_adjust_column_widths(config_sheet)
-            self.auto_adjust_column_widths(paces_sheet)
-            self.auto_adjust_column_widths(hr_sheet)
-            
-            # Save the file
-            wb.save(output_file)
-            self.log(f"File Excel creato con {sessions_per_week} sessioni per settimana")
-            return output_file
-            
-        except Exception as e:
-            self.log(f"Errore nella creazione del file Excel: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            raise
+           # Format header
+           for col in ['A', 'B', 'C', 'D', 'E']:
+               cell = workouts_sheet[f'{col}2']
+               cell.font = Font(bold=True)
+               cell.fill = header_fill
+               cell.border = thin_border  # Add border to all header cells
+           
+           # Definisci tipi di allenamento basati sul numero di sessioni per settimana
+           if sessions_per_week == 1:
+               # Piano minimo: solo una sessione lunga a settimana
+               workout_types = [
+                   "Long slow run"
+               ]
+           elif sessions_per_week == 2:
+               # Piano base: una sessione lunga e una di intervalli
+               workout_types = [
+                   "Interval training",
+                   "Long slow run"
+               ]
+           elif sessions_per_week == 3:
+               # Piano intermedio: più varietà
+               workout_types = [
+                   "Easy run",
+                   "Interval training",
+                   "Long slow run"
+               ]
+           elif sessions_per_week == 4:
+               # Piano avanzato: aggiunta di un allenamento di recupero
+               workout_types = [
+                   "Recovery run",
+                   "Tempo run",
+                   "Interval training",
+                   "Long slow run"
+               ]
+           elif sessions_per_week == 5:
+               # Piano molto avanzato
+               workout_types = [
+                   "Easy run",
+                   "Recovery run", 
+                   "Tempo run",
+                   "Interval training",
+                   "Long slow run"
+               ]
+           elif sessions_per_week >= 6:
+               # Piano professionale
+               workout_types = [
+                   "Easy run",
+                   "Recovery run", 
+                   "Tempo run",
+                   "Interval training",
+                   "Hill repeats",
+                   "Long slow run"
+               ]
+               # Aggiungi sessioni aggiuntive se necessario
+               while len(workout_types) < sessions_per_week:
+                   workout_types.append("Extra session")
+           
+           # Definisci dettagli degli allenamenti con distinzione chiara tra zone di passo e HR
+           workout_details = {
+               "Easy run": {
+                   "steps": "warmup: 10min @ Z1_HR\ninterval: 30min @ Z2\ncooldown: 5min @ Z1_HR"
+               },
+               "Recovery run": {
+                   "steps": "interval: 30min @ Z1_HR"
+               },
+               "Tempo run": {
+                   "steps": "warmup: 15min @ Z1_HR\ninterval: 20min @ Z4\ncooldown: 10min @ Z1_HR"
+               },
+               "Interval training": {
+                   "steps": "warmup: 15min @ Z1_HR\nrepeat 5:\n  interval: 400m @ Z5\n  recovery: 2min @ Z1_HR\ncooldown: 10min @ Z1_HR"
+               },
+               "Hill repeats": {
+                   "steps": "warmup: 15min @ Z1_HR\nrepeat 6:\n  interval: 1min @ Z5 -- Salita\n  recovery: 2min @ Z1_HR -- Discesa\ncooldown: 10min @ Z1_HR"
+               },
+               "Long slow run": {
+                   "steps": "warmup: 10min @ Z1_HR\ninterval: 45min @ Z2\ncooldown: 5min @ Z1_HR"
+               },
+               "Extra session": {
+                   "steps": "warmup: 10min @ Z1_HR\ninterval: 20min @ Z2\ncooldown: 5min @ Z1_HR"
+               },
+               "Race day": {
+                   "steps": "warmup: 10min @ Z1_HR\ninterval: 3000m @ race_pace\ncooldown: 10min @ Z1_HR"
+               }
+           }
+           
+           # Define alternating colors for weeks
+           week_colors = [
+               "FFF2CC",  # Light yellow
+               "DAEEF3",  # Light blue
+               "E2EFDA",  # Light green
+               "FCE4D6",  # Light orange
+               "EAD1DC",  # Light pink
+               "D9D9D9",  # Light gray
+           ]
+           
+           # Aggiungi allenamenti al foglio
+           row_index = 3  # Start from row 3 (after header and athlete row)
+           
+           # Generiamo 3 settimane di esempio
+           for week in range(1, 4):
+               # Determina il colore per questa settimana
+               color_index = (week - 1) % len(week_colors)
+               row_fill = PatternFill(start_color=week_colors[color_index], 
+                                     end_color=week_colors[color_index], 
+                                     fill_type="solid")
+               
+               # Aggiungi ciascuna sessione per questa settimana
+               for session in range(1, min(sessions_per_week, 3) + 1):  # Limitiamo a 3 sessioni per chiarezza
+                   # Usa l'indice corretto in base al numero di sessioni
+                   workout_type = workout_types[(session - 1) % len(workout_types)]
+                   
+                   # Se è l'ultima settimana e la prima sessione, rendiamola la gara
+                   if week == 3 and session == 1:
+                       workout_type = "Race day"
+                   
+                   # Crea la riga per questa sessione
+                   workouts_sheet[f'A{row_index}'] = week
+                   workouts_sheet[f'B{row_index}'] = None  # La data verrà impostata successivamente
+                   workouts_sheet[f'C{row_index}'] = session
+                   workouts_sheet[f'D{row_index}'] = workout_type
+                   workouts_sheet[f'E{row_index}'] = workout_details[workout_type]["steps"]
+                   
+                   # Applica lo stile a tutte le celle della riga
+                   for col in ['A', 'B', 'C', 'D', 'E']:
+                       cell = workouts_sheet[f'{col}{row_index}']
+                       cell.fill = row_fill
+                       cell.border = thin_border
+                       cell.alignment = Alignment(wrapText=True, vertical='top')
+                   
+                   # Calcola altezza appropriata per il contenuto
+                   steps_text = workout_details[workout_type]["steps"]
+                   num_lines = 1 + steps_text.count('\n') + steps_text.count(';')
+                   
+                   # Considera indentazione per i ripetuti
+                   if 'repeat' in steps_text and '\n' in steps_text:
+                       # Conta le righe indentate dopo un repeat
+                       lines_after_repeat = steps_text.split('repeat')[1].count('\n')
+                       if lines_after_repeat > 0:
+                           num_lines += lines_after_repeat - 1  # -1 perché la riga con repeat è già contata
+                   
+                   # Imposta altezza minima più altezza per ogni riga di testo (circa 15 punti per riga)
+                   row_height = max(20, 15 * num_lines)  # Altezza minima aumentata
+                   workouts_sheet.row_dimensions[row_index].height = row_height
+                   
+                   # Passa alla prossima riga
+                   row_index += 1
+                   
+           # Aggiungi una nota in fondo che rinvia al foglio degli esempi
+           workouts_sheet.merge_cells(f'A{row_index}:E{row_index}')
+           workouts_sheet[f'A{row_index}'] = '# Vedi il foglio "Examples" per esempi di sintassi avanzata'
+           workouts_sheet[f'A{row_index}'].font = comment_font
+           
+           # 5. Examples sheet (Questo foglio sarà completamente ignorato dalla conversione YAML)
+           examples_sheet = wb.create_sheet(title='Examples')
+           
+           # Intestazioni per il foglio degli esempi (formato non corrispondente a un formato riconosciuto)
+           examples_sheet['A1'] = 'Tipo di Esempio'
+           examples_sheet['B1'] = 'Descrizione'
+           examples_sheet['C1'] = 'Passi (Steps)'
+           
+           # Format header
+           for col in ['A', 'B', 'C']:
+               examples_sheet[f'{col}1'].font = Font(bold=True)
+               examples_sheet[f'{col}1'].fill = header_fill
+               examples_sheet[f'{col}1'].border = thin_border
+           
+           # Aggiunta di una riga di descrizione
+           examples_sheet.merge_cells('A2:C2')
+           examples_sheet['A2'] = '# ESEMPI DI SINTASSI - Questo foglio è solo per scopo informativo e non viene importato'
+           examples_sheet['A2'].font = comment_font
+           
+           # Esempi di sintassi per gli allenamenti (con distinzione chiara tra zone di passo e HR)
+           workout_examples = [
+               {
+                   "type": "Distanza",
+                   "description": "Esempio di allenamento basato su distanza",
+                   "steps": "warmup: 2km @ Z1_HR\ninterval: 5km @ Z3\ncooldown: 1km @ Z1_HR"
+               },
+               {
+                   "type": "Tempo",
+                   "description": "Esempio di allenamento basato su tempo",
+                   "steps": "warmup: 10min @ Z1_HR\ninterval: 30min @ Z2\ncooldown: 5min @ Z1_HR"
+               },
+               {
+                   "type": "Ripetute semplici",
+                   "description": "Esempio di allenamento con ripetute",
+                   "steps": "warmup: 10min @ Z1_HR\nrepeat 5:\n  interval: 1km @ Z4\n  recovery: 2min @ Z1_HR\ncooldown: 10min @ Z1_HR"
+               },
+               {
+                   "type": "Ripetute annidate",
+                   "description": "Esempio di ripetute annidate",
+                   "steps": "warmup: 10min @ Z1_HR\nrepeat 3:\n  interval: 5min @ Z3\n  repeat 4:\n    interval: 30s @ Z5\n    recovery: 30s @ Z1_HR\n  recovery: 3min @ Z2_HR\ncooldown: 10min @ Z1_HR"
+               },
+               {
+                   "type": "Con descrizioni",
+                   "description": "Esempio con descrizioni per ogni passo",
+                   "steps": "warmup: 10min @ Z1_HR -- Inizia lentamente\ninterval: 20min @ Z3 -- Mantieni ritmo costante\ncooldown: 5min @ Z1_HR -- Rallenta gradualmente"
+               },
+               {
+                   "type": "Pulsante lap",
+                   "description": "Esempio con pulsante lap",
+                   "steps": "warmup: 10min @ Z1_HR\nrest: lap-button @ Z1_HR -- Premi lap quando sei pronto\ninterval: 5km @ Z3\ncooldown: 5min @ Z1_HR"
+               },
+               {
+                   "type": "Zone personalizzate",
+                   "description": "Esempio con zone personalizzate",
+                   "steps": "warmup: 10min @ Z1_HR\ninterval: 20min @ marathon\ninterval: 10min @ threshold\ncooldown: 5min @ Z1_HR"
+               },
+               {
+                   "type": "Combinato",
+                   "description": "Combinazione di vari tipi di passi",
+                   "steps": "warmup: 15min @ Z1_HR\ninterval: 10min @ Z2\nrepeat 3:\n  interval: 5min @ Z4\n  recovery: 3min @ Z2_HR\n  repeat 2:\n    interval: 30s @ Z5\n    recovery: 90s @ Z1_HR\ninterval: 5min @ Z3\ncooldown: 10min @ Z1_HR"
+               }
+           ]
+           
+           # Aggiungi gli esempi
+           row_idx = 3
+           for example in workout_examples:
+               examples_sheet[f'A{row_idx}'] = example["type"]
+               examples_sheet[f'B{row_idx}'] = example["description"]
+               examples_sheet[f'C{row_idx}'] = example["steps"]
+               
+               for col in ['A', 'B', 'C']:
+                   examples_sheet[f'{col}{row_idx}'].border = thin_border
+                   examples_sheet[f'{col}{row_idx}'].fill = example_fill
+                   examples_sheet[f'{col}{row_idx}'].alignment = Alignment(wrapText=True, vertical='top')
+               
+               # Calcola altezza appropriata
+               steps_text = example["steps"]
+               num_lines = 1 + steps_text.count('\n') + steps_text.count(';')
+               
+               # Considera indentazione per i ripetuti
+               if 'repeat' in steps_text and '\n' in steps_text:
+                   lines_after_repeat = steps_text.split('repeat')[1].count('\n')
+                   if lines_after_repeat > 0:
+                       num_lines += lines_after_repeat - 1
+               
+               row_height = max(20, 15 * num_lines)
+               examples_sheet.row_dimensions[row_idx].height = row_height
+               
+               row_idx += 1
+           
+           # Aggiunta di una riga di suggerimenti sulla sintassi
+           examples_sheet.merge_cells(f'A{row_idx}:C{row_idx}')
+           examples_sheet[f'A{row_idx}'] = "# SINTASSI SUPPORTATA NEGLI STEP"
+           examples_sheet[f'A{row_idx}'].font = comment_font
+           examples_sheet[f'A{row_idx}'].alignment = Alignment(horizontal='center')
+           row_idx += 1
+           
+           # Suggerimenti sulla sintassi
+           syntax_examples = [
+               "tipo: durata @ zona -- descrizione opzionale",
+               "Tipi: warmup, interval, recovery, cooldown, rest, repeat",
+               "Durate: tempo (s, min, h) o distanza (m, km)",
+               "Zone: Z1-Z5 (passo), Z1_HR-Z5_HR (freq. cardiaca), o qualsiasi zona definita nei fogli Paces/HeartRates",
+               "Repeat: repeat N: seguito da step indentati con 2 spazi"
+           ]
+           
+           for example in syntax_examples:
+               examples_sheet.merge_cells(f'A{row_idx}:C{row_idx}')
+               examples_sheet[f'A{row_idx}'] = example
+               examples_sheet[f'A{row_idx}'].font = comment_font
+               row_idx += 1
+           
+           # Aggiunta di un foglio di esempi avanzati per Paces e HeartRates
+           advanced_examples_sheet = wb.create_sheet(title='Advanced Examples')
+           
+           advanced_examples_sheet['A1'] = 'Tipo'
+           advanced_examples_sheet['B1'] = 'Nome'
+           advanced_examples_sheet['C1'] = 'Valore'
+           advanced_examples_sheet['D1'] = 'Note'
+           
+           # Format header
+           for col in ['A', 'B', 'C', 'D']:
+               advanced_examples_sheet[f'{col}1'].font = Font(bold=True)
+               advanced_examples_sheet[f'{col}1'].fill = header_fill
+               advanced_examples_sheet[f'{col}1'].border = thin_border
+           
+           # Aggiunta di una riga di descrizione
+           advanced_examples_sheet.merge_cells('A2:D2')
+           advanced_examples_sheet['A2'] = '# ESEMPI AVANZATI DI SINTASSI - Questo foglio è solo per scopo informativo e non viene importato'
+           advanced_examples_sheet['A2'].font = comment_font
+           
+           # Esempi avanzati di ritmi
+           advanced_paces = [
+               ('Intervallo di ritmi', 'threshold', '5:20-5:10', 'Intervallo tra due ritmi'),
+               ('Percentuale', 'interval', '105-110% threshold', 'Percentuale di un altro ritmo'),
+               ('Percentuale', 'recovery', '70% marathon', 'Percentuale di un altro ritmo'),
+               ('Basato su distanza', '10km', '45:00', 'Tempo per completare 10km'),
+               ('Basato su distanza', '5km', '21:00', 'Tempo per completare 5km'),
+               ('Basato su distanza', '1km', '4:00', 'Tempo per completare 1km'),
+               ('Basato su distanza', 'mile', '6:30', 'Tempo per completare un miglio'),
+               ('Basato su distanza', '400m', '1:30', 'Tempo per completare 400m'),
+               ('Calcolo', 'half_marathon', '10km + 10s', 'Basato su 10km + secondi')
+           ]
+           
+           # Esempi avanzati di HR
+           advanced_hr = [
+               ('HR base', 'resting_hr', '50', 'FC a riposo'),
+               ('HR base', 'lactate_threshold_HR', '165', 'Soglia lattato'),
+               ('Intervallo', 'recovery_HR', '120-130', 'Intervallo diretto di battiti'),
+               ('Comparazione', 'easy_HR', '<140', 'Minore di un valore'),
+               ('Intervallo', 'moderate_HR', '140-160', 'Intervallo diretto di battiti'),
+               ('Comparazione', 'hard_HR', '>160', 'Maggiore di un valore'),
+               ('Percentuale', 'lt_zone_HR', '95-100% lactate_threshold_HR', 'Percentuale della soglia lattato'),
+               ('Formula', 'reserve_85_HR', '85% [max_hr-resting_hr] + resting_hr', 'Formula FC di riserva')
+           ]
+           
+           # Aggiungi gli esempi di pace
+           row_idx = 3
+           for example in advanced_paces:
+               advanced_examples_sheet[f'A{row_idx}'] = 'Paces'
+               advanced_examples_sheet[f'B{row_idx}'] = example[1]
+               advanced_examples_sheet[f'C{row_idx}'] = example[2]
+               advanced_examples_sheet[f'D{row_idx}'] = example[3]
+               
+               for col in ['A', 'B', 'C', 'D']:
+                   advanced_examples_sheet[f'{col}{row_idx}'].border = thin_border
+                   advanced_examples_sheet[f'{col}{row_idx}'].fill = example_fill
+               
+               row_idx += 1
+               
+           # Aggiungi gli esempi di HR
+           for example in advanced_hr:
+               advanced_examples_sheet[f'A{row_idx}'] = 'HeartRates'
+               advanced_examples_sheet[f'B{row_idx}'] = example[1]
+               advanced_examples_sheet[f'C{row_idx}'] = example[2]
+               advanced_examples_sheet[f'D{row_idx}'] = example[3]
+               
+               for col in ['A', 'B', 'C', 'D']:
+                   advanced_examples_sheet[f'{col}{row_idx}'].border = thin_border
+                   advanced_examples_sheet[f'{col}{row_idx}'].fill = example_fill
+               
+               row_idx += 1
+           
+           # Set column widths
+           workouts_sheet.column_dimensions['A'].width = 10  # Week
+           workouts_sheet.column_dimensions['B'].width = 15  # Date
+           workouts_sheet.column_dimensions['C'].width = 10  # Session
+           workouts_sheet.column_dimensions['D'].width = 25  # Description
+           workouts_sheet.column_dimensions['E'].width = 60  # Steps
+           
+           # Imposta larghezze colonne nei fogli di esempi
+           examples_sheet.column_dimensions['A'].width = 20  # Type
+           examples_sheet.column_dimensions['B'].width = 40  # Description
+           examples_sheet.column_dimensions['C'].width = 60  # Steps
+           
+           advanced_examples_sheet.column_dimensions['A'].width = 15  # Tipo
+           advanced_examples_sheet.column_dimensions['B'].width = 20  # Nome
+           advanced_examples_sheet.column_dimensions['C'].width = 30  # Valore
+           advanced_examples_sheet.column_dimensions['D'].width = 40  # Note
+           
+           # Auto-adjust column widths in Config, Paces, and HR sheets
+           self.auto_adjust_column_widths(config_sheet)
+           self.auto_adjust_column_widths(paces_sheet)
+           self.auto_adjust_column_widths(hr_sheet)
+           
+           # Save the file
+           wb.save(output_file)
+           self.log(f"File Excel creato con {sessions_per_week} sessioni per settimana")
+           return output_file
+           
+       except Exception as e:
+           self.log(f"Errore nella creazione del file Excel: {str(e)}")
+           import traceback
+           traceback.print_exc()
+           raise
+
+
 
     def auto_adjust_column_widths(self, worksheet):
         """Adatta automaticamente le larghezze delle colonne in base al contenuto"""

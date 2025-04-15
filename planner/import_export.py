@@ -458,46 +458,139 @@ def get_target(step_txt, verbose=False):
     target = None
     scale_min = 1
     scale_max = 1
-
+    
+    if verbose:
+        print(f"Processing step: {step_txt}")
+    
     if ' in ' in step_txt:
         target_type = 'pace.zone'
         target = ms_to_pace(dist_time_to_ms(step_txt))
     elif ' @ ' in step_txt:
-        target_type = 'pace.zone'
         parts = [p.strip() for p in step_txt.split(' @ ')]
         target = parts[1]
-
-        if re.compile(r'^\d{1,2}:\d{1,2}(?:-\d{1,2}:\d{1,2})?').match(target):
-            pass  # Target is already in the correct format
-        else:
-            while not re.compile(r'^\d{1,2}:\d{1,2}(?:-\d{1,2}:\d{1,2})?').match(target):
-                # Check if the target is of type 75% marathon_pace
-                tm = re.compile(r'^(\d+-?\d+)%\s*(\S+)$').match(target)
-                if tm:
-                    # Get the scale in the form 75% or 70-80%
-                    scales = sorted([float(s)/100 for s in tm.group(1).split('-')])
-                    scale_min = scale_max = scales[0]
-                    if len(scales) == 2:
-                        scale_max = scales[1]
-                    target = tm.group(2).strip()
-
-                # Check if the target is found in the paces config block
-                if target in config.get('paces', {}):
-                    target = config['paces'][target]
+        
+        # Check if this is a heart rate target with _HR suffix - these are ALWAYS heart rate zones
+        if '_HR' in target:
+            target_type = 'heart.rate.zone'
+            
+            # Look up directly in config.heart_rates with the _HR suffix included
+            if target in config.get('heart_rates', {}):
+                target_value = config['heart_rates'][target]
+                if verbose:
+                    print(f"Found in heart_rates with _HR suffix: {target} -> {target_value}")
+                target = target_value
+            else:
+                # Try removing the _HR suffix and look up in heart_rates
+                clean_target = target.replace('_HR', '')
+                if clean_target in config.get('heart_rates', {}):
+                    target_value = config['heart_rates'][clean_target]
+                    if verbose:
+                        print(f"Found in heart_rates after removing _HR: {clean_target} -> {target_value}")
+                    target = target_value
                 else:
-                    raise ValueError(f'Cannot find pace target \'{target}\' in workout step \'{step_txt}\'')
+                    # If we can't find it, try using Zx format directly
+                    if clean_target.lower() in ['z1', 'z2', 'z3', 'z4', 'z5']:
+                        zone_num = int(clean_target[1:])
+                        if verbose:
+                            print(f"Using direct HR zone reference: {zone_num}")
+                        return Target('heart.rate.zone', zone=zone_num)
+                    else:
+                        # Still can't find it, check if a key with _HR suffix exists in heart_rates
+                        hr_key = f"{clean_target}_HR"
+                        if hr_key in config.get('heart_rates', {}):
+                            target_value = config['heart_rates'][hr_key]
+                            if verbose:
+                                print(f"Found by adding _HR: {hr_key} -> {target_value}")
+                            target = target_value
+                        
+            # Convert integer target to range format
+            if isinstance(target, int):
+                target = f'{target}-{target}'
+                
+        # Check if target refers to a pace zone key in the paces config
+        elif target in config.get('paces', {}):
+            target_type = 'pace.zone'
+            target_value = config['paces'][target]
+            if verbose:
+                print(f"Found in paces config: {target} -> {target_value}")
+            target = target_value
+            
+        # Check if this is a plain Zx format (like Z1, Z2) - these should be pace zones by default
+        # unless they're only defined in heart_rates
+        elif re.match(r'^[zZ][1-5]$', target):
+            zone_key = target.upper()  # Normalize to uppercase
+            
+            # Check if it exists in paces config
+            if zone_key in config.get('paces', {}):
+                target_type = 'pace.zone'
+                target_value = config['paces'][zone_key]
+                if verbose:
+                    print(f"Found zone in paces config: {zone_key} -> {target_value}")
+                target = target_value
+            # If not in paces but is in heart_rates with _HR suffix, use heart rate
+            elif zone_key + "_HR" in config.get('heart_rates', {}):
+                target_type = 'heart.rate.zone'
+                target_value = config['heart_rates'][zone_key + "_HR"]
+                if verbose:
+                    print(f"Zone not in paces but found in heart_rates: {zone_key}_HR -> {target_value}")
+                target = target_value
+                # Convert integer target to range format
+                if isinstance(target, int):
+                    target = f'{target}-{target}'
+            # Last resort: map Z1-Z5 directly to pace zones
+            else:
+                target_type = 'pace.zone'
+                zone_num = int(target[1:])
+                if verbose:
+                    print(f"Using zone number directly for pace zone: {zone_num}")
+                # Map zones 1-5 to pace ranges
+                zone_paces = {
+                    1: "6:30",
+                    2: "6:00",
+                    3: "5:30",
+                    4: "5:00",
+                    5: "4:30"
+                }
+                target = zone_paces.get(zone_num, "5:00")  # Default to 5:00 if unknown
+                if verbose:
+                    print(f"Mapped to pace: {target}")
+        else:
+            # Process as pace zone for all other targets
+            target_type = 'pace.zone'
+            if re.compile(r'^\d{1,2}:\d{1,2}(?:-\d{1,2}:\d{1,2})?').match(target):
+                pass  # Target is already in the correct format
+            else:
+                while not re.compile(r'^\d{1,2}:\d{1,2}(?:-\d{1,2}:\d{1,2})?').match(target):
+                    # Check if the target is of type 75% marathon_pace
+                    tm = re.compile(r'^(\d+-?\d+)%\s*(\S+)$').match(target)
+                    if tm:
+                        # Get the scale in the form 75% or 70-80%
+                        scales = sorted([float(s)/100 for s in tm.group(1).split('-')])
+                        scale_min = scale_max = scales[0]
+                        if len(scales) == 2:
+                            scale_max = scales[1]
+                        target = tm.group(2).strip()
+                    # Check if the target is found in the paces config block
+                    if target in config.get('paces', {}):
+                        target = config['paces'][target]
+                    else:
+                        raise ValueError(f'Cannot find pace target \'{target}\' in workout step \'{step_txt}\'')
     elif ' @hr ' in step_txt:
         target_type = 'heart.rate.zone'
         parts = [p.strip() for p in step_txt.split(' @hr ')]
         target = parts[1]
+        
+        # Check for both direct key and key with _HR suffix
         if target in config.get('heart_rates', {}):
             target = config['heart_rates'][target]
-
+        elif target + "_HR" in config.get('heart_rates', {}):
+            target = config['heart_rates'][target + "_HR"]
+            
         if isinstance(target, int):
-            target = f'{target}-{target}'            
+            target = f'{target}-{target}'
     else: # No target
         return None
-
+    
     if target_type == 'pace.zone':
         target_range = get_pace_range(target, config.get('margins', None))
         return Target(target_type, scale_min*pace_to_ms(target_range[0]), scale_max*pace_to_ms(target_range[1]))
@@ -505,9 +598,26 @@ def get_target(step_txt, verbose=False):
         if re.compile(r'^\d{2,3}-\d{2,3}$').match(target):
             target_range = [int(t) for t in target.split('-')]
             return Target(target_type, target_range[0], target_range[1])
-        m = re.compile(r'^(z|zone)[-_]?([1-5])$').match(target)
+        m = re.compile(r'^(z|zone)[-_]?([1-5])$', re.IGNORECASE).match(target)
         if m:
             return Target(target_type, zone=int(m.group(2)))
+            
+        # Special handling for percentage-based ranges like "62-76% max_hr"
+        pct_match = re.compile(r'^(\d+)-(\d+)%\s+(.+)$').match(target)
+        if pct_match:
+            low_pct = int(pct_match.group(1))
+            high_pct = int(pct_match.group(2))
+            base_hr_key = pct_match.group(3).strip()
+            
+            # Look up the base heart rate value (like max_hr)
+            if base_hr_key in config.get('heart_rates', {}):
+                base_hr = config['heart_rates'][base_hr_key]
+                if isinstance(base_hr, int):
+                    # Calculate the actual heart rate range
+                    low_hr = int(base_hr * low_pct / 100)
+                    high_hr = int(base_hr * high_pct / 100)
+                    return Target(target_type, low_hr, high_hr)
+        
         raise ValueError('Invalid heart rate target: ' + step_txt)
         
     raise ValueError('Invalid step description: ' + step_txt)
