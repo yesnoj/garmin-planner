@@ -36,10 +36,9 @@ class NoAliasDumper(yaml.SafeDumper):
 VALID_STEP_TYPES = {"warmup", "cooldown", "interval", "recovery", "rest", "repeat", "other"}
 
 def excel_to_yaml(excel_file, output_file=None):
-
     """
     Converte un file Excel strutturato in un file YAML compatibile con garmin-planner.
-    Include supporto per estrarre la data della gara (l'ultima data presente).
+    Include supporto per estrarre le date degli allenamenti e la data della gara.
     
     Args:
         excel_file: Percorso del file Excel di input
@@ -115,53 +114,60 @@ def excel_to_yaml(excel_file, output_file=None):
     except Exception as e:
         print(f"Nota: impossibile estrarre il nome dell'atleta: {str(e)}")
     
-    # Verifica se c'è una colonna Date e cerca di determinare la data della gara
+    # Estrai la data della gara SOLO dal foglio Config
     race_day = None
-    last_date = None
-    
-    if 'Date' in df.columns:
-        # Filtra per date valide
-        valid_dates = []
-        for date in df['Date'].dropna():
-            try:
-                if isinstance(date, str):
-                    date_obj = datetime.strptime(date, "%Y-%m-%d").date()
-                else:
-                    # Se è già un oggetto datetime, estrai solo la data
-                    date_obj = date.date() if hasattr(date, 'date') else date
-                valid_dates.append(date_obj)
-            except (ValueError, AttributeError, TypeError):
-                pass
+    try:
+        if 'Config' in xls.sheet_names:
+            config_df = pd.read_excel(excel_file, sheet_name='Config')
+            race_day_rows = config_df[config_df.iloc[:, 0] == 'race_day']
+            
+            if not race_day_rows.empty and pd.notna(race_day_rows.iloc[0, 1]):
+                race_day_value = race_day_rows.iloc[0, 1]
                 
-        if valid_dates:
-            # La data più recente è probabilmente il giorno della gara
-            last_date = max(valid_dates)
-            race_day = last_date.strftime("%Y-%m-%d")
-            # Assicurati che questa riga sia presente:
-            plan['config']['race_day'] = race_day
-            print(f"Data della gara estratta: {race_day}")
-    
-    # Cerca informazioni dalla data della gara anche usando altre strategie
-    if not race_day:
-        # Cerca una riga con la descrizione che contiene "gara", "maratona", "race", ecc.
-        race_keywords = ["gara", "maratona", "maratonina", "marathon", "race", "competition", "competizione", "evento"]
-        
-        for _, row in df.iterrows():
-            if pd.notna(row['Description']):
-                desc = row['Description'].lower()
-                if any(keyword in desc for keyword in race_keywords):
-                    if 'Date' in df.columns and pd.notna(row['Date']):
-                        try:
-                            if isinstance(row['Date'], str):
-                                race_obj = datetime.strptime(row['Date'], "%Y-%m-%d").date()
-                            else:
-                                race_obj = row['Date'].date() if hasattr(row['Date'], 'date') else row['Date']
-                            race_day = race_obj.strftime("%Y-%m-%d")
-                            print(f"Data gara trovata da descrizione: {race_day}")
-                            plan['config']['race_day'] = race_day
-                            break
-                        except (ValueError, AttributeError, TypeError):
-                            pass
+                # Gestisci diversi formati di data
+                if isinstance(race_day_value, datetime):
+                    race_day = race_day_value.strftime("%Y-%m-%d")
+                elif isinstance(race_day_value, str):
+                    try:
+                        # Prova a interpretare il formato
+                        if len(race_day_value) == 10 and race_day_value[4] == '-' and race_day_value[7] == '-':
+                            # Già in formato YYYY-MM-DD
+                            race_day = race_day_value
+                        else:
+                            # Prova altre interpretazioni comuni
+                            try:
+                                date_obj = datetime.strptime(race_day_value, "%d/%m/%Y").date()
+                                race_day = date_obj.strftime("%Y-%m-%d")
+                            except ValueError:
+                                try:
+                                    date_obj = datetime.strptime(race_day_value, "%m/%d/%Y").date()
+                                    race_day = date_obj.strftime("%Y-%m-%d")
+                                except ValueError:
+                                    print(f"Impossibile interpretare la data: {race_day_value}")
+                    except:
+                        print(f"Errore nel parsing della data: {race_day_value}")
+                else:
+                    # Gestisci altri tipi di dato, come date numeriche
+                    try:
+                        race_day = pd.to_datetime(race_day_value).strftime("%Y-%m-%d")
+                    except:
+                        print(f"Impossibile convertire il valore in data: {race_day_value}")
+                
+                if race_day:
+                    plan['config']['race_day'] = race_day
+                    print(f"Data della gara trovata nel foglio Config: {race_day}")
+            else:
+                print("Campo 'race_day' non trovato nel foglio Config o valore mancante")
+                # Qui potresti lanciare un'eccezione se la data della gara è obbligatoria
+                raise ValueError("Data della gara (race_day) mancante nel foglio Config")
+        else:
+            print("Foglio Config non trovato nel file Excel")
+            # Qui potresti lanciare un'eccezione se la data della gara è obbligatoria
+            raise ValueError("Foglio Config mancante nel file Excel, impossibile determinare la data della gara")
+    except Exception as e:
+        print(f"Errore nell'estrazione della data della gara: {str(e)}")
+        # Se la data della gara è considerata obbligatoria, rilancia l'eccezione
+        raise ValueError(f"Impossibile determinare la data della gara: {str(e)}")
     
     # Estrai le informazioni di configurazione
     if 'Config' in xls.sheet_names:
@@ -173,7 +179,7 @@ def excel_to_yaml(excel_file, output_file=None):
             # Assicurati che il prefisso termini con uno spazio
             prefix = str(name_prefix_rows.iloc[0, 1]).strip()
             # Aggiungi uno spazio alla fine se non c'è già
-            if not prefix.endswith(' '):
+            if prefix and not prefix.endswith(' '):
                 prefix = prefix + ' '
             plan['config']['name_prefix'] = prefix
         
@@ -246,6 +252,19 @@ def excel_to_yaml(excel_file, output_file=None):
         
         # Prepara la lista dei passi
         workout_steps = parse_workout_steps(steps_str, full_name)
+        
+        # Aggiungi la data come primo elemento se disponibile
+        if 'Date' in df.columns and pd.notna(row['Date']):
+            date_value = row['Date']
+            if isinstance(date_value, str):
+                formatted_date = date_value
+            else:
+                # Se è un oggetto datetime o date, formattalo come stringa
+                formatted_date = date_value.strftime("%Y-%m-%d") if hasattr(date_value, 'strftime') else str(date_value)
+            
+            # Aggiungi la data come primo elemento dei passi
+            date_step = {"date": formatted_date}
+            workout_steps.insert(0, date_step)
         
         # Aggiungi l'allenamento al piano (senza la data nel nome)
         plan[full_name] = workout_steps

@@ -253,6 +253,23 @@ def import_workouts(plan_file, name_filter=None):
             fix_steps(steps)
 
             w = Workout("running", config.get('name_prefix', '') + name, descriptions.get(name, None))
+            
+            # Estrai la data, se presente, come primo elemento
+            workout_date = None
+            if steps and isinstance(steps, list) and len(steps) > 0:
+                first_step = steps[0]
+                if isinstance(first_step, dict) and 'date' in first_step:
+                    workout_date = first_step['date']
+                    # Rimuovi l'elemento date dalla lista degli step
+                    steps = steps[1:]
+            
+            # Aggiungi la data alla descrizione del workout se presente
+            if workout_date:
+                if w.description:
+                    w.description += f" (Data: {workout_date})"
+                else:
+                    w.description = f"Data: {workout_date}"
+            
             for step in steps:
                 for k, v in step.items():
                     if k == 'repeat':
