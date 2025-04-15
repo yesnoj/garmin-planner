@@ -72,6 +72,7 @@ class GarminPlannerGUI(tk.Tk):
         self.day_selections = [tk.IntVar() for _ in range(7)]
         self.day_names = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
         self.calendar_tree = None
+        self.yaml_file_step1 = tk.StringVar()
 
         # Verifica licenza - VERSIONE SEMPLIFICATA
         is_valid, message, features, expiry_date, username = self.license_manager.validate_license()
@@ -1606,7 +1607,7 @@ class GarminPlannerGUI(tk.Tk):
         ttk.Label(parent_frame, text="Step 1: Pianificazione Allenamenti", font=("", 12, "bold")).pack(pady=10)
         
         # Descrizione
-        desc_text = "In questo step, inserisci i dati dell'atleta, la data della gara e seleziona i giorni preferiti per gli allenamenti."
+        desc_text = "In questo step, inserisci i dati dell'atleta, la data della gara e seleziona i giorni preferiti per gli allenamenti.\nOppure seleziona direttame un file YAML o Excel precedentemente creato."
         ttk.Label(parent_frame, text=desc_text, wraplength=600).pack(pady=5)
         
         # Frame principale con elementi di input
@@ -1644,22 +1645,43 @@ class GarminPlannerGUI(tk.Tk):
         for i, day_name in enumerate(day_names):
             var = self.day_selections[i]
             cb = ttk.Checkbutton(days_container, text=day_name, variable=var,
-                              command=lambda i=i: self.on_excel_day_checkbox_clicked(i))
+                            command=lambda i=i: self.on_excel_day_checkbox_clicked(i))
             cb.grid(row=0, column=i, padx=5)
         
-        # Output file
-        output_frame = ttk.Frame(input_frame)
-        output_frame.pack(fill=tk.X, pady=10)
+        # Pulsante "Crea Template Piano" sotto i giorni della settimana
+        create_template_button = ttk.Button(days_frame, text="Crea Template Piano", 
+                                         command=self.create_training_plan_excel)
+        create_template_button.pack(side=tk.LEFT, padx=10, pady=10)
         
-        ttk.Label(output_frame, text="File Excel di output:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
-        ttk.Entry(output_frame, textvariable=self.excel_input_file, width=50).grid(row=0, column=1, padx=5, pady=5, sticky=tk.W+tk.E)
-        ttk.Button(output_frame, text="Sfoglia", command=self.browse_excel_output_path).grid(row=0, column=2, padx=5, pady=5)
+        # NUOVO: Frame con opzioni file Excel/YAML
+        files_frame = ttk.LabelFrame(input_frame, text="File del piano di allenamento")
+        files_frame.pack(fill=tk.X, pady=10)
         
-        output_frame.columnconfigure(1, weight=1)
+        # Output Excel file
+        excel_frame = ttk.Frame(files_frame)
+        excel_frame.pack(fill=tk.X, pady=5)
         
-        # Bottone per creare il file Excel
-        ttk.Button(input_frame, text="Crea Piano Allenamenti", 
-                   command=self.create_training_plan_excel).pack(pady=10)
+        ttk.Label(excel_frame, text="File Excel:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        ttk.Entry(excel_frame, textvariable=self.excel_input_file, width=50).grid(row=0, column=1, padx=5, pady=5, sticky=tk.W+tk.E)
+        ttk.Button(excel_frame, text="Sfoglia", command=self.browse_excel_step1).grid(row=0, column=2, padx=5, pady=5)
+        
+        excel_frame.columnconfigure(1, weight=1)
+        
+        # NUOVO: YAML file (opzionale)
+        yaml_frame = ttk.Frame(files_frame)
+        yaml_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(yaml_frame, text="File YAML:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        ttk.Entry(yaml_frame, textvariable=self.yaml_file_step1, width=50).grid(row=0, column=1, padx=5, pady=5, sticky=tk.W+tk.E)
+        ttk.Button(yaml_frame, text="Sfoglia", command=self.browse_yaml_step1).grid(row=0, column=2, padx=5, pady=5)
+        
+        yaml_frame.columnconfigure(1, weight=1)
+        
+        # Bottone "Procedi con il file selezionato" spostato sotto la selezione del file YAML
+        proceed_button = ttk.Button(yaml_frame, text="Procedi con il file selezionato", 
+                                  command=self.proceed_with_selected_file)
+        proceed_button.grid(row=1, column=0, columnspan=3, padx=5, pady=5, sticky=tk.W)
+
 
     def create_step2_content(self, parent_frame):
         """Step 2: Conversione da Excel a YAML"""
@@ -1814,7 +1836,8 @@ class GarminPlannerGUI(tk.Tk):
             # Aggiorna stato pulsanti
             self.prev_button.config(state=tk.NORMAL)
             if current + 1 == len(self.step_frames):
-                self.next_button.config(state=tk.DISABLED)
+                # Nascondiamo il pulsante "Successivo" nell'ultimo step
+                self.next_button.pack_forget()
             
             # Azioni specifiche per ogni step
             if current + 1 == 2:  # Passando allo step 2
@@ -1845,9 +1868,48 @@ class GarminPlannerGUI(tk.Tk):
             self.step_frames[current-2].pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
             
             # Aggiorna stato pulsanti
-            self.next_button.config(state=tk.NORMAL)
+            # Se stiamo tornando dall'ultimo step, rimostriamo il pulsante successivo
+            if current == len(self.step_frames):
+                self.next_button.pack(side=tk.RIGHT, padx=5)
+                self.next_button.config(state=tk.NORMAL)
+            
             if current - 1 == 1:
                 self.prev_button.config(state=tk.DISABLED)
+
+    def browse_excel_step1(self):
+        """Seleziona un file Excel esistente dallo Step 1"""
+        filename = filedialog.askopenfilename(
+            title="Seleziona file Excel",
+            filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
+            initialdir=EXCEL_DIR  # Usa la directory predefinita per i file Excel
+        )
+        if filename:
+            self.excel_input_file.set(filename)
+            self.log(f"File Excel selezionato: {filename}")
+            
+            # Suggerisci automaticamente il file YAML corrispondente
+            yaml_path = os.path.splitext(filename)[0] + ".yaml"
+            if os.path.exists(yaml_path):
+                self.yaml_file_step1.set(yaml_path)
+                self.log(f"Trovato file YAML corrispondente: {yaml_path}")
+            
+            # Analizza il file Excel per determinare il numero massimo di sessioni
+            self.analyze_excel_file(filename)
+
+
+    def browse_yaml_step1(self):
+        """Seleziona un file YAML esistente dallo Step 1"""
+        filename = filedialog.askopenfilename(
+            title="Seleziona file YAML",
+            filetypes=[("YAML files", "*.yaml *.yml"), ("All files", "*.*")],
+            initialdir=os.path.join(SCRIPT_DIR, "training_plans")  # Usa la directory predefinita per i piani
+        )
+        if filename:
+            self.yaml_file_step1.set(filename)
+            self.log(f"File YAML selezionato: {filename}")
+            
+            # Prova ad analizzare immediatamente il file YAML selezionato
+            self.analyze_yaml_plan(filename)
 
     def browse_excel_output_path(self):
         """Seleziona il percorso per il file Excel di output"""
@@ -1864,6 +1926,53 @@ class GarminPlannerGUI(tk.Tk):
             yaml_path = os.path.splitext(filename)[0] + ".yaml"
             self.yaml_output_file.set(yaml_path)
 
+    def proceed_with_selected_file(self):
+        """Procedi con il file selezionato (Excel o YAML)"""
+        # Verifica se è stato selezionato un file YAML
+        yaml_file = self.yaml_file_step1.get()
+        if yaml_file and os.path.exists(yaml_file):
+            self.log(f"Procedendo con il file YAML: {yaml_file}")
+            
+            # Prima analizziamo il file YAML per estrarre i parametri
+            # (questo imposterà i giorni preferiti e le date se presenti nel file YAML)
+            if not self.analyze_yaml_plan(yaml_file):
+                messagebox.showerror("Errore", "Non è stato possibile analizzare il file YAML selezionato.")
+                return
+                
+            # Salta direttamente allo step 3
+            self.yaml_output_file.set(yaml_file)
+            
+            # Nascondi lo step corrente
+            current = self.current_step.get()
+            self.step_frames[current-1].pack_forget()
+            
+            # Vai allo step 3
+            self.current_step.set(3)
+            
+            # Mostra lo step 3
+            self.step_frames[2].pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+            
+            # Aggiorna stato pulsanti
+            self.prev_button.config(state=tk.NORMAL)
+            
+            return
+        
+        # Verifica se è stato selezionato un file Excel
+        excel_file = self.excel_input_file.get()
+        if excel_file and os.path.exists(excel_file):
+            self.log(f"Procedendo con il file Excel: {excel_file}")
+            
+            # Vai allo step 2
+            self.go_to_next_step()
+            
+            # Imposta automaticamente il file YAML di output
+            yaml_path = os.path.splitext(excel_file)[0] + ".yaml"
+            self.yaml_output_file.set(yaml_path)
+            return
+        
+        # Se non è stato selezionato alcun file
+        messagebox.showwarning("Nessun file selezionato", 
+                              "Seleziona un file Excel o YAML esistente, oppure crea un nuovo piano.")
 
     def create_training_plan_excel(self):
         """Crea il file Excel del piano di allenamento con tutti i dettagli"""
@@ -3599,8 +3708,7 @@ class GarminPlannerGUI(tk.Tk):
                     plan_id = config['name_prefix'].strip()
                     self.log(f"ID del piano estratto dal YAML: {plan_id}")
                     
-                    # Imposta l'ID piano sia nella vecchia variabile che nella nuova 
-                    # a seconda di quali esistono nell'interfaccia attuale
+                    # Imposta l'ID piano
                     if hasattr(self, 'training_plan'):
                         self.training_plan.set(plan_id)
                     if hasattr(self, 'training_plan '):
@@ -3613,9 +3721,7 @@ class GarminPlannerGUI(tk.Tk):
                     race_day_str = config['race_day']
                     self.log(f"Trovata data della gara nel YAML: {race_day_str}")
                     
-                    # Imposta la data della gara nelle variabili appropriate
-                    if hasattr(self, 'race_day'):
-                        self.race_day.set(race_day_str)
+                    # Imposta la data della gara
                     if hasattr(self, 'race_day'):
                         self.race_day.set(race_day_str)
                     
@@ -3633,49 +3739,6 @@ class GarminPlannerGUI(tk.Tk):
                     self.log("Data della gara non trovata nella configurazione")
                     self.original_race_day = None
                 
-                # Estrai i giorni preferiti e aggiornali nell'interfaccia
-                if 'preferred_days' in config:
-                    preferred_days = config['preferred_days']
-                    
-                    # Se preferred_days è una stringa rappresentante una lista, convertila
-                    if isinstance(preferred_days, str):
-                        try:
-                            # Rimuovi parentesi quadre, split per virgole e converti in int
-                            preferred_days = preferred_days.strip('[]').split(',')
-                            preferred_days = [int(d.strip()) for d in preferred_days if d.strip()]
-                            self.log(f"Giorni preferiti convertiti da stringa: {preferred_days}")
-                        except Exception as e:
-                            self.log(f"Errore nella conversione dei giorni preferiti: {str(e)}")
-                            preferred_days = []
-                    
-                    self.log(f"Trovati giorni preferiti nel YAML: {preferred_days}")
-                    
-                    # Memorizza i giorni originali per confronti futuri
-                    self.original_preferred_days = preferred_days
-                    
-                    # Aggiorna i checkbox nell'interfaccia appropriata
-                    selections = []
-                    if hasattr(self, 'day_selections'):
-                        selections = self.day_selections
-                    elif hasattr(self, 'day_selections'):
-                        selections = self.day_selections
-                    
-                    if selections:
-                        # Resetta tutti i checkbox
-                        for i in range(len(selections)):
-                            selections[i].set(0)
-                        
-                        # Seleziona i giorni preferiti
-                        for day_index in preferred_days:
-                            if 0 <= day_index < len(selections):  # Verifica che l'indice sia valido
-                                selections[day_index].set(1)
-                else:
-                    self.log("Giorni preferiti non trovati nella configurazione")
-                    # Se non ci sono giorni preferiti, usa preselect_days se è disponibile
-                    if hasattr(self, 'preselect_days'):
-                        self.preselect_days(self.max_sessions if hasattr(self, 'max_sessions') else 0)
-                    self.original_preferred_days = None
-                
                 # Rimuovi la sezione config per continuare l'analisi degli allenamenti
                 plan_data_copy = plan_data.copy()
                 if 'config' in plan_data_copy:
@@ -3687,6 +3750,9 @@ class GarminPlannerGUI(tk.Tk):
                 # Analizza le settimane e sessioni
                 weeks = {}
                 workouts_with_dates = {}
+                
+                # Estrai date specifiche e giorni della settimana utilizzati
+                session_days = set()  # Per memorizzare i giorni della settimana usati nelle sessioni
                 
                 for workout_name, steps in plan_data_copy.items():
                     # Cerca il pattern WxxSxx nel nome
@@ -3707,18 +3773,85 @@ class GarminPlannerGUI(tk.Tk):
                                 date_str = first_step['date']
                                 workouts_with_dates[workout_name] = date_str
                                 self.log(f"Trovata data {date_str} per allenamento {workout_name}")
+                                
+                                # Estrai il giorno della settimana da questa data
+                                try:
+                                    session_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+                                    weekday = session_date.weekday()  # 0=Lunedì, 1=Martedì, ecc.
+                                    session_days.add(weekday)
+                                    self.log(f"Allenamento il {['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica'][weekday]}")
+                                except Exception as e:
+                                    self.log(f"Errore nel parsing della data {date_str}: {str(e)}")
                 
                 # Salva le date originali per confronti futuri
                 self.original_workout_dates = workouts_with_dates
+                
+                # Se abbiamo trovato date con giorni della settimana, selezioniamo quei giorni
+                if session_days:
+                    self.log(f"Trovati giorni della settimana: {sorted(session_days)}")
+                    
+                    # Converti il set in una lista ordinata
+                    selected_days = sorted(list(session_days))
+                    
+                    # Memorizza per uso futuro
+                    self.original_preferred_days = selected_days
+                    
+                    # Seleziona i giorni corrispondenti nei checkbox
+                    for i in range(len(self.day_selections)):
+                        self.day_selections[i].set(1 if i in selected_days else 0)
+                    
+                    # Imposta il numero massimo di sessioni per settimana
+                    # Usa il massimo tra il numero di giorni rilevati e il numero massimo di sessioni per settimana
+                    self.max_sessions = max(len(selected_days), max(weeks.values()) if weeks else 0)
+                else:
+                    # Estrai i giorni preferiti dalla configurazione (se presenti)
+                    if 'preferred_days' in config:
+                        preferred_days = config['preferred_days']
+                        
+                        # Se preferred_days è una stringa rappresentante una lista, convertila
+                        if isinstance(preferred_days, str):
+                            try:
+                                # Rimuovi parentesi quadre, split per virgole e converti in int
+                                preferred_days = preferred_days.strip('[]').split(',')
+                                preferred_days = [int(d.strip()) for d in preferred_days if d.strip()]
+                                self.log(f"Giorni preferiti convertiti da stringa: {preferred_days}")
+                            except Exception as e:
+                                self.log(f"Errore nella conversione dei giorni preferiti: {str(e)}")
+                                preferred_days = []
+                        
+                        self.log(f"Trovati giorni preferiti nel YAML: {preferred_days}")
+                        
+                        # Memorizza i giorni originali per confronti futuri
+                        self.original_preferred_days = preferred_days
+                        
+                        # Seleziona i giorni preferiti nei checkbox
+                        for i in range(len(self.day_selections)):
+                            self.day_selections[i].set(1 if i in preferred_days else 0)
+                        
+                        # Imposta il numero massimo di sessioni per settimana
+                        self.max_sessions = max(len(preferred_days), max(weeks.values()) if weeks else 0)
+                    else:
+                        self.log("Giorni preferiti non trovati nella configurazione")
+                        self.original_preferred_days = None
+                        
+                        # In assenza di informazioni sui giorni, usa il numero massimo di sessioni
+                        max_sessions = max(weeks.values()) if weeks else 0
+                        self.max_sessions = max_sessions
+                        
+                        if max_sessions > 0:
+                            self.log(f"Preselezione giorni basata su {max_sessions} sessioni massime")
+                            self.preselect_days(max_sessions)
                 
                 # Costruisci il testo informativo
                 num_weeks = len(weeks)
                 max_sessions = max(weeks.values()) if weeks else 0
                 
-                # Salva il numero massimo di sessioni come attributo della classe
-                self.max_sessions = max_sessions
+                # Salva il numero massimo di sessioni anche nell'altra variabile se esiste
                 if hasattr(self, 'excel_max_sessions'):
-                    self.excel_max_sessions = max_sessions
+                    self.excel_max_sessions = self.max_sessions
+                    
+                # Log del numero massimo di sessioni per debug
+                self.log(f"Numero massimo di sessioni per settimana: {self.max_sessions}")
                 
                 info_text = f"Piano da file YAML: {workout_count} allenamenti, {num_weeks} settimane"
                 if weeks:
@@ -3750,7 +3883,7 @@ class GarminPlannerGUI(tk.Tk):
                 self.log(f"Analisi completata: {workout_count} allenamenti in {num_weeks} settimane")
                 
                 return True
-                
+                    
         except Exception as e:
             self.log(f"Errore nell'analisi del piano YAML: {str(e)}")
             import traceback
@@ -3768,6 +3901,7 @@ class GarminPlannerGUI(tk.Tk):
                 self.excel_max_sessions = 0
                 
             return False
+
 
     def preselect_days(self, sessions_per_week):
         """Preseleziona i giorni della settimana in base al numero di sessioni"""
@@ -3983,6 +4117,15 @@ class GarminPlannerGUI(tk.Tk):
             messagebox.showerror("Errore", "Formato data non valido. Usa YYYY-MM-DD")
             return
         
+        # Se abbiamo date già definite nel file YAML e non c'è stata nessuna modifica, usiamole direttamente
+        yaml_dates_usable = (hasattr(self, 'original_workout_dates') and self.original_workout_dates and
+                             hasattr(self, 'original_race_day') and self.original_race_day == self.race_day.get())
+        
+        if yaml_dates_usable:
+            self.log("Utilizzo delle date già definite nel file YAML")
+            self._schedule_with_yaml_dates()
+            return
+        
         # Ottieni i giorni selezionati
         selected_days = []
         for i, var in enumerate(self.day_selections):
@@ -4152,49 +4295,187 @@ class GarminPlannerGUI(tk.Tk):
             # Verifica se abbiamo le date originali dai workout
             if not hasattr(self, 'original_workout_dates') or not self.original_workout_dates:
                 self.log("Nessuna data originale trovata, uso la pianificazione standard")
+                # Ottieni i giorni selezionati dai checkbox
+                selected_days = [i for i, var in enumerate(self.day_selections) if var.get() == 1]
                 self._do_schedule(selected_days, False)
                 return
             
             self.log("Pianificazione con le date dal file YAML in corso...")
             
+            # Verifica che il piano sia stato importato prima di pianificare
+            training_plan_id = self.training_plan.get().strip()
+            
+            # Verifica se gli allenamenti sono già stati importati
+            self.log("Verifica se il piano è già importato...")
+            self.plan_imported = False  # Reset dello stato di importazione
+            
+            # Controlla nella cache se esistono allenamenti per questo piano
+            self.check_workouts_in_cache(training_plan_id)
+            
+            # Se non è stato importato, dobbiamo importarlo prima di pianificare
+            if not self.plan_imported:
+                self.log("Piano non importato. Ricerca del file YAML...")
+                
+                # Trova il file YAML corrispondente
+                yaml_path = None
+                if hasattr(self, 'current_yaml_path') and self.current_yaml_path:
+                    yaml_path = self.current_yaml_path
+                
+                if not yaml_path:
+                    yaml_path = self.find_yaml_for_plan(training_plan_id)
+                
+                if not yaml_path:
+                    # Nessun file YAML trovato, chiedi all'utente di specificarne uno
+                    yaml_path = filedialog.askopenfilename(
+                        title=f"Seleziona file YAML per il piano '{training_plan_id}'",
+                        filetypes=[("YAML files", "*.yaml *.yml"), ("All files", "*.*")]
+                    )
+                    
+                    if not yaml_path:
+                        self.log("Operazione annullata. Nessun file selezionato.")
+                        return
+                
+                # Conferma importazione all'utente
+                if not messagebox.askyesno("Conferma importazione", 
+                                          f"Prima di pianificare, gli allenamenti devono essere importati in Garmin Connect.\n\n"
+                                          f"Importare gli allenamenti dal file:\n{yaml_path}?"):
+                    self.log("Operazione annullata dall'utente.")
+                    return
+                
+                # Imposta il file di importazione e opzioni
+                self.import_file.set(yaml_path)
+                self.import_replace.set(True)  # Sostituisci eventuali allenamenti esistenti
+                
+                self.log(f"Importazione degli allenamenti da {yaml_path}...")
+                
+                # Esegui l'importazione e verifica che abbia avuto successo
+                import_success = self._do_import_for_schedule()
+                
+                if not import_success:
+                    self.log("Impossibile procedere con la pianificazione a causa di errori nell'importazione.")
+                    messagebox.showerror("Errore", "La pianificazione è stata annullata a causa di problemi durante l'importazione.")
+                    return
+            else:
+                self.log("Piano già importato in Garmin Connect. Procedo con la pianificazione.")
+            
             # Assicurati che il cliente Garmin sia creato
             client = GarminClient(self.oauth_folder.get())
             
-            # Ottieni la lista degli allenamenti
+            # Ottieni la lista degli allenamenti aggiornata dopo l'importazione
+            self.log("Ottengo la lista aggiornata degli allenamenti da Garmin Connect...")
             all_workouts = client.list_workouts()
-            workouts_by_name = {}
             
-            # Crea un mapping nome -> id
+            # Debug: mostra i primi allenamenti per vedere il formato
+            for i, workout in enumerate(all_workouts[:5]):
+                workout_name = workout.get('workoutName', '')
+                self.log(f"DEBUG: Allenamento disponibile #{i}: '{workout_name}'")
+            
+            # Il problema è che stiamo cercando allenamenti con nomi come "W01S01 Recovery run"
+            # ma sono importati con un prefisso come "MYRUN_9GCW9M_ W01S01 Recovery run"
+            
+            # Crea un mapping che sia più flessibile, controllando se la parte di pattern è contenuta nel nome
+            workouts_by_pattern = {}
+            
+            # Estrai il nome_prefix dal YAML per maggiore precisione
+            name_prefix = training_plan_id
+            
+            # Carica il file YAML per ottenere maggiori informazioni
+            if hasattr(self, 'current_yaml_path') and os.path.exists(self.current_yaml_path):
+                try:
+                    with open(self.current_yaml_path, 'r') as f:
+                        yaml_data = yaml.safe_load(f)
+                        if 'config' in yaml_data and 'name_prefix' in yaml_data['config']:
+                            name_prefix = yaml_data['config']['name_prefix']
+                            self.log(f"Estratto name_prefix dal YAML: {name_prefix}")
+                except Exception as e:
+                    self.log(f"Errore nella lettura del YAML per name_prefix: {str(e)}")
+            
             for workout in all_workouts:
-                name = workout.get('workoutName', '')
+                workout_name = workout.get('workoutName', '')
                 workout_id = workout.get('workoutId', '')
-                if name and workout_id:
-                    workouts_by_name[name] = workout_id
+                
+                # Aggiungi l'allenamento completo per ricerca esatta
+                if workout_name and workout_id:
+                    workouts_by_pattern[workout_name] = workout_id
+                
+                # Estrai la parte del pattern (WxxSxx) e aggiungila anche come chiave
+                # Questo ci aiuta a trovare corrispondenze più flessibili
+                match = re.search(r'(W\d\dS\d\d\s+\w+(?:\s+\w+)*)', workout_name)
+                if match:
+                    pattern = match.group(1).strip()
+                    workouts_by_pattern[pattern] = workout_id
+                    self.log(f"DEBUG: Estratto pattern '{pattern}' da '{workout_name}'")
             
             # Pianifica ogni allenamento con la sua data
             scheduled_count = 0
-            for workout_name, date_str in self.original_workout_dates.items():
-                # Verifica se l'allenamento esiste
-                if workout_name in workouts_by_name:
-                    workout_id = workouts_by_name[workout_name]
-                    self.log(f"Pianificazione dell'allenamento '{workout_name}' per la data {date_str}")
+            not_found_count = 0
+            
+            # Mostra quali chiavi sono disponibili nel dizionario
+            self.log(f"DEBUG: Chiavi disponibili (primi 10): {list(workouts_by_pattern.keys())[:10]}")
+            
+            for workout_key, date_str in self.original_workout_dates.items():
+                self.log(f"DEBUG: Cercando di pianificare '{workout_key}' per la data {date_str}")
+                
+                # Prova diverse strategie per trovare l'allenamento
+                workout_id = None
+                
+                # 1. Prova ricerca diretta
+                if workout_key in workouts_by_pattern:
+                    workout_id = workouts_by_pattern[workout_key]
+                    self.log(f"Trovato allenamento per corrispondenza diretta: {workout_key}")
+                
+                # 2. Prova con il prefisso
+                elif name_prefix and f"{name_prefix} {workout_key}" in workouts_by_pattern:
+                    full_name = f"{name_prefix} {workout_key}"
+                    workout_id = workouts_by_pattern[full_name]
+                    self.log(f"Trovato allenamento con prefisso: {full_name}")
+                
+                # 3. Prova ricerca per pattern contenuto
+                else:
+                    # Estrai la parte WxxSxx dal nome del workout
+                    match = re.search(r'(W\d\dS\d\d)', workout_key)
+                    if match:
+                        pattern_to_search = match.group(1)
+                        
+                        # Cerca negli allenamenti disponibili
+                        for available_name, available_id in workouts_by_pattern.items():
+                            if pattern_to_search in available_name:
+                                workout_id = available_id
+                                self.log(f"Trovato allenamento per pattern contenuto: '{pattern_to_search}' in '{available_name}'")
+                                break
+                
+                # Verifica se abbiamo trovato l'allenamento
+                if workout_id:
+                    self.log(f"Pianificazione dell'allenamento per la data {date_str}")
                     
                     try:
                         response = client.schedule_workout(workout_id, date_str)
                         scheduled_count += 1
-                        self.log(f"Allenamento pianificato con successo: {workout_name} ({date_str})")
+                        self.log(f"Allenamento pianificato con successo per {date_str}")
                     except Exception as e:
-                        self.log(f"Errore nella pianificazione dell'allenamento {workout_name}: {str(e)}")
+                        self.log(f"Errore nella pianificazione dell'allenamento per {date_str}: {str(e)}")
                 else:
-                    self.log(f"Allenamento non trovato in Garmin Connect: {workout_name}")
+                    not_found_count += 1
+                    self.log(f"Allenamento non trovato in Garmin Connect: {workout_key}")
+            
+            # Mostra un messaggio di avviso se alcuni allenamenti non sono stati trovati
+            if not_found_count > 0:
+                messagebox.showwarning("Attenzione", 
+                                     f"{not_found_count} allenamenti non sono stati trovati in Garmin Connect.\n"
+                                     f"Verifica che l'importazione sia stata completata correttamente.")
             
             # Aggiorna l'interfaccia
             self.refresh_calendar()
             
             # Mostra un messaggio all'utente
-            messagebox.showinfo("Pianificazione completata", 
-                              f"Pianificazione completata con successo!\n\n"
-                              f"Sono stati pianificati {scheduled_count} allenamenti.")
+            if scheduled_count > 0:
+                messagebox.showinfo("Pianificazione completata", 
+                                  f"Pianificazione completata con successo!\n\n"
+                                  f"Sono stati pianificati {scheduled_count} allenamenti.")
+            else:
+                messagebox.showinfo("Nessun allenamento pianificato", 
+                                  "Non è stato possibile pianificare nessun allenamento.\n"
+                                  "Verifica che il piano sia stato importato correttamente.")
             
         except Exception as e:
             self.log(f"Errore nella pianificazione con le date dal YAML: {str(e)}")
@@ -4642,11 +4923,11 @@ class GarminPlannerGUI(tk.Tk):
                 self.calendar_tree.insert("", "end", values=(workout['date'], workout['title']))
             
             # Log e messaggio all'utente
-            self.log(f"Visualizzate {len(workout_list)} date originali dal file YAML")
-            messagebox.showinfo("Date originali", 
-                              f"Sono state visualizzate {len(workout_list)} date originali dal file YAML.\n"
-                              f"Queste date verranno utilizzate per la pianificazione effettiva se non modifichi\n"
-                              f"la data della gara o i giorni preferiti.")
+            self.log(f"Visualizzate {len(workout_list)} date dal file YAML")
+            messagebox.showinfo("Date pianificate", 
+                              f"Il file YAML contiene già {len(workout_list)} allenamenti con date pianificate.\n\n"
+                              f"Le date degli allenamenti sono state caricate dal file YAML.\n"
+                              f"Per modificare la pianificazione, modifica il file YAML o usa i controlli di pianificazione.")
         
         except Exception as e:
             self.log(f"Errore nella visualizzazione delle date originali: {str(e)}")
@@ -4819,6 +5100,15 @@ class GarminPlannerGUI(tk.Tk):
     def _simulate_schedule(self, selected_days):
         """Simula la pianificazione degli allenamenti senza apportare modifiche"""
         try:
+            # Verifica se abbiamo date già definite nel file YAML
+            if hasattr(self, 'original_workout_dates') and self.original_workout_dates:
+                self.log(f"Trovate {len(self.original_workout_dates)} date preesistenti nel file YAML")
+                
+                # Mostra le date esistenti invece di simulare
+                self._display_original_dates()
+                return
+            
+            # Continuiamo con la simulazione standard se non ci sono date
             # Recupera i parametri necessari
             training_plan_id = self.training_plan.get().strip()
             race_day_str = self.race_day.get()  # Usa direttamente race_day
@@ -4868,6 +5158,22 @@ class GarminPlannerGUI(tk.Tk):
             if use_original_dates:
                 self._display_original_dates()
                 return
+            
+            # Verifica che ci siano giorni selezionati e convertili in numeri
+            if hasattr(self, 'day_selections'):
+                selected_days = [i for i, var in enumerate(self.day_selections) if var.get() == 1]
+            else:
+                selected_days = [i for i, var in enumerate(self.day_selections) if var.get() == 1]
+                    
+            if not selected_days:
+                # Prima di mostrare l'errore, prova a selezionare i giorni automaticamente
+                if hasattr(self, 'ensure_days_selected') and self.ensure_days_selected():
+                    # Ora che i giorni sono stati selezionati, ottieni la nuova lista
+                    selected_days = [i for i, var in enumerate(self.day_selections) if var.get() == 1]
+                    self.log(f"Giorni selezionati automaticamente: {selected_days}")
+                else:
+                    messagebox.showwarning("Nessun giorno selezionato", "Seleziona almeno un giorno della settimana.")
+                    return
             
             # Inizializza struttura per gli allenamenti
             workouts = []
@@ -5256,8 +5562,13 @@ class GarminPlannerGUI(tk.Tk):
             
             self.log("Importazione completata con successo")
             
-            # Aggiorna la lista degli allenamenti
-            self.refresh_workouts()
+            # Aggiorna la lista degli allenamenti in modo attivo per assicurarci che la cache sia aggiornata
+            self.log("Aggiornamento cache degli allenamenti...")
+            # Forza l'aggiornamento della cache degli allenamenti
+            client = GarminClient(self.oauth_folder.get())
+            workouts = client.list_workouts()
+            self.save_workouts_to_cache(workouts)
+            self.log(f"Cache aggiornata con {len(workouts)} allenamenti")
             
             messagebox.showinfo("Importazione completata", 
                               "Gli allenamenti sono stati importati con successo.\n"
@@ -5270,6 +5581,7 @@ class GarminPlannerGUI(tk.Tk):
             self.log(traceback.format_exc())
             messagebox.showerror("Errore", f"Errore durante l'importazione: {str(e)}")
             return False
+
 
     def _refresh_workouts_silent(self):
         """Versione silenziosa di refresh_workouts che non mostra messaggi all'utente"""
