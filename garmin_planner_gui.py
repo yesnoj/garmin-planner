@@ -68,9 +68,11 @@ class GarminPlannerGUI(tk.Tk):
 
         self.training_plan = tk.StringVar()
         self.race_day = tk.StringVar()
+
         self.day_selections = [tk.IntVar() for _ in range(7)]
         self.day_names = ["Lunedì", "Martedì", "Mercoledì", "Giovedì", "Venerdì", "Sabato", "Domenica"]
-        
+        self.calendar_tree = None
+
         # Verifica licenza - VERSIONE SEMPLIFICATA
         is_valid, message, features, expiry_date, username = self.license_manager.validate_license()
         if is_valid:
@@ -1254,7 +1256,7 @@ class GarminPlannerGUI(tk.Tk):
             args.oauth_folder = self.oauth_folder.get()
             args.training_plan = self.training_plan.get()
             args.start_date = None
-            args.dry_run = self.schedule_dry_run.get()
+            args.dry_run = False
             
             # Log della modalità simulazione
             if args.dry_run:
@@ -1778,18 +1780,18 @@ class GarminPlannerGUI(tk.Tk):
         calendar_frame.pack(fill=tk.BOTH, expand=True, pady=10)
         
         # Tree view per visualizzare il calendario
-        self.step4_calendar_tree = ttk.Treeview(calendar_frame, columns=("date", "workout"), show="headings")
-        self.step4_calendar_tree.heading("date", text="Data")
-        self.step4_calendar_tree.heading("workout", text="Allenamento")
-        self.step4_calendar_tree.column("date", width=100)
-        self.step4_calendar_tree.column("workout", width=500)
+        self.calendar_tree = ttk.Treeview(calendar_frame, columns=("date", "workout"), show="headings")
+        self.calendar_tree.heading("date", text="Data")
+        self.calendar_tree.heading("workout", text="Allenamento")
+        self.calendar_tree.column("date", width=100)
+        self.calendar_tree.column("workout", width=500)
         
         # Scrollbar
-        scrollbar = ttk.Scrollbar(calendar_frame, orient="vertical", command=self.step4_calendar_tree.yview)
-        self.step4_calendar_tree.configure(yscrollcommand=scrollbar.set)
+        scrollbar = ttk.Scrollbar(calendar_frame, orient="vertical", command=self.calendar_tree.yview)
+        self.calendar_tree.configure(yscrollcommand=scrollbar.set)
         
         # Layout
-        self.step4_calendar_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
+        self.calendar_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5, pady=5)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y, pady=5)
         
         # Bottone per aggiornare il calendario
@@ -2453,14 +2455,14 @@ class GarminPlannerGUI(tk.Tk):
             calendar_data = get_scheduled(args)
             
             # Pulisci la tabella
-            for item in self.step4_calendar_tree.get_children():
-                self.step4_calendar_tree.delete(item)
+            for item in self.calendar_tree.get_children():
+                self.calendar_tree.delete(item)
             
             # Aggiungi alla tabella
             for item in calendar_data:
                 date = item.get('date', 'N/A')
                 workout_name = item.get('title', 'Senza nome')
-                self.step4_calendar_tree.insert("", "end", values=(date, workout_name))
+                self.calendar_tree.insert("", "end", values=(date, workout_name))
             
             self.log(f"Trovati {len(calendar_data)} allenamenti pianificati")
             
@@ -5194,8 +5196,8 @@ class GarminPlannerGUI(tk.Tk):
         """Visualizza gli allenamenti simulati nella tabella del calendario"""
         try:
             # Pulisci la tabella del calendario
-            for item in self.step4_calendar_tree.get_children():
-                self.step4_calendar_tree.delete(item)
+            for item in self.calendar_tree.get_children():
+                self.calendar_tree.delete(item)
                     
             # Aggiungi gli allenamenti simulati
             for workout in workouts:
@@ -5207,7 +5209,7 @@ class GarminPlannerGUI(tk.Tk):
                 title = workout['title'] + " (SIMULAZIONE)"
                 
                 # Inserisci nella tabella
-                self.step4_calendar_tree.insert("", "end", values=(date, title))
+                self.calendar_tree.insert("", "end", values=(date, title))
                     
             self.log(f"Visualizzati {len(workouts)} allenamenti simulati nel calendario")
             
