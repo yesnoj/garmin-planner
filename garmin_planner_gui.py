@@ -2792,9 +2792,17 @@ class GarminPlannerGUI(tk.Tk):
                     
             args = Args()
             args.oauth_folder = self.oauth_folder.get()
-            args.start_date = None
-            args.end_date = None
-            args.date_range = None
+            
+            # Imposta un intervallo di date che include i prossimi 6 mesi
+            from datetime import datetime, timedelta
+            today = datetime.today().date()
+            args.start_date = today.strftime("%Y-%m-%d")  # Inizia da oggi
+            
+            # Imposta end_date a 6 mesi nel futuro
+            six_months_later = today + timedelta(days=180)
+            args.end_date = six_months_later.strftime("%Y-%m-%d")
+            
+            args.date_range = None  # Non usare intervalli predefiniti
             
             # Aggiungi il filtro per nome se specificato
             if self.training_plan.get():
@@ -2820,7 +2828,8 @@ class GarminPlannerGUI(tk.Tk):
             
         except Exception as e:
             self.log(f"Errore nell'aggiornamento del calendario: {str(e)}")
-
+            import traceback
+            self.log(traceback.format_exc())
 
     def verify_garmin_login(self):
         """Verifica che l'utente sia loggato a Garmin Connect"""

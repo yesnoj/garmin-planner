@@ -215,9 +215,16 @@ class StepDialog(tk.Toplevel):
             # Carica le opzioni per la frequenza cardiaca dal config globale
             hr_zones = list(workout_config.get('heart_rates', {}).keys())
             
+            # Aggiungi anche le versioni senza _HR per le zone che hanno il suffisso
+            hr_zones_without_suffix = []
+            for zone in hr_zones:
+                if zone.endswith("_HR"):
+                    hr_zones_without_suffix.append(zone)
+                    # hr_zones_without_suffix.append(zone.replace("_HR", ""))
+            
             # Se non ci sono zone definite, usa le predefinite
             if not hr_zones:
-                hr_zones = ["Z1", "Z2", "Z3", "Z4", "Z5", "120-130", "130-140", "140-150", "150-160", "160-170"]
+                hr_zones = ["Z1_HR", "Z2_HR", "Z3_HR", "Z4_HR", "Z5_HR", "120-130", "130-140", "140-150", "150-160", "160-170"]
             
             self.zone_var = tk.StringVar()
             self.zone_combo = ttk.Combobox(self.zone_options_frame, textvariable=self.zone_var, values=hr_zones, width=15)
@@ -240,6 +247,7 @@ class StepDialog(tk.Toplevel):
             self.measure_var.set("")
             self.measure_entry.configure(state="disabled")
     
+
     def populate_from_detail(self, detail):
         """Populate fields from step detail"""
         # Handle case where detail is a list (old format)
@@ -280,13 +288,19 @@ class StepDialog(tk.Toplevel):
         if " @ " in main_part:
             measure, zone = main_part.split(" @ ", 1)
             
-            # Identifica se è HR o pace
-            if "@hr" in detail:
+            # Identifica se è HR o pace basato sul suffisso _HR
+            if "_HR" in zone:
+                self.zone_type.set("hr")
+            elif "@hr" in detail:
                 self.zone_type.set("hr")
                 zone = zone.replace("hr ", "")
             else:
                 self.zone_type.set("pace")
             
+            # Prima aggiorna le opzioni di zona in base al tipo (hr o pace)
+            self.update_zone_options()
+            
+            # Ora imposta il valore della zona (dopo che le opzioni sono state aggiornate)
             self.zone_var.set(zone.strip())
             
             # Estrai la misura e l'unità
@@ -325,9 +339,10 @@ class StepDialog(tk.Toplevel):
                 self.unit_var.set("m")
             else:
                 self.measure_var.set(measure)
-        
-        # Aggiorna la UI
-        self.update_zone_options()
+            
+            # Aggiorna la UI
+            self.update_zone_options()
+
     
     def on_ok(self):
         """Handle OK button click"""
