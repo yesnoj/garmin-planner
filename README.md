@@ -1,530 +1,450 @@
-# Guida completa a Garmin Planner
+# Guida Dettagliata a Garmin Planner
 
-Garmin Planner è un'applicazione potente per la gestione e pianificazione degli allenamenti su Garmin Connect. Questo strumento consente di importare, esportare e pianificare allenamenti in modo semplice ed efficace, automatizzando molte delle operazioni ripetitive che normalmente dovresti fare manualmente nell'interfaccia di Garmin Connect.
+Garmin Planner è un'applicazione versatile progettata per gestire, creare e pianificare allenamenti su Garmin Connect. Questa guida ti aiuterà a comprendere tutte le funzionalità dell'applicazione e come utilizzarle efficacemente.
 
 ## Indice
-1. [Introduzione e panoramica](#introduzione-e-panoramica)
-2. [Installazione e primo avvio](#installazione-e-primo-avvio)
-3. [Interfaccia grafica (GUI)](#interfaccia-grafica-gui)
-4. [Pianificazione degli allenamenti](#pianificazione-degli-allenamenti)
-5. [Conversione Excel a YAML](#conversione-excel-a-yaml)
-6. [Struttura e formato degli allenamenti](#struttura-e-formato-degli-allenamenti)
-7. [Editor di allenamenti](#editor-di-allenamenti)
-8. [Esempi pratici](#esempi-pratici)
-9. [Risoluzione dei problemi](#risoluzione-dei-problemi)
-10. [FAQ](#faq)
+- [Introduzione](#introduzione)
+- [Installazione](#installazione)
+- [Interfaccia Principale](#interfaccia-principale)
+- [Login a Garmin Connect](#login-a-garmin-connect)
+- [Importazione Allenamenti](#importazione-allenamenti)
+- [Esportazione Allenamenti](#esportazione-allenamenti)
+- [Pianificazione](#pianificazione)
+  - [Flusso Guidato di Pianificazione](#flusso-guidato-di-pianificazione)
+  - [Creazione del Piano di Allenamento](#creazione-del-piano-di-allenamento)
+  - [Conversione Excel a YAML](#conversione-excel-a-yaml)
+  - [Pianificazione nel Calendario](#pianificazione-nel-calendario)
+- [Editor di Allenamenti](#editor-di-allenamenti)
+  - [Creare un Nuovo Allenamento](#creare-un-nuovo-allenamento)
+  - [Tipi di Passi](#tipi-di-passi)
+  - [Gestione delle Ripetizioni](#gestione-delle-ripetizioni)
+  - [Configurazione delle Zone](#configurazione-delle-zone)
+- [Funzionalità Avanzate](#funzionalità-avanzate)
+  - [Modifica delle Date](#modifica-delle-date)
+- [Risoluzione dei Problemi](#risoluzione-dei-problemi)
 
-## Introduzione e panoramica
+## Introduzione
 
-Garmin Planner è nato per risolvere un problema comune tra gli atleti che utilizzano Garmin Connect: la difficoltà di creare e pianificare allenamenti complessi. Con questa applicazione, puoi:
+Garmin Planner è un'applicazione che ti consente di:
+- Importare ed esportare allenamenti da/verso Garmin Connect
+- Creare piani di allenamento completi
+- Pianificare gli allenamenti nel calendario di Garmin Connect
+- Creare e modificare allenamenti con un editor visuale intuitivo
+- Convertire piani di allenamento da Excel a YAML
 
-- Importare e esportare allenamenti in formato YAML
-- Creare piani di allenamento completi in Excel e convertirli in YAML
-- Pianificare automaticamente gli allenamenti nel calendario di Garmin Connect
-- Modificare facilmente gli allenamenti con un editor visuale intuitivo
-- Gestire i tuoi allenamenti tramite un'interfaccia grafica semplice da usare
+L'applicazione è disponibile in diverse versioni:
+- **Basic**: Funzionalità di importazione/esportazione
+- **Pro**: Aggiunge funzionalità di pianificazione di base ed Excel
+- **Premium**: Aggiunge funzionalità di conversione Excel a YAML e editor di allenamenti
 
-## Installazione e primo avvio
+## Installazione
 
-### Installazione
-1. Scarica l'ultima versione di Garmin Planner dal sito ufficiale
-2. Fai doppio clic sul file di installazione e segui le istruzioni a schermo
-3. Una volta completata l'installazione, avvia Garmin Planner dal menu Start o dall'icona sul desktop
+L'applicazione Garmin Planner è disponibile come applicazione desktop. Per installarla:
 
-### Primo avvio
-1. Al primo avvio, ti verrà richiesto di effettuare il login a Garmin Connect
-2. Inserisci le tue credenziali di Garmin Connect (email e password)
-3. L'applicazione salverà in modo sicuro i token di autenticazione per le sessioni future
+1. Scarica l'installer appropriato per il tuo sistema operativo (Windows, macOS, Linux)
+2. Esegui l'installer e segui le istruzioni a schermo
+3. Al primo avvio, ti verrà richiesto di impostare la cartella per i token OAuth di Garmin Connect
 
-## Interfaccia grafica (GUI)
+Una volta installata, l'applicazione creerà automaticamente le cartelle necessarie per il funzionamento:
+- `oauth`: Contiene i token di autenticazione per Garmin Connect
+- `training_plans`: Contiene i piani di allenamento
+- `cache`: Contiene la cache degli allenamenti di Garmin Connect
+- `exported`: Directory predefinita per i file esportati
+- `excel`: Directory predefinita per i file Excel
 
-L'interfaccia grafica di Garmin Planner è divisa in diverse schede, ognuna dedicata a una funzionalità specifica:
+## Interfaccia Principale
 
-### Scheda Login
-Qui puoi effettuare il login a Garmin Connect. La scheda mostra lo stato corrente della connessione e ti permette di:
-- Effettuare il login con le tue credenziali Garmin
-- Verificare lo stato della connessione
-- Eseguire il logout
+Garmin Planner presenta un'interfaccia grafica con diverse schede (tab):
 
-**Come effettuare il login:**
-1. Fai clic su "Effettua login"
-2. Inserisci la tua email e password di Garmin Connect
-3. Attendi la conferma di avvenuto login
+1. **Login**: Per accedere al tuo account Garmin Connect
+2. **Importa**: Per importare allenamenti da file YAML
+3. **Esporta**: Per esportare allenamenti da Garmin Connect
+4. **Pianificazione**: Per creare e pianificare allenamenti 
+5. **Editor Allenamenti**: Per creare e modificare allenamenti
+6. **Log**: Visualizza i log delle operazioni
+7. **Info**: Informazioni sull'applicazione e sulla licenza
 
-### Scheda Importa
-Qui puoi importare allenamenti da file YAML a Garmin Connect:
-- Seleziona un file YAML contenente gli allenamenti
-- Opzionalmente sostituisci allenamenti esistenti con lo stesso nome
-- Importa tutti gli allenamenti o solo quelli selezionati
+## Login a Garmin Connect
 
-### Scheda Esporta
-Consente di esportare allenamenti da Garmin Connect:
-- Visualizza la lista degli allenamenti disponibili
-- Seleziona gli allenamenti da esportare
-- Scegli tra formato YAML o JSON
-- Opzionalmente pulisci i dati non necessari
+Prima di utilizzare la maggior parte delle funzionalità, è necessario effettuare il login a Garmin Connect:
 
-### Scheda Pianificazione
-Permette di pianificare gli allenamenti in modo visuale e strutturato:
-1. Inserisci i dati dell'atleta e la data della gara
-2. Seleziona i giorni preferiti per gli allenamenti
-3. Converti il piano Excel in YAML
-4. Pianifica gli allenamenti sul calendario Garmin
+1. Vai alla scheda **Login**
+2. Se non hai già effettuato l'accesso, clicca sul pulsante "Effettua login"
+3. Inserisci le tue credenziali Garmin Connect (email e password)
+4. Le credenziali verranno salvate in modo sicuro nella cartella OAuth specificata
+5. Una volta effettuato l'accesso, vedrai uno stato "✅ Hai già effettuato l'accesso a Garmin Connect"
 
-### Scheda Editor Allenamenti
-Un editor visuale completo per creare e modificare allenamenti:
-- Crea nuovi allenamenti da zero
-- Modifica allenamenti esistenti
-- Visualizza graficamente la struttura dell'allenamento
-- Salva e carica allenamenti da file YAML
+> **Nota**: Non è necessario effettuare nuovamente l'accesso ad ogni avvio dell'applicazione.
 
-## Pianificazione degli allenamenti
+Per verificare la connessione in qualsiasi momento, puoi cliccare su "Verifica connessione".
 
-La pianificazione degli allenamenti è una delle funzionalità più potenti di Garmin Planner. Permette di organizzare automaticamente i tuoi allenamenti nel calendario di Garmin Connect.
+## Importazione Allenamenti
 
-### Procedura guidata in 4 step
+La scheda **Importa** ti permette di importare allenamenti da file YAML a Garmin Connect:
 
-1. **Step 1: Pianificazione Allenamenti**
-   - Inserisci il nome dell'atleta
-   - Seleziona la data della gara
-   - Scegli i giorni preferiti per gli allenamenti
-   - Crea un template Excel o seleziona un file esistente
+1. Clicca su "Sfoglia" per selezionare un file YAML contenente definizioni di allenamenti
+2. Opzionalmente, seleziona "Sostituisci allenamenti esistenti" se vuoi sovrascrivere allenamenti con lo stesso nome
+3. Clicca su "Importa" per iniziare il processo di importazione
 
-2. **Step 2: Conversione Excel → YAML**
-   - Converti il file Excel in formato YAML
-   - Questo YAML contiene tutti i dettagli degli allenamenti
+Nella parte inferiore della scheda, puoi visualizzare i piani di allenamento disponibili. Puoi:
+- Cliccare su "Aggiorna lista" per ricaricare i piani
+- Fare doppio clic su un piano per selezionarlo e visualizzarne i dettagli
 
-3. **Step 3: Informazioni Piano**
-   - Visualizza le informazioni sul piano creato
-   - Verifica il numero di allenamenti e settimane
-   - Controlla le date pianificate
+### Struttura dei File YAML
 
-4. **Step 4: Pianificazione Calendar**
-   - Simula la pianificazione per verificare
-   - Pianifica effettivamente gli allenamenti su Garmin Connect
-   - Visualizza e gestisci gli allenamenti pianificati
+I file YAML per Garmin Planner seguono una struttura specifica:
 
-### Esempio di pianificazione
+```yaml
+config:
+  name_prefix: "MYRUN_"
+  paces:
+    Z1: "6:30"
+    Z2: "6:00"
+    Z3: "5:30"
+    Z4: "5:00"
+    Z5: "4:30"
+    race_pace: "5:10"
+    threshold: "5:20-5:10"
+  heart_rates:
+    max_hr: 180
+    Z1_HR: "62-76% max_hr"
+    Z2_HR: "76-85% max_hr"
+    Z3_HR: "85-91% max_hr"
+    Z4_HR: "91-95% max_hr"
+    Z5_HR: "95-100% max_hr"
+  margins:
+    faster: "0:03"
+    slower: "0:03"
+    hr_up: 5
+    hr_down: 5
 
-Supponiamo di voler pianificare un piano di 12 settimane per una mezza maratona:
+"W01S01 Easy Run": # Descrizione come commento
+  - warmup: "10min @ Z1_HR"
+  - interval: "30min @ Z2"
+  - cooldown: "5min @ Z1_HR"
 
-1. Inserisci "Mario Rossi" come nome atleta
-2. Seleziona la data della gara (es. 15 Ottobre 2023)
-3. Seleziona martedì, giovedì e domenica come giorni preferiti
-4. Crea il template Excel con "Crea Template Piano"
-5. Completa il piano nel file Excel generato
-6. Torna nell'app e converti il file in YAML
-7. Verifica le informazioni del piano
-8. Simula la pianificazione per controllare le date
-9. Pianifica gli allenamenti sul calendario
-
-## Conversione Excel a YAML
-
-La conversione da Excel a YAML è perfetta per chi preferisce creare i propri piani di allenamento in Excel.
-
-### Struttura del file Excel
-
-Il file Excel deve contenere quattro fogli:
-1. **Config**: Impostazioni generali del piano
-2. **Paces**: Definizione dei ritmi di corsa
-3. **HeartRates**: Definizione delle zone di frequenza cardiaca
-4. **Workouts**: Gli allenamenti veri e propri
-
-### Foglio Workouts
-
-Il foglio Workouts deve avere questa struttura:
-- Riga 1: Nome dell'atleta (Atleta: Mario Rossi)
-- Riga 2: Intestazioni (Week, Date, Session, Description, Steps)
-- Righe successive: Allenamenti
-
-Esempio:
-```
-| Week | Date       | Session | Description  | Steps                                         |
-|------|------------|---------|--------------|-----------------------------------------------|
-| 1    | 2023-09-01 | 1       | Easy run     | warmup: 10min @ Z1                           |
-|      |            |         |              | interval: 30min @ Z2                          |
-|      |            |         |              | cooldown: 5min @ Z1                           |
-| 1    | 2023-09-03 | 2       | Intervals    | warmup: 15min @ Z1                           |
-|      |            |         |              | repeat 5:                                     |
-|      |            |         |              |   interval: 400m @ Z5                         |
-|      |            |         |              |   recovery: 2min @ Z1                         |
-|      |            |         |              | cooldown: 10min @ Z1                          |
+"W01S02 Interval Training":
+  - warmup: "15min @ Z1_HR"
+  - repeat: 5
+    steps:
+      - interval: "400m @ Z5"
+      - recovery: "2min @ Z1_HR"
+  - cooldown: "10min @ Z1_HR"
 ```
 
-### Esecuzione della conversione
+La sezione `config` contiene:
+- `name_prefix`: Prefisso aggiunto ai nomi degli allenamenti
+- `paces`: Definizione delle zone di ritmo
+- `heart_rates`: Definizione delle zone di frequenza cardiaca
+- `margins`: Margini di tolleranza per ritmi e frequenze cardiache
 
-1. Nella scheda "Pianificazione", seleziona il file Excel
-2. Fai click su "Converti Excel → YAML"
-3. Seleziona dove salvare il file YAML risultante
-4. Il file YAML è ora pronto per essere importato in Garmin Connect
+Ciascun allenamento è rappresentato da un nome (es. "W01S01 Easy Run") seguito da una lista di passi.
 
-## Struttura e formato degli allenamenti
+## Esportazione Allenamenti
 
-La corretta struttura degli allenamenti è fondamentale per il funzionamento di Garmin Planner e per la pianificazione automatica.
+La scheda **Esporta** ti permette di esportare allenamenti da Garmin Connect a file YAML o JSON:
 
-### Convenzione di denominazione degli allenamenti
+1. Clicca su "Sfoglia" per selezionare la posizione e il nome del file di esportazione
+2. Seleziona "Pulisci dati" per rimuovere informazioni non necessarie
+3. Nella lista degli allenamenti, seleziona quelli che vuoi esportare
+4. Clicca su "Esporta Selezionati" per salvare gli allenamenti selezionati
 
-Per permettere la pianificazione automatica, gli allenamenti devono seguire una specifica convenzione di denominazione:
+Puoi anche eliminare allenamenti selezionandoli dalla lista e cliccando su "Elimina Selezionati".
+
+Per aggiornare la lista degli allenamenti disponibili su Garmin Connect, clicca su "Aggiorna lista".
+
+## Pianificazione
+
+### Flusso Guidato di Pianificazione
+
+La scheda **Pianificazione** offre un flusso guidato a 4 step per la creazione e pianificazione di allenamenti:
+
+#### Step 1: Pianificazione Allenamenti
+- Inserisci i dati dell'atleta e la data della gara
+- Seleziona i giorni preferiti per gli allenamenti
+- Crea un template Excel del piano o carica un file YAML/Excel esistente
+
+#### Step 2: Conversione Excel a YAML
+- Converti il file Excel in un file YAML compatibile con Garmin Connect
+
+#### Step 3: Informazioni Piano
+- Visualizza le informazioni dettagliate sul piano creato
+- Analizza il numero di settimane e allenamenti
+
+#### Step 4: Pianificazione Calendario
+- Simula la pianificazione per verificare come saranno distribuiti gli allenamenti
+- Pianifica gli allenamenti nel calendario di Garmin Connect
+- Rimuovi una pianificazione esistente se necessario
+
+### Creazione del Piano di Allenamento
+
+Per creare un nuovo piano di allenamento:
+
+1. Nello Step 1, compila i seguenti campi:
+   - Nome dell'atleta
+   - Giorno della gara
+   - Seleziona i giorni preferiti per gli allenamenti (es. Lunedì, Mercoledì, Venerdì)
+2. Clicca su "Crea Template Piano" per generare un file Excel
+
+Questo creerà un file Excel con la seguente struttura:
+- Foglio **Config**: Contiene parametri generali come prefisso del nome e margini
+- Foglio **Paces**: Definizione delle zone di ritmo
+- Foglio **HeartRates**: Definizione delle zone di frequenza cardiaca
+- Foglio **Workouts**: Gli allenamenti veri e propri
+- Fogli **Examples** e **Advanced Examples**: Esempi di sintassi per la definizione degli allenamenti
+
+#### Esempi Pratici di Compilazione del Foglio Excel
+
+##### Foglio Config
+
+Il foglio Config contiene i parametri generali del piano:
+
+| Parameter   | Value     | Slower    | HR Up | HR Down |
+|-------------|-----------|-----------|-------|---------|
+| name_prefix | MYRUN_XYZ |           |       |         |
+| margins     | 0:03      | 0:03      | 5     | 5       |
+| race_day    | 2023-09-30|           |       |         |
+
+- **name_prefix**: Definisce un prefisso che sarà aggiunto a tutti i nomi degli allenamenti
+- **margins**: Definisce i margini di tolleranza per ritmi e frequenze cardiache
+- **race_day**: La data della gara nel formato YYYY-MM-DD
+
+##### Foglio Paces
+
+Il foglio Paces definisce le zone di ritmo:
+
+| Name        | Value     |
+|-------------|-----------|
+| Z1          | 6:30      |
+| Z2          | 6:00      |
+| Z3          | 5:30      |
+| Z4          | 5:00      |
+| Z5          | 4:30      |
+| race_pace   | 5:10      |
+| threshold   | 5:20-5:10 |
+| marathon    | 5:30      |
+| 10k         | 21:00     |
+
+Le zone possono essere definite in diversi formati:
+- Ritmo in min/km: `5:30`
+- Intervallo di ritmi: `5:20-5:10`
+- Tempo per una distanza: `10km in 45:00`
+- Ritmo derivato: `110% marathon`
+
+##### Foglio HeartRates
+
+Il foglio HeartRates definisce le zone di frequenza cardiaca:
+
+| Name        | Value        |
+|-------------|--------------|
+| max_hr      | 180          |
+| Z1_HR       | 62-76% max_hr|
+| Z2_HR       | 76-85% max_hr|
+| Z3_HR       | 85-91% max_hr|
+| Z4_HR       | 91-95% max_hr|
+| Z5_HR       | 95-100% max_hr|
+| recovery_HR | 120-130      |
+
+Le zone possono essere definite in diversi formati:
+- Valore fisso: `180`
+- Intervallo diretto: `120-130`
+- Percentuale di un'altra zona: `62-76% max_hr`
+
+##### Foglio Workouts
+
+Il foglio Workouts contiene gli allenamenti veri e propri:
+
+| Week | Date       | Session | Description      | Steps                                                          |
+|------|------------|---------|------------------|----------------------------------------------------------------|
+| 1    | 2023-08-01 | 1       | Easy Run         | warmup: 10min @ Z1_HR\ninterval: 30min @ Z2\ncooldown: 5min @ Z1_HR |
+| 1    | 2023-08-03 | 2       | Intervals        | warmup: 15min @ Z1_HR\nrepeat 5:\n  interval: 400m @ Z5\n  recovery: 2min @ Z1_HR\ncooldown: 10min @ Z1_HR |
+| 1    | 2023-08-05 | 3       | Long Run         | warmup: 10min @ Z1_HR\ninterval: 60min @ Z2\ncooldown: 5min @ Z1_HR |
+| 2    | 2023-08-08 | 1       | Recovery Run     | interval: 30min @ Z1_HR |
+| 2    | 2023-08-10 | 2       | Tempo Run        | warmup: 15min @ Z1_HR\ninterval: 20min @ Z4\ncooldown: 10min @ Z1_HR |
+
+Struttura della colonna Steps:
+- Ogni passo è definito in una nuova riga usando la sintassi `tipo: durata @ zona`
+- Per le ripetizioni, usa `repeat n:` seguito dai passi indentati con 2 spazi
+- Puoi aggiungere descrizioni ai passi usando `-- descrizione`
+
+**Esempio di syntax completo per la colonna Steps:**
 
 ```
-[PREFISSO] WxxSyy Descrizione
+warmup: 10min @ Z1_HR -- Riscaldamento iniziale
+interval: 30min @ Z2 -- Mantieni ritmo costante
+cooldown: 5min @ Z1_HR -- Rallenta gradualmente
 ```
 
-Dove:
-- **[PREFISSO]**: Un prefisso opzionale definito nella configurazione (es. "HM_" per mezza maratona)
-- **Wxx**: Indica la settimana (es. W01 = prima settimana, W12 = dodicesima settimana)
-- **Syy**: Indica la sessione all'interno della settimana (es. S01 = prima sessione, S03 = terza sessione)
-- **Descrizione**: Breve descrizione dell'allenamento (es. "Easy Run", "Intervals", "Long Run")
+**Esempio con ripetizioni:**
 
-Esempi di nomi corretti:
-- `W01S01 Easy Run`
-- `HM_W04S02 Hill Intervals`
-- `MYRUN_123 W12S03 Race Pace`
+```
+warmup: 15min @ Z1_HR
+repeat 5:
+  interval: 400m @ Z5 -- Veloce!
+  recovery: 2min @ Z1_HR -- Recupero completo
+cooldown: 10min @ Z1_HR
+```
 
-### Perché questa struttura è importante
+**Esempio con passi di vario tipo:**
 
-Questa convenzione permette a Garmin Planner di:
-1. **Raggruppare gli allenamenti** per piano (tramite il prefisso)
-2. **Ordinare correttamente** le settimane e le sessioni
-3. **Pianificare automaticamente** in base alla data della gara e ai giorni selezionati
-4. **Tracciare la progressione** all'interno del piano
+```
+warmup: 2km @ Z1_HR
+interval: 5km @ Z3
+rest: lap-button @ Z1_HR -- Premi lap quando sei pronto
+repeat 3:
+  interval: 1km @ threshold
+  recovery: 3min @ Z1_HR
+cooldown: 1km @ Z1_HR
+```
 
-Senza questa struttura, la pianificazione automatica non funzionerà correttamente.
+### Conversione Excel a YAML
 
-### Tipi di passi (step) supportati
+Una volta creato o modificato il piano in Excel, converti il file in formato YAML:
 
-Gli step dell'allenamento possono essere di vari tipi:
+1. Nello Step 2, verifica che il file Excel sia correttamente selezionato
+2. Se necessario, modifica il percorso del file YAML di output
+3. Clicca su "Converti Excel → YAML"
+
+La conversione trasformerà la struttura Excel in un file YAML compatibile con Garmin Connect e con la struttura necessaria per Garmin Planner.
+
+### Pianificazione nel Calendario
+
+Dopo aver convertito il piano in YAML, puoi pianificare gli allenamenti nel calendario di Garmin Connect:
+
+1. Nello Step 4, puoi:
+   - Cliccare su "Simula Pianificazione" per vedere come saranno distribuiti gli allenamenti senza apportare modifiche
+   - Cliccare su "Pianifica Allenamenti" per inserire gli allenamenti nel calendario di Garmin Connect
+   - Cliccare su "Rimuovi Pianificazione" per eliminare allenamenti precedentemente pianificati
+
+La pianificazione distribuirà gli allenamenti nei giorni selezionati, tenendo conto della data della gara e assicurandosi che:
+- Nessun allenamento coincida con il giorno della gara
+- Nessun allenamento sia pianificato nel passato
+- Nessun allenamento sia pianificato dopo la data della gara
+
+## Editor di Allenamenti
+
+La scheda **Editor Allenamenti** permette di creare e modificare allenamenti con un'interfaccia visuale intuitiva.
+
+### Creare un Nuovo Allenamento
+
+Per creare un nuovo allenamento:
+
+1. Clicca su "Nuovo allenamento"
+2. Inserisci un nome per l'allenamento (formato consigliato: "W01S01 Descrizione")
+3. Aggiungi passi all'allenamento utilizzando i pulsanti "Aggiungi passo" e "Aggiungi ripetizione"
+4. Configura ciascun passo con tipo, durata/distanza e zona di intensità
+5. Al termine, clicca su "Salva"
+
+L'editor mostra una visualizzazione grafica dell'allenamento nella parte superiore, che ti consente di vedere la struttura dell'allenamento e di trascinare i passi per riordinarli.
+
+### Tipi di Passi
+
+Garmin Planner supporta diversi tipi di passi:
+
 - **warmup**: Riscaldamento
 - **interval**: Intervallo di lavoro
-- **recovery**: Recupero
+- **recovery**: Recupero tra intervalli
 - **cooldown**: Defaticamento
-- **rest**: Riposo
-- **repeat**: Ripetizioni di una sequenza di passi
+- **rest**: Pausa
+- **repeat**: Sezione da ripetere multipla volta
+- **other**: Altro tipo di passo
 
-La sintassi per ogni step è:
-```
-tipo: durata/distanza @ zona [-- descrizione]
-```
+Per ciascun passo, puoi specificare:
+- **Durata/Distanza**: Può essere in minuti (min), chilometri (km), metri (m) o tramite pulsante lap (lap-button)
+- **Intensità**: Può essere basata su ritmo (pace) o frequenza cardiaca (hr)
+- **Descrizione**: Una descrizione opzionale del passo
 
-Esempi:
-- `warmup: 10min @ Z1`
-- `interval: 5km @ Z3 -- Corsa a ritmo medio`
-- `recovery: 2min @ Z1`
-- `interval: 400m @ Z5 -- Sprint`
-
-Per le ripetizioni:
+Esempio di definizione di un passo:
 ```
-repeat 5:
-  interval: 400m @ Z5
-  recovery: 2min @ Z1
+10min @ Z2 -- Corsa lenta a ritmo costante
 ```
 
-### Unità di misura supportate
+Questo indica un passo di 10 minuti alla zona di ritmo Z2, con la descrizione "Corsa lenta a ritmo costante".
 
-- **Tempo**: min (minuti), h (ore), s (secondi)
-- **Distanza**: m (metri), km (chilometri)
-- **Altro**: lap-button (pulsante lap)
+### Gestione delle Ripetizioni
 
-### Zone di ritmo e frequenza cardiaca
+Per creare una sezione di ripetizioni:
 
-Le zone possono essere definite nel foglio configurazione o nell'editor:
+1. Clicca su "Aggiungi ripetizione"
+2. Inserisci il numero di ripetizioni
+3. Aggiungi i passi da ripetere (intervallo, recupero, ecc.)
+4. Clicca su "OK" per confermare
 
-#### Zone di ritmo (Paces)
-- Possono essere definite come intervalli (es. "5:30-5:10")
-- Possono essere calcolate da una prestazione (es. "10km in 45:00")
-- Possono essere relative ad altre zone (es. "80-85% marathon")
+Le ripetizioni sono visualizzate come blocchi circondati da una linea tratteggiata nell'anteprima grafica, con l'indicazione del numero di ripetizioni.
 
-#### Zone di frequenza cardiaca (Heart Rates)
-- Possono essere definite come intervalli (es. "150-160")
-- Possono essere relative a una frequenza massima (es. "70-76% max_hr")
-- Possono essere specificate come zone standardizzate (es. "Z1", "Z2")
+### Configurazione delle Zone
 
-## Editor di allenamenti
+Puoi configurare zone di ritmo e frequenza cardiaca cliccando su "Modifica Configurazione":
 
-L'editor di allenamenti è uno strumento visuale per creare e modificare facilmente gli allenamenti senza dover conoscere la sintassi YAML.
+#### Zone di Ritmo (Paces)
 
-### Interfaccia principale
+Puoi definire zone di ritmo in diversi formati:
+- Direttamente come ritmo: `5:30` (minuti:secondi per km)
+- Come intervallo di ritmi: `5:30-5:10`
+- In base alla distanza e tempo: `10km in 45:00`
+- Come percentuale di un altro ritmo: `80-85% marathon`
 
-L'interfaccia dell'editor è divisa in:
-- **Lista degli allenamenti**: Visualizza tutti gli allenamenti disponibili
-- **Pulsanti di gestione**: Per creare, modificare ed eliminare allenamenti
-- **Pulsanti di file**: Per caricare e salvare allenamenti da/su file
+#### Zone di Frequenza Cardiaca (Heart Rates)
 
-### Editor di un singolo allenamento
+Puoi definire zone di frequenza cardiaca in diversi formati:
+- Come valore fisso: `150`
+- Come intervallo: `150-160`
+- Come percentuale della frequenza massima: `70-76% max_hr`
 
-Quando crei o modifichi un allenamento, vedrai:
-- **Nome dell'allenamento**: Campo per inserire il nome (formato consigliato: W01S01 Descrizione)
-- **Anteprima grafica**: Rappresentazione visuale dell'allenamento
-- **Lista dei passi**: Dettagli di tutti i passi dell'allenamento
-- **Pulsanti di gestione**: Per aggiungere, modificare, rimuovere e riordinare i passi
+#### Margini
 
-### Creazione di un allenamento
+I margini definiscono le tolleranze per ritmi e frequenze cardiache:
+- `faster`: Margine per un ritmo più veloce (es. "0:03" = 3 secondi più veloce)
+- `slower`: Margine per un ritmo più lento (es. "0:03" = 3 secondi più lento)
+- `hr_up`: Margine per una frequenza cardiaca più alta (in %)
+- `hr_down`: Margine per una frequenza cardiaca più bassa (in %)
 
-Esempio di creazione di un allenamento:
+## Funzionalità Avanzate
 
-1. Fai click su "Nuovo allenamento"
-2. Inserisci nome "W01S01 Easy Run"
-3. Aggiungi un passo di riscaldamento:
-   - Fai click su "Aggiungi passo"
-   - Seleziona tipo "warmup"
-   - Inserisci durata "10" e unità "min"
-   - Seleziona zona di ritmo "Z1"
-   - Fai click su "OK"
-4. Aggiungi un intervallo principale:
-   - Fai click su "Aggiungi passo"
-   - Seleziona tipo "interval"
-   - Inserisci durata "30" e unità "min"
-   - Seleziona zona di ritmo "Z2"
-   - Inserisci descrizione "Corsa facile"
-   - Fai click su "OK"
-5. Aggiungi un defaticamento:
-   - Fai click su "Aggiungi passo"
-   - Seleziona tipo "cooldown"
-   - Inserisci durata "5" e unità "min"
-   - Seleziona zona di ritmo "Z1"
-   - Fai click su "OK"
-6. Fai click su "Salva" per completare l'allenamento
+### Modifica delle Date
 
-### Creazione di ripetizioni
+Puoi modificare le date di pianificazione in diversi modi:
 
-Per aggiungere ripetizioni:
-
-1. Fai click su "Aggiungi ripetizione"
-2. Inserisci il numero di ripetizioni (es. 5)
-3. Aggiungi passi alla ripetizione:
-   - Fai click su "Aggiungi passo"
-   - Inserisci i dettagli del passo
-   - Ripeti per tutti i passi necessari
-4. Fai click su "OK" per salvare la ripetizione
-
-### Configurazione dei ritmi e frequenze cardiache
-
-Per personalizzare ritmi e frequenze cardiache:
-
-1. Fai click su "Modifica Configurazione"
-2. Vai alla scheda "Ritmi" per configurare i ritmi
-3. Vai alla scheda "Frequenze Cardiache" per configurare le zone FC
-4. Imposta i margini di tolleranza nella scheda "Margini"
-5. Fai click su "OK" per salvare la configurazione
-
-## Esempi pratici
-
-### Esempio 1: Piano completo per una mezza maratona
-
-In questo esempio, creeremo un piano completo di 12 settimane per una mezza maratona:
-
-1. **Creazione del file Excel:**
-   - Avvia l'applicazione e vai alla scheda "Pianificazione"
-   - Compila i dati dell'atleta e seleziona la data della gara
-   - Seleziona i giorni martedì, giovedì e domenica
-   - Fai click su "Crea Template Piano"
-   - Si aprirà un file Excel con una struttura predefinita
-   - Completa il file Excel con i dettagli degli allenamenti, assicurandoti di seguire il formato corretto
-
-2. **Esempio di come compilare il file Excel:**
-   
-   **Foglio Config:**
-   ```
-   Parameter | Value    | Slower  | HR Up | HR Down
-   ----------|----------|---------|-------|--------
-   name_prefix | HM_PLAN_ |         |       |
-   margins   | 0:03     | 0:03    | 5     | 5
-   race_day  | 2023-10-15|         |       |
+1. **Direttamente nei file YAML**: Aggiungi un elemento `date` come primo passo di un allenamento
+   ```yaml
+   "W01S01 Easy Run":
+     - date: "2023-06-01"
+     - warmup: "10min @ Z1_HR"
+     - interval: "30min @ Z2"
+     - cooldown: "5min @ Z1_HR"
    ```
 
-   **Foglio Paces:**
-   ```
-   Name      | Value
-   ----------|-------
-   Z1        | 6:30
-   Z2        | 6:00
-   Z3        | 5:30
-   Z4        | 5:00
-   Z5        | 4:30
-   race_pace | 5:10
-   ```
+2. **Tramite il file Excel**: Modifica la colonna "Date" nel foglio Workouts
 
-   **Foglio HeartRates:**
-   ```
-   Name      | Value
-   ----------|-------
-   max_hr    | 180
-   Z1        | 62-76% max_hr
-   Z2        | 76-85% max_hr
-   Z3        | 85-91% max_hr
-   Z4        | 91-95% max_hr
-   Z5        | 95-100% max_hr
-   ```
+3. **Tramite l'interfaccia di pianificazione**: Modifica la data della gara e i giorni preferiti per ricalcolare la pianificazione
 
-   **Foglio Workouts:**
-   ```
-   Week | Date       | Session | Description     | Steps
-   -----|------------|---------|-----------------|------
-   1    |            | 1       | Easy Run        | warmup: 10min @ Z1
-        |            |         |                 | interval: 30min @ Z2
-        |            |         |                 | cooldown: 5min @ Z1
-   1    |            | 2       | Intervals       | warmup: 15min @ Z1
-        |            |         |                 | repeat 5:
-        |            |         |                 |   interval: 400m @ Z5
-        |            |         |                 |   recovery: 2min @ Z1
-        |            |         |                 | cooldown: 10min @ Z1
-   1    |            | 3       | Long Run        | warmup: 10min @ Z1
-        |            |         |                 | interval: 60min @ Z2
-        |            |         |                 | cooldown: 5min @ Z1
-   ```
 
-3. **Conversione in YAML:**
-   - Ritorna all'applicazione
-   - Vai al secondo step e fai click su "Converti Excel → YAML"
-   - Verifica le informazioni del piano nel terzo step
 
-4. **Importazione in Garmin Connect:**
-   - Vai alla scheda "Importa"
-   - Seleziona il file YAML appena creato
-   - Fai click su "Importa"
+## Risoluzione dei Problemi
 
-5. **Pianificazione nel calendario:**
-   - Torna alla scheda "Pianificazione" e vai al quarto step
-   - Fai click su "Simula Pianificazione" per verificare
-   - Fai click su "Pianifica Allenamenti" per confermare
+### Problemi di Login
 
-### Esempio 2: Creazione di un allenamento a intervalli avanzato
+Se hai problemi di accesso a Garmin Connect:
 
-Creiamo un allenamento a intervalli avanzato con l'editor:
+1. Assicurati di avere una connessione internet attiva
+2. Verifica che le tue credenziali Garmin Connect siano corrette
+3. Prova a cliccare su "Aggiorna credenziali" nella scheda Login
+4. Controlla la cartella OAuth per verificare che i file di autenticazione siano presenti
 
-1. **Avvio dell'editor:**
-   - Vai alla scheda "Editor Allenamenti"
-   - Fai click su "Nuovo allenamento"
-   - Inserisci nome "W05S02 Interval Training"
+### Problemi di Importazione/Esportazione
 
-2. **Creazione della struttura:**
-   - Aggiungi un riscaldamento di 15min @ Z1
-   - Aggiungi una ripetizione di 6 volte:
-     - Intervallo di 400m @ Z5
-     - Recupero di 90sec @ Z1
-   - Aggiungi un intervallo di 5min @ Z2
-   - Aggiungi una ripetizione di 4 volte:
-     - Intervallo di 200m @ Z5
-     - Recupero di 60sec @ Z1
-   - Aggiungi un defaticamento di 10min @ Z1
+Se hai problemi con l'importazione o l'esportazione di allenamenti:
 
-3. **Salvataggio e esportazione:**
-   - Fai click su "Salva" per completare l'allenamento
-   - Torna alla lista degli allenamenti
-   - Fai click su "Salva su file" per esportare in YAML
+1. Controlla il log per messaggi di errore specifici
+2. Verifica che il formato del file YAML sia corretto
+3. Assicurati di avere effettuato l'accesso a Garmin Connect
+4. Verifica che il file di input o la cartella di output esistano e siano accessibili
 
-### Esempio 3: Allenamento con ripetute e descrizioni personalizzate
+### Problemi di Pianificazione
 
-Ecco un esempio di come impostare un allenamento con ripetute e descrizioni dettagliate:
+Se hai problemi con la pianificazione degli allenamenti:
 
-```
-Nome: W08S02 Hill Intervals
-
-Passi:
-- warmup: 15min @ Z1 -- Riscaldamento progressivo
-- interval: 5min @ Z2 -- Avvicinamento alla collina
-- repeat 6:
-  - interval: 1min @ Z5 -- Salita a massima potenza
-  - recovery: 90sec @ Z1 -- Recupero in discesa
-- interval: 10min @ Z2 -- Transizione verso casa
-- cooldown: 10min @ Z1 -- Defaticamento
-```
-
-Questo allenamento include:
-- Un riscaldamento specifico con descrizione
-- Un intervallo di avvicinamento
-- 6 ripetute su salita con recupero in discesa
-- Un intervallo di transizione
-- Un defaticamento finale
-
-## Risoluzione dei problemi
-
-### Problemi di login
-
-**Problema**: Non riesco ad accedere a Garmin Connect.
-**Soluzione**: 
-1. Verifica le credenziali (email e password)
-2. Assicurati di avere una connessione a Internet attiva
-3. Prova a effettuare nuovamente il login
-4. Riavvia l'applicazione se il problema persiste
-
-### Errori di importazione
-
-**Problema**: Errore durante l'importazione degli allenamenti.
-**Soluzione**:
-1. Verifica che il file YAML sia formattato correttamente
-2. Controlla la sintassi degli allenamenti
-3. Assicurati di essere connesso a Garmin Connect
-4. Prova a importare un singolo allenamento alla volta
-
-### Errori di pianificazione
-
-**Problema**: Gli allenamenti non vengono pianificati correttamente.
-**Soluzione**:
-1. Verifica che gli allenamenti siano stati importati correttamente
-2. Controlla che i nomi degli allenamenti seguano il formato corretto (es. W01S01)
-3. Assicurati che la data della gara sia nel futuro
-4. Prova prima la modalità "Simula Pianificazione" per verificare
-
-### Problemi con l'editor
-
-**Problema**: L'editor non visualizza correttamente gli allenamenti.
-**Soluzione**:
-1. Verifica che il file YAML caricato abbia la struttura corretta
-2. Prova a creare un nuovo allenamento da zero
-3. Riavvia l'applicazione se persiste il problema
-
-### Errori nel file Excel
-
-**Problema**: La conversione Excel a YAML fallisce.
-**Soluzione**:
-1. Verifica che la struttura del file Excel sia corretta
-2. Controlla che tutti i fogli necessari siano presenti
-3. Assicurati che i nomi degli allenamenti seguano il formato corretto
-4. Verifica che i passi degli allenamenti usino la sintassi corretta
-5. Prova a utilizzare il template generato dall'applicazione
-
-## FAQ
-
-### Domande generali
-
-**D: Posso usare Garmin Planner senza un account Garmin Connect?**
-R: No, Garmin Planner richiede un account Garmin Connect valido per funzionare, in quanto interagisce direttamente con il servizio di Garmin.
-
-**D: I miei dati sono al sicuro?**
-R: Garmin Planner salva localmente solo i token di autenticazione necessari per comunicare con Garmin Connect. Le credenziali complete non vengono mai memorizzate.
-
-**D: Quali tipi di allenamento posso creare?**
-R: Puoi creare allenamenti per corsa, ciclismo, nuoto e altri sport supportati da Garmin Connect, con vari tipi di passi come riscaldamento, intervalli, recupero, etc.
-
-### Domande sulla pianificazione
-
-**D: Quanti allenamenti posso pianificare alla volta?**
-R: Non c'è un limite specifico, ma si consiglia di pianificare un piano di allenamento alla volta per evitare sovrapposizioni.
-
-**D: Posso pianificare allenamenti ripetitivi (es. ogni lunedì)?**
-R: Sì, puoi selezionare i giorni della settimana preferiti e Garmin Planner pianificherà gli allenamenti in quei giorni.
-
-**D: Cosa succede se ho già allenamenti pianificati in quelle date?**
-R: Garmin Planner non sovrascrive automaticamente gli allenamenti esistenti, ma puoi utilizzare l'opzione "Rimuovi Pianificazione" per rimuoverli prima di pianificare.
-
-**D: Perché è importante che i nomi degli allenamenti seguano il formato WxxSyy?**
-R: Questo formato permette a Garmin Planner di organizzare gli allenamenti in settimane e sessioni, fondamentale per la pianificazione automatica. Senza questo formato, l'applicazione non sarebbe in grado di determinare la sequenza corretta degli allenamenti.
-
-### Domande sull'Editor
-
-**D: Posso importare allenamenti esistenti in Garmin Connect nell'editor?**
-R: Sì, puoi esportare gli allenamenti da Garmin Connect in YAML e poi caricarli nell'editor.
-
-**D: Quali zone di ritmo e frequenza cardiaca posso utilizzare?**
-R: Puoi definire zone personalizzate nell'editor di configurazione o utilizzare le zone predefinite (Z1-Z5).
-
-**D: Posso condividere i miei allenamenti con altri utenti?**
-R: Sì, puoi esportare i tuoi allenamenti in file YAML e condividerli. Altri utenti potranno importarli nella loro istanza di Garmin Planner.
-
-**D: Come posso trasformare un piano di allenamento da PDF o da un sito web in Garmin Planner?**
-R: Il modo più semplice è creare un file Excel seguendo la struttura descritta in questa guida, inserendo ogni allenamento nel formato corretto. Poi usa la funzione di conversione Excel → YAML e importa gli allenamenti in Garmin Connect.
-
----
-
-Questa guida ti ha fornito una panoramica dettagliata di Garmin Planner, concentrandosi sulle funzionalità dell'interfaccia grafica e sulla corretta strutturazione degli allenamenti. Per ulteriori informazioni o supporto, consulta la documentazione online.
+1. Verifica di aver selezionato il numero corretto di giorni per settimana (in base al piano di allenamento)
+2. Controlla che la data della gara sia nel futuro
+3. Assicurati che gli allenamenti siano stati importati correttamente
+4. Verifica nel log eventuali messaggi di errore relativi alla pianificazione
