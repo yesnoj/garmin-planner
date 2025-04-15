@@ -1927,6 +1927,8 @@ class GarminPlannerGUI(tk.Tk):
             self.yaml_output_file.set(yaml_path)
 
     def proceed_with_selected_file(self):
+        if not LicenseManager.get_instance().check_feature_access("pro"):
+            return
         """Procedi con il file selezionato (Excel o YAML)"""
         # Verifica se è stato selezionato un file YAML
         yaml_file = self.yaml_file_step1.get()
@@ -1976,6 +1978,9 @@ class GarminPlannerGUI(tk.Tk):
 
     def create_training_plan_excel(self):
         """Crea il file Excel del piano di allenamento con tutti i dettagli"""
+        if not LicenseManager.get_instance().check_feature_access("pro"):
+            return
+
         try:
             # Verifica campi obbligatori
             athlete_name = self.athlete_name_var.get().strip()
@@ -2473,6 +2478,8 @@ class GarminPlannerGUI(tk.Tk):
             messagebox.showerror("Errore", f"Si è verificato un errore:\n{str(e)}")
 
     def perform_schedule_step4(self):
+        if not LicenseManager.get_instance().check_feature_access("premium"):
+            return
         """Esegue la pianificazione effettiva per lo step 4"""
         try:
             # Verifica che siano presenti le informazioni necessarie
@@ -2510,6 +2517,8 @@ class GarminPlannerGUI(tk.Tk):
             messagebox.showerror("Errore", f"Si è verificato un errore:\n{str(e)}")
 
     def perform_unschedule_step4(self):
+        if not LicenseManager.get_instance().check_feature_access("premium"):
+            return
         """Rimuove gli allenamenti pianificati per lo step 4"""
         try:
             # Verifica che siano presenti le informazioni necessarie
