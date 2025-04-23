@@ -608,11 +608,20 @@ class GarminPlannerGUI(tk.Tk):
                     for item in self.workouts_tree.get_children():
                         self.workouts_tree.delete(item)
                     
-                    # Add workouts to the tree view
+                    # Add workouts to the tree view with sport type
                     for workout in workouts:
                         workout_id = workout.get('workoutId', 'N/A')
                         workout_name = workout.get('workoutName', 'Senza nome')
-                        self.workouts_tree.insert("", "end", values=(workout_id, workout_name))
+                        
+                        # Extract sport type
+                        sport_type = "running"  # Default
+                        if 'sportType' in workout and workout['sportType'].get('sportTypeKey') in ["running", "cycling"]:
+                            sport_type = workout['sportType'].get('sportTypeKey')
+                        
+                        # Converti in italiano per visualizzazione
+                        sport_display = "Corsa" if sport_type == "running" else "Ciclismo"
+                        
+                        self.workouts_tree.insert("", "end", values=(workout_id, workout_name, sport_display))
                     
                     self.log(f"Caricati {len(workouts)} allenamenti dalla cache")
             else:
@@ -993,7 +1002,6 @@ class GarminPlannerGUI(tk.Tk):
         contact_text = "Per supporto e informazioni: prochilo.francesco@gmail.com"
         ttk.Label(footer_frame, text=contact_text).pack()
 
-
     def create_import_tab(self):
         import_frame = ttk.Frame(self.notebook)
         self.notebook.add(import_frame, text="Importa")
@@ -1001,6 +1009,7 @@ class GarminPlannerGUI(tk.Tk):
         # Variables
         self.import_file = tk.StringVar()
         self.import_replace = tk.BooleanVar(value=False)
+        self.import_sport_type = tk.StringVar(value="running")  # Default tipo di sport
         
         # Widgets
         ttk.Label(import_frame, text="Importa allenamenti da file YAML", font=("", 12, "bold")).pack(pady=10)
@@ -1027,10 +1036,11 @@ class GarminPlannerGUI(tk.Tk):
         ttk.Button(tree_buttons_frame, text="Aggiorna lista", command=self.load_training_plans).pack(side=tk.RIGHT, padx=5)
         
         # Crea il training_plans_tree
-        self.training_plans_tree = ttk.Treeview(import_frame, columns=("plan", "weeks", "type"), show="headings")
+        self.training_plans_tree = ttk.Treeview(import_frame, columns=("plan", "weeks", "type", "sport"), show="headings")
         self.training_plans_tree.heading("plan", text="Piano")
         self.training_plans_tree.heading("weeks", text="Settimane")
         self.training_plans_tree.heading("type", text="Tipo")
+        self.training_plans_tree.heading("sport", text="Sport")  # Nuova colonna per sport
         self.training_plans_tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         # Populate tree with available training plans
@@ -1039,14 +1049,15 @@ class GarminPlannerGUI(tk.Tk):
         # Double-click to select a plan
         self.training_plans_tree.bind("<Double-1>", self.select_training_plan)
 
+
     def create_export_tab(self):
         export_frame = ttk.Frame(self.notebook)
         self.notebook.add(export_frame, text="Esporta")
         
         # Variables
         self.export_file = tk.StringVar()
-        # Rimossa variabile format: self.export_format = tk.StringVar(value="YAML")
         self.export_clean = tk.BooleanVar(value=True)
+        self.export_sport_type = tk.StringVar(value="")  # Vuoto per esportare tutti
         
         # Widgets
         ttk.Label(export_frame, text="Esporta allenamenti", font=("", 12, "bold")).pack(pady=10)
@@ -1061,9 +1072,8 @@ class GarminPlannerGUI(tk.Tk):
         options_frame = ttk.Frame(export_frame)
         options_frame.pack(fill=tk.X, padx=10, pady=5)
         
-        # Rimosso il combobox per il formato
         ttk.Checkbutton(options_frame, text="Pulisci dati", variable=self.export_clean).pack(side=tk.LEFT, padx=5, pady=5)
-        
+                
         # Bottoni per l'esportazione
         export_buttons_frame = ttk.Frame(export_frame)
         export_buttons_frame.pack(fill=tk.X, padx=10, pady=5)
@@ -1073,11 +1083,14 @@ class GarminPlannerGUI(tk.Tk):
         # Lista degli allenamenti disponibili
         ttk.Label(export_frame, text="Allenamenti disponibili su Garmin Connect:").pack(pady=(10, 5))
         
-        self.workouts_tree = ttk.Treeview(export_frame, columns=("id", "name"), show="headings")
+        # Modifica del workouts_tree per includere il tipo di sport
+        self.workouts_tree = ttk.Treeview(export_frame, columns=("id", "name", "sport"), show="headings")
         self.workouts_tree.heading("id", text="ID")
         self.workouts_tree.heading("name", text="Nome")
+        self.workouts_tree.heading("sport", text="Sport")  # Nuova colonna
         self.workouts_tree.column("id", width=100)
-        self.workouts_tree.column("name", width=500)
+        self.workouts_tree.column("name", width=400)
+        self.workouts_tree.column("sport", width=100)  # Larghezza colonna sport
         self.workouts_tree.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
         # Carica gli allenamenti dalla cache
@@ -1085,7 +1098,6 @@ class GarminPlannerGUI(tk.Tk):
         
         # Bottone per aggiornare la lista
         ttk.Button(export_frame, text="Aggiorna lista", command=self.refresh_workouts).pack(pady=5)
-
 
 
     def delete_selected_workouts(self):
@@ -1099,18 +1111,29 @@ class GarminPlannerGUI(tk.Tk):
         # Ottieni gli ID degli allenamenti selezionati
         selected_ids = []
         selected_names = []
+        selected_sports = []  # Aggiungi i tipi di sport
         for item in selected_items:
             values = self.workouts_tree.item(item, "values")
             workout_id = values[0]
             workout_name = values[1]
+            workout_sport = values[2]  # Estrai il tipo di sport
             selected_ids.append(workout_id)
             selected_names.append(workout_name)
+            selected_sports.append(workout_sport)
         
-        # Chiedi conferma all'utente
+        # Prepara un messaggio di conferma che include i tipi di sport
         if len(selected_ids) == 1:
-            message = f"Sei sicuro di voler eliminare l'allenamento '{selected_names[0]}'?"
+            message = f"Sei sicuro di voler eliminare l'allenamento '{selected_names[0]}' ({selected_sports[0]})?"
         else:
             message = f"Sei sicuro di voler eliminare {len(selected_ids)} allenamenti selezionati?"
+            # Visualizza i primi 5 allenamenti con il loro tipo di sport
+            if len(selected_ids) > 5:
+                for i in range(5):
+                    message += f"\n- {selected_names[i]} ({selected_sports[i]})"
+                message += "\n..."
+            else:
+                for i in range(len(selected_ids)):
+                    message += f"\n- {selected_names[i]} ({selected_sports[i]})"
         
         if not messagebox.askyesno("Conferma eliminazione", message):
             return
@@ -1209,6 +1232,7 @@ class GarminPlannerGUI(tk.Tk):
             args.workout_ids = ",".join(selected_ids)
             args.clean = self.export_clean.get()
             args.name_filter = None
+            args.sport_type = None
             
             # Determina il formato dall'estensione del file
             file_extension = os.path.splitext(self.export_file.get())[1].lower()
@@ -1607,12 +1631,24 @@ class GarminPlannerGUI(tk.Tk):
         ttk.Label(parent_frame, text="Step 1: Pianificazione Allenamenti", font=("", 12, "bold")).pack(pady=10)
         
         # Descrizione
-        desc_text = "In questo step, inserisci i dati dell'atleta, la data della gara e seleziona i giorni preferiti per gli allenamenti.\nOppure seleziona direttame un file YAML o Excel precedentemente creato."
+        desc_text = "In questo step, inserisci i dati dell'atleta, la data della gara, il tipo di sport e seleziona i giorni preferiti per gli allenamenti.\nOppure seleziona direttame un file YAML o Excel precedentemente creato."
         ttk.Label(parent_frame, text=desc_text, wraplength=600).pack(pady=5)
         
         # Frame principale con elementi di input
         input_frame = ttk.Frame(parent_frame)
         input_frame.pack(fill=tk.X, padx=10, pady=10)
+        
+        # Tipo di sport
+        sport_frame = ttk.Frame(input_frame)
+        sport_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(sport_frame, text="Tipo di sport:").pack(side=tk.LEFT, padx=5)
+        self.plan_sport_type = tk.StringVar(value="running")  # Default a running
+        sport_combo = ttk.Combobox(sport_frame, textvariable=self.plan_sport_type, values=["running", "cycling"], state="readonly", width=10)
+        sport_combo.pack(side=tk.LEFT, padx=5)
+        
+        # Aggiungi etichette descrittive per i tipi di sport
+        ttk.Label(sport_frame, text="(running = corsa, cycling = ciclismo)", foreground="gray", font=("", 9)).pack(side=tk.LEFT, padx=5)
         
         # Nome Atleta (con asterisco rosso per indicare campo obbligatorio)
         athlete_frame = ttk.Frame(input_frame)
@@ -1976,6 +2012,7 @@ class GarminPlannerGUI(tk.Tk):
         messagebox.showwarning("Nessun file selezionato", 
                               "Seleziona un file Excel o YAML esistente, oppure crea un nuovo piano.")
 
+
     def create_training_plan_excel(self):
         """Crea il file Excel del piano di allenamento con tutti i dettagli"""
         if not LicenseManager.get_instance().check_feature_access("pro"):
@@ -2006,6 +2043,9 @@ class GarminPlannerGUI(tk.Tk):
                 messagebox.showerror("Errore", "Seleziona almeno un giorno della settimana!")
                 return
             
+            # Ottieni il tipo di sport
+            sport_type = self.plan_sport_type.get()
+            
             # Chiedi file di output se non specificato
             if not self.excel_input_file.get():
                 filename = filedialog.asksaveasfilename(
@@ -2018,11 +2058,11 @@ class GarminPlannerGUI(tk.Tk):
                 self.excel_input_file.set(filename)
             
             # Crea un file Excel personalizzato con il numero corretto di sessioni
-            excel_file = self.create_custom_excel_plan(self.excel_input_file.get(), len(selected_days))
+            excel_file = self.create_custom_excel_plan(self.excel_input_file.get(), len(selected_days), sport_type)
             self.log(f"File Excel creato: {excel_file}")
             
             # Aggiorna il file Excel con i dettagli dell'atleta, la data della gara e i giorni selezionati
-            self._schedule_excel_workouts_from_race_day(excel_file, race_date, selected_days, athlete_name)
+            self._schedule_excel_workouts_from_race_day(excel_file, race_date, selected_days, athlete_name, sport_type)
             
             # Mostra messaggio di successo
             messagebox.showinfo("Successo", 
@@ -2039,555 +2079,657 @@ class GarminPlannerGUI(tk.Tk):
             self.log(traceback.format_exc())
             messagebox.showerror("Errore", f"Si è verificato un errore:\n{str(e)}")
 
+
     
-    def create_custom_excel_plan(self, output_file, sessions_per_week):
-       """
-       Crea un file Excel personalizzato con il numero corretto di sessioni per settimana,
-       includendo esempi completi di tutte le possibili definizioni dei campi.
-       
-       Args:
-           output_file: Percorso del file Excel di output
-           sessions_per_week: Numero di sessioni per settimana (giorni selezionati)
-           
-       Returns:
-           Percorso del file Excel creato
-       """
-       try:
-           import openpyxl
-           from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-           from openpyxl.utils import get_column_letter
-           import random
-           import string
-           
-           self.log(f"Creazione piano Excel con {sessions_per_week} sessioni per settimana")
-           
-           wb = openpyxl.Workbook()
-           
-           # Define a thin border style
-           thin_border = Border(
-               left=Side(style='thin'),
-               right=Side(style='thin'),
-               top=Side(style='thin'),
-               bottom=Side(style='thin')
-           )
-           
-           # Definisci stili per commenti ed esempi
-           comment_font = Font(italic=True, color="606060")
-           example_fill = PatternFill(start_color="EBF1DE", end_color="EBF1DE", fill_type="solid")
+    def create_custom_excel_plan(self, output_file, sessions_per_week, sport_type="running"):
+        """
+        Crea un file Excel personalizzato con il numero corretto di sessioni per settimana,
+        includendo esempi completi di tutte le possibili definizioni dei campi.
+        
+        Args:
+            output_file: Percorso del file Excel di output
+            sessions_per_week: Numero di sessioni per settimana (giorni selezionati)
+            sport_type: Tipo di sport ('running' o 'cycling')
+            
+        Returns:
+            Percorso del file Excel creato
+        """
+        try:
+            import openpyxl
+            from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+            from openpyxl.utils import get_column_letter
+            import random
+            import string
+            
+            self.log(f"Creazione piano Excel {sport_type} con {sessions_per_week} sessioni per settimana")
+            
+            wb = openpyxl.Workbook()
+            
+            # Define a thin border style
+            thin_border = Border(
+                left=Side(style='thin'),
+                right=Side(style='thin'),
+                top=Side(style='thin'),
+                bottom=Side(style='thin')
+            )
+            
+            # Definisci stili per commenti ed esempi
+            comment_font = Font(italic=True, color="606060")
+            example_fill = PatternFill(start_color="EBF1DE", end_color="EBF1DE", fill_type="solid")
 
-           random_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-           prefix = f"MYRUN_{random_suffix}_"
-           
-           # 1. Config sheet - già attivo come primo foglio
-           config_sheet = wb.active
-           config_sheet.title = 'Config'
-           
-           # Config sheet headers
-           config_sheet['A1'] = 'Parameter'
-           config_sheet['B1'] = 'Value'
-           config_sheet['C1'] = 'Slower'
-           config_sheet['D1'] = 'HR Up'
-           config_sheet['E1'] = 'HR Down'
-           
-           # Format header
-           header_fill = PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid")
-           for col in ['A', 'B', 'C', 'D', 'E']:
-               config_sheet[f'{col}1'].font = Font(bold=True)
-               config_sheet[f'{col}1'].fill = header_fill
-               config_sheet[f'{col}1'].border = thin_border
-           
-           # Config sheet values
-           config_sheet['A2'] = 'name_prefix'
-           config_sheet['B2'] = prefix
-           config_sheet['A2'].comment = openpyxl.comments.Comment(
-               "Prefisso per i nomi degli allenamenti, usato per identificare il piano", "Garmin Planner")
-           
-           config_sheet['A3'] = 'margins'
-           config_sheet['B3'] = '0:03'  # faster
-           config_sheet['C3'] = '0:03'  # slower
-           config_sheet['D3'] = 5       # hr_up
-           config_sheet['E3'] = 5       # hr_down
-           config_sheet['A3'].comment = openpyxl.comments.Comment(
-               "Margini di tolleranza: faster, slower (in secondi), HR up, HR down (in battiti)", "Garmin Planner")
-           
-           # Aggiungi la race_day nel foglio Config
-           config_sheet['A4'] = 'race_day'
-           config_sheet['B4'] = datetime.now().strftime("%Y-%m-%d")
-           config_sheet['A4'].comment = openpyxl.comments.Comment(
-               "Data della gara nel formato YYYY-MM-DD", "Garmin Planner")
-           
-           # Aggiungi i giorni preferiti nel foglio Config
-           selected_days = [i for i, var in enumerate(self.day_selections) if var.get() == 1]
-           config_sheet['A5'] = 'preferred_days'
-           config_sheet['B5'] = str(selected_days)
-           config_sheet['A5'].comment = openpyxl.comments.Comment(
-               "Giorni preferiti: [0=Lunedì, 1=Martedì, ..., 6=Domenica]", "Garmin Planner")
-           
-           # Applica bordi a tutte le celle di dati
-           for row in range(2, 6):
-               for col in ['A', 'B', 'C', 'D', 'E']:
-                   if config_sheet[f'{col}{row}'].value is not None:
-                       config_sheet[f'{col}{row}'].border = thin_border
-           
-           # 2. Paces sheet
-           paces_sheet = wb.create_sheet(title='Paces')
-           
-           paces_sheet['A1'] = 'Name'
-           paces_sheet['B1'] = 'Value'
-           
-           # Format header
-           for col in ['A', 'B']:
-               paces_sheet[f'{col}1'].font = Font(bold=True)
-               paces_sheet[f'{col}1'].fill = header_fill
-               paces_sheet[f'{col}1'].border = thin_border
-               
-           # Aggiunta di una riga di descrizione che sarà ignorata dalla conversione (inizia con #)
-           paces_sheet.merge_cells('A2:B2')
-           paces_sheet['A2'] = '# Definizioni dei ritmi di corsa - modifica secondo le tue necessità'
-           paces_sheet['A2'].font = comment_font
-           
-           # Zone standard di passo
-           pace_zones = [
-               ('Z1', '6:30'),
-               ('Z2', '6:00'),
-               ('Z3', '5:30'),
-               ('Z4', '5:00'),
-               ('Z5', '4:30'),
-               # Aggiungi solo alcune zone avanzate che non creano problemi per l'importazione
-               ('race_pace', '5:10'),  # Ritmo gara
-               ('threshold', '5:20-5:10'),  # Intervallo di ritmi
-               ('marathon', '5:30')  # Per maratona
-           ]
-           
-           # Aggiunta zone standard
-           for i, (name, value) in enumerate(pace_zones, 3):  # Inizia dalla riga 3
-               paces_sheet[f'A{i}'] = name
-               cell = paces_sheet[f'B{i}']
-               cell.value = value
-               cell.number_format = '@'  # Il formato '@' indica "Testo" in Excel
-               cell.border = thin_border
-               paces_sheet[f'A{i}'].border = thin_border
-           
-           # 3. HeartRates sheet
-           hr_sheet = wb.create_sheet(title='HeartRates')
-           
-           hr_sheet['A1'] = 'Name'
-           hr_sheet['B1'] = 'Value'
-           
-           # Format header
-           for col in ['A', 'B']:
-               hr_sheet[f'{col}1'].font = Font(bold=True)
-               hr_sheet[f'{col}1'].fill = header_fill
-               hr_sheet[f'{col}1'].border = thin_border
-               
-           # Aggiungi una riga di descrizione che sarà ignorata dalla conversione (inizia con #)
-           hr_sheet.merge_cells('A2:B2')
-           hr_sheet['A2'] = '# Definizioni delle zone di frequenza cardiaca - modifica secondo le tue necessità'
-           hr_sheet['A2'].font = comment_font
-           
-           # Definizione max_hr e zone standard con _HR in suffisso per distinguerle dalle zone di passo
-           hr_zones = [
-               ('max_hr', '180'),
-               ('Z1_HR', '62-76% max_hr'),
-               ('Z2_HR', '76-85% max_hr'),
-               ('Z3_HR', '85-91% max_hr'),
-               ('Z4_HR', '91-95% max_hr'),
-               ('Z5_HR', '95-100% max_hr')
-           ]
-           
-           # Aggiungi zone standard
-           for i, (name, value) in enumerate(hr_zones, 3):  # Inizia dalla riga 3
-               hr_sheet[f'A{i}'] = name
-               hr_sheet[f'B{i}'] = value
-               hr_sheet[f'A{i}'].border = thin_border
-               hr_sheet[f'B{i}'].border = thin_border
-           
-           # 4. Workouts sheet
-           workouts_sheet = wb.create_sheet(title='Workouts')
-           
-           # Add a row for the athlete's name
-           # Create a merged cell for the athlete's name
-           workouts_sheet.merge_cells('A1:E1')
-           athlete_cell = workouts_sheet['A1']
-           athlete_cell.value = "Atleta: Mario Rossi"  # Esempio di nome atleta
-           athlete_cell.alignment = Alignment(horizontal='center', vertical='center')
-           athlete_cell.font = Font(size=12, bold=True)
-           athlete_cell.border = thin_border
+            random_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+            prefix = f"MYRUN_{random_suffix}_"
+            
+            # 1. Config sheet - già attivo come primo foglio
+            config_sheet = wb.active
+            config_sheet.title = 'Config'
+            
+            # Config sheet headers
+            config_sheet['A1'] = 'Parameter'
+            config_sheet['B1'] = 'Value'
+            config_sheet['C1'] = 'Slower'
+            config_sheet['D1'] = 'HR Up'
+            config_sheet['E1'] = 'HR Down'
+            
+            # Format header
+            header_fill = PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid")
+            for col in ['A', 'B', 'C', 'D', 'E']:
+                config_sheet[f'{col}1'].font = Font(bold=True)
+                config_sheet[f'{col}1'].fill = header_fill
+                config_sheet[f'{col}1'].border = thin_border
+            
+            # Config sheet values
+            config_sheet['A2'] = 'name_prefix'
+            config_sheet['B2'] = prefix
+            config_sheet['A2'].comment = openpyxl.comments.Comment(
+                "Prefisso per i nomi degli allenamenti, usato per identificare il piano", "Garmin Planner")
+            
+            # Aggiungi il tipo di sport
+            config_sheet['A3'] = 'sport_type'
+            config_sheet['B3'] = sport_type
+            config_sheet['A3'].comment = openpyxl.comments.Comment(
+                "Tipo di sport: 'running' (corsa) o 'cycling' (ciclismo)", "Garmin Planner")
+            
+            # Margini di tolleranza - diversi per corsa e ciclismo
+            config_sheet['A4'] = 'margins'
+            if sport_type == "running":
+                config_sheet['B4'] = '0:03'  # faster in min:sec per running
+                config_sheet['C4'] = '0:03'  # slower in min:sec per running
+            else:  # cycling
+                config_sheet['B4'] = '2.0'   # faster in km/h per cycling
+                config_sheet['C4'] = '2.0'   # slower in km/h per cycling
+                
+            config_sheet['D4'] = 5       # hr_up
+            config_sheet['E4'] = 5       # hr_down
+            config_sheet['A4'].comment = openpyxl.comments.Comment(
+                "Margini di tolleranza: faster, slower (min:sec per corsa, km/h per ciclismo), HR up, HR down (in battiti)", "Garmin Planner")
+            
+            # Aggiungi la race_day nel foglio Config
+            config_sheet['A5'] = 'race_day'
+            config_sheet['B5'] = datetime.now().strftime("%Y-%m-%d")
+            config_sheet['A5'].comment = openpyxl.comments.Comment(
+                "Data della gara nel formato YYYY-MM-DD", "Garmin Planner")
+            
+            # Aggiungi i giorni preferiti nel foglio Config
+            selected_days = [i for i, var in enumerate(self.day_selections) if var.get() == 1]
+            config_sheet['A6'] = 'preferred_days'
+            config_sheet['B6'] = str(selected_days)
+            config_sheet['A6'].comment = openpyxl.comments.Comment(
+                "Giorni preferiti: [0=Lunedì, 1=Martedì, ..., 6=Domenica]", "Garmin Planner")
+            
+            # Applica bordi a tutte le celle di dati
+            for row in range(2, 7):  # Ora abbiamo 6 righe nella configurazione
+                for col in ['A', 'B', 'C', 'D', 'E']:
+                    if config_sheet[f'{col}{row}'].value is not None:
+                        config_sheet[f'{col}{row}'].border = thin_border
+            
+            # 2. Sheet per ritmi o velocità in base al tipo di sport
+            if sport_type == "running":
+                # Paces sheet per running
+                zones_sheet = wb.create_sheet(title='Paces')
+                zones_sheet['A1'] = 'Name'
+                zones_sheet['B1'] = 'Value'
+                
+                # Format header
+                for col in ['A', 'B']:
+                    zones_sheet[f'{col}1'].font = Font(bold=True)
+                    zones_sheet[f'{col}1'].fill = header_fill
+                    zones_sheet[f'{col}1'].border = thin_border
+                    
+                # Aggiunta di una riga di descrizione che sarà ignorata dalla conversione (inizia con #)
+                zones_sheet.merge_cells('A2:B2')
+                zones_sheet['A2'] = '# Definizioni dei ritmi di corsa - modifica secondo le tue necessità'
+                zones_sheet['A2'].font = comment_font
+                
+                # Zone standard di passo
+                pace_zones = [
+                    ('Z1', '6:30'),
+                    ('Z2', '6:00'),
+                    ('Z3', '5:30'),
+                    ('Z4', '5:00'),
+                    ('Z5', '4:30'),
+                    # Aggiungi solo alcune zone avanzate che non creano problemi per l'importazione
+                    ('race_pace', '5:10'),  # Ritmo gara
+                    ('threshold', '5:20-5:10'),  # Intervallo di ritmi
+                    ('marathon', '5:30')  # Per maratona
+                ]
+                
+                # Aggiunta zone standard
+                for i, (name, value) in enumerate(pace_zones, 3):  # Inizia dalla riga 3
+                    zones_sheet[f'A{i}'] = name
+                    cell = zones_sheet[f'B{i}']
+                    cell.value = value
+                    cell.number_format = '@'  # Il formato '@' indica "Testo" in Excel
+                    cell.border = thin_border
+                    zones_sheet[f'A{i}'].border = thin_border
+            else:  # cycling
+                # Speeds sheet per cycling
+                zones_sheet = wb.create_sheet(title='Speeds')
+                zones_sheet['A1'] = 'Name'
+                zones_sheet['B1'] = 'Value'
+                
+                # Format header
+                for col in ['A', 'B']:
+                    zones_sheet[f'{col}1'].font = Font(bold=True)
+                    zones_sheet[f'{col}1'].fill = header_fill
+                    zones_sheet[f'{col}1'].border = thin_border
+                    
+                # Aggiunta di una riga di descrizione che sarà ignorata dalla conversione (inizia con #)
+                zones_sheet.merge_cells('A2:B2')
+                zones_sheet['A2'] = '# Definizioni delle velocità di ciclismo - modifica secondo le tue necessità'
+                zones_sheet['A2'].font = comment_font
+                
+                # Zone standard di velocità
+                speed_zones = [
+                    ('Z1', '15.0'),
+                    ('Z2', '20.0'),
+                    ('Z3', '25.0'),
+                    ('Z4', '30.0'),
+                    ('Z5', '35.0'),
+                    # Aggiungi solo alcune zone avanzate
+                    ('ftp', '32.0'),  # Velocità FTP
+                    ('recovery', '15.0-20.0'),  # Intervallo di velocità
+                    ('race', '30.0')  # Velocità gara
+                ]
+                
+                # Aggiunta zone standard
+                for i, (name, value) in enumerate(speed_zones, 3):  # Inizia dalla riga 3
+                    zones_sheet[f'A{i}'] = name
+                    cell = zones_sheet[f'B{i}']
+                    cell.value = value
+                    cell.number_format = '@'  # Il formato '@' indica "Testo" in Excel
+                    cell.border = thin_border
+                    zones_sheet[f'A{i}'].border = thin_border
+            
+            # 3. HeartRates sheet (comune a entrambi gli sport)
+            hr_sheet = wb.create_sheet(title='HeartRates')
+            
+            hr_sheet['A1'] = 'Name'
+            hr_sheet['B1'] = 'Value'
+            
+            # Format header
+            for col in ['A', 'B']:
+                hr_sheet[f'{col}1'].font = Font(bold=True)
+                hr_sheet[f'{col}1'].fill = header_fill
+                hr_sheet[f'{col}1'].border = thin_border
+                
+            # Aggiungi una riga di descrizione che sarà ignorata dalla conversione (inizia con #)
+            hr_sheet.merge_cells('A2:B2')
+            hr_sheet['A2'] = '# Definizioni delle zone di frequenza cardiaca - modifica secondo le tue necessità'
+            hr_sheet['A2'].font = comment_font
+            
+            # Definizione max_hr e zone standard con _HR in suffisso per distinguerle dalle zone di passo/velocità
+            hr_zones = [
+                ('max_hr', '180'),
+                ('Z1_HR', '62-76% max_hr'),
+                ('Z2_HR', '76-85% max_hr'),
+                ('Z3_HR', '85-91% max_hr'),
+                ('Z4_HR', '91-95% max_hr'),
+                ('Z5_HR', '95-100% max_hr')
+            ]
+            
+            # Aggiungi zone standard
+            for i, (name, value) in enumerate(hr_zones, 3):  # Inizia dalla riga 3
+                hr_sheet[f'A{i}'] = name
+                hr_sheet[f'B{i}'] = value
+                hr_sheet[f'A{i}'].border = thin_border
+                hr_sheet[f'B{i}'].border = thin_border
+            
+            # 4. Workouts sheet
+            workouts_sheet = wb.create_sheet(title='Workouts')
+            
+            # Add a row for the athlete's name
+            # Create a merged cell for the athlete's name
+            workouts_sheet.merge_cells('A1:E1')
+            athlete_cell = workouts_sheet['A1']
+            athlete_cell.value = "Atleta: Mario Rossi"  # Esempio di nome atleta
+            athlete_cell.alignment = Alignment(horizontal='center', vertical='center')
+            athlete_cell.font = Font(size=12, bold=True)
+            athlete_cell.border = thin_border
 
-           # Headers in row 2
-           workouts_sheet['A2'] = 'Week'
-           workouts_sheet['B2'] = 'Date'
-           workouts_sheet['C2'] = 'Session'
-           workouts_sheet['D2'] = 'Description'
-           workouts_sheet['E2'] = 'Steps'
+            # Headers in row 2
+            workouts_sheet['A2'] = 'Week'
+            workouts_sheet['B2'] = 'Date'
+            workouts_sheet['C2'] = 'Session'
+            workouts_sheet['D2'] = 'Description'
+            workouts_sheet['E2'] = 'Steps'
 
-           # Format header
-           for col in ['A', 'B', 'C', 'D', 'E']:
-               cell = workouts_sheet[f'{col}2']
-               cell.font = Font(bold=True)
-               cell.fill = header_fill
-               cell.border = thin_border  # Add border to all header cells
-           
-           # Definisci tipi di allenamento basati sul numero di sessioni per settimana
-           if sessions_per_week == 1:
-               # Piano minimo: solo una sessione lunga a settimana
-               workout_types = [
-                   "Long slow run"
-               ]
-           elif sessions_per_week == 2:
-               # Piano base: una sessione lunga e una di intervalli
-               workout_types = [
-                   "Interval training",
-                   "Long slow run"
-               ]
-           elif sessions_per_week == 3:
-               # Piano intermedio: più varietà
-               workout_types = [
-                   "Easy run",
-                   "Interval training",
-                   "Long slow run"
-               ]
-           elif sessions_per_week == 4:
-               # Piano avanzato: aggiunta di un allenamento di recupero
-               workout_types = [
-                   "Recovery run",
-                   "Tempo run",
-                   "Interval training",
-                   "Long slow run"
-               ]
-           elif sessions_per_week == 5:
-               # Piano molto avanzato
-               workout_types = [
-                   "Easy run",
-                   "Recovery run", 
-                   "Tempo run",
-                   "Interval training",
-                   "Long slow run"
-               ]
-           elif sessions_per_week >= 6:
-               # Piano professionale
-               workout_types = [
-                   "Easy run",
-                   "Recovery run", 
-                   "Tempo run",
-                   "Interval training",
-                   "Hill repeats",
-                   "Long slow run"
-               ]
-               # Aggiungi sessioni aggiuntive se necessario
-               while len(workout_types) < sessions_per_week:
-                   workout_types.append("Extra session")
-           
-           # Definisci dettagli degli allenamenti con distinzione chiara tra zone di passo e HR
-           workout_details = {
-               "Easy run": {
-                   "steps": "warmup: 10min @ Z1_HR\ninterval: 30min @ Z2\ncooldown: 5min @ Z1_HR"
-               },
-               "Recovery run": {
-                   "steps": "interval: 30min @ Z1_HR"
-               },
-               "Tempo run": {
-                   "steps": "warmup: 15min @ Z1_HR\ninterval: 20min @ Z4\ncooldown: 10min @ Z1_HR"
-               },
-               "Interval training": {
-                   "steps": "warmup: 15min @ Z1_HR\nrepeat 5:\n  interval: 400m @ Z5\n  recovery: 2min @ Z1_HR\ncooldown: 10min @ Z1_HR"
-               },
-               "Hill repeats": {
-                   "steps": "warmup: 15min @ Z1_HR\nrepeat 6:\n  interval: 1min @ Z5 -- Salita\n  recovery: 2min @ Z1_HR -- Discesa\ncooldown: 10min @ Z1_HR"
-               },
-               "Long slow run": {
-                   "steps": "warmup: 10min @ Z1_HR\ninterval: 45min @ Z2\ncooldown: 5min @ Z1_HR"
-               },
-               "Extra session": {
-                   "steps": "warmup: 10min @ Z1_HR\ninterval: 20min @ Z2\ncooldown: 5min @ Z1_HR"
-               },
-               "Race day": {
-                   "steps": "warmup: 10min @ Z1_HR\ninterval: 3000m @ race_pace\ncooldown: 10min @ Z1_HR"
-               }
-           }
-           
-           # Define alternating colors for weeks
-           week_colors = [
-               "FFF2CC",  # Light yellow
-               "DAEEF3",  # Light blue
-               "E2EFDA",  # Light green
-               "FCE4D6",  # Light orange
-               "EAD1DC",  # Light pink
-               "D9D9D9",  # Light gray
-           ]
-           
-           # Aggiungi allenamenti al foglio
-           row_index = 3  # Start from row 3 (after header and athlete row)
-           
-           # Generiamo 3 settimane di esempio
-           for week in range(1, 4):
-               # Determina il colore per questa settimana
-               color_index = (week - 1) % len(week_colors)
-               row_fill = PatternFill(start_color=week_colors[color_index], 
-                                     end_color=week_colors[color_index], 
-                                     fill_type="solid")
-               
-               # Aggiungi ciascuna sessione per questa settimana
-               for session in range(1, min(sessions_per_week, 3) + 1):  # Limitiamo a 3 sessioni per chiarezza
-                   # Usa l'indice corretto in base al numero di sessioni
-                   workout_type = workout_types[(session - 1) % len(workout_types)]
-                   
-                   # Se è l'ultima settimana e la prima sessione, rendiamola la gara
-                   if week == 3 and session == 1:
-                       workout_type = "Race day"
-                   
-                   # Crea la riga per questa sessione
-                   workouts_sheet[f'A{row_index}'] = week
-                   workouts_sheet[f'B{row_index}'] = None  # La data verrà impostata successivamente
-                   workouts_sheet[f'C{row_index}'] = session
-                   workouts_sheet[f'D{row_index}'] = workout_type
-                   workouts_sheet[f'E{row_index}'] = workout_details[workout_type]["steps"]
-                   
-                   # Applica lo stile a tutte le celle della riga
-                   for col in ['A', 'B', 'C', 'D', 'E']:
-                       cell = workouts_sheet[f'{col}{row_index}']
-                       cell.fill = row_fill
-                       cell.border = thin_border
-                       cell.alignment = Alignment(wrapText=True, vertical='top')
-                   
-                   # Calcola altezza appropriata per il contenuto
-                   steps_text = workout_details[workout_type]["steps"]
-                   num_lines = 1 + steps_text.count('\n') + steps_text.count(';')
-                   
-                   # Considera indentazione per i ripetuti
-                   if 'repeat' in steps_text and '\n' in steps_text:
-                       # Conta le righe indentate dopo un repeat
-                       lines_after_repeat = steps_text.split('repeat')[1].count('\n')
-                       if lines_after_repeat > 0:
-                           num_lines += lines_after_repeat - 1  # -1 perché la riga con repeat è già contata
-                   
-                   # Imposta altezza minima più altezza per ogni riga di testo (circa 15 punti per riga)
-                   row_height = max(20, 15 * num_lines)  # Altezza minima aumentata
-                   workouts_sheet.row_dimensions[row_index].height = row_height
-                   
-                   # Passa alla prossima riga
-                   row_index += 1
-                   
-           # Aggiungi una nota in fondo che rinvia al foglio degli esempi
-           workouts_sheet.merge_cells(f'A{row_index}:E{row_index}')
-           workouts_sheet[f'A{row_index}'] = '# Vedi il foglio "Examples" per esempi di sintassi avanzata'
-           workouts_sheet[f'A{row_index}'].font = comment_font
-           
-           # 5. Examples sheet (Questo foglio sarà completamente ignorato dalla conversione YAML)
-           examples_sheet = wb.create_sheet(title='Examples')
-           
-           # Intestazioni per il foglio degli esempi (formato non corrispondente a un formato riconosciuto)
-           examples_sheet['A1'] = 'Tipo di Esempio'
-           examples_sheet['B1'] = 'Descrizione'
-           examples_sheet['C1'] = 'Passi (Steps)'
-           
-           # Format header
-           for col in ['A', 'B', 'C']:
-               examples_sheet[f'{col}1'].font = Font(bold=True)
-               examples_sheet[f'{col}1'].fill = header_fill
-               examples_sheet[f'{col}1'].border = thin_border
-           
-           # Aggiunta di una riga di descrizione
-           examples_sheet.merge_cells('A2:C2')
-           examples_sheet['A2'] = '# ESEMPI DI SINTASSI - Questo foglio è solo per scopo informativo e non viene importato'
-           examples_sheet['A2'].font = comment_font
-           
-           # Esempi di sintassi per gli allenamenti (con distinzione chiara tra zone di passo e HR)
-           workout_examples = [
-               {
-                   "type": "Distanza",
-                   "description": "Esempio di allenamento basato su distanza",
-                   "steps": "warmup: 2km @ Z1_HR\ninterval: 5km @ Z3\ncooldown: 1km @ Z1_HR"
-               },
-               {
-                   "type": "Tempo",
-                   "description": "Esempio di allenamento basato su tempo",
-                   "steps": "warmup: 10min @ Z1_HR\ninterval: 30min @ Z2\ncooldown: 5min @ Z1_HR"
-               },
-               {
-                   "type": "Ripetute semplici",
-                   "description": "Esempio di allenamento con ripetute",
-                   "steps": "warmup: 10min @ Z1_HR\nrepeat 5:\n  interval: 1km @ Z4\n  recovery: 2min @ Z1_HR\ncooldown: 10min @ Z1_HR"
-               },
-               {
-                   "type": "Ripetute annidate",
-                   "description": "Esempio di ripetute annidate",
-                   "steps": "warmup: 10min @ Z1_HR\nrepeat 3:\n  interval: 5min @ Z3\n  repeat 4:\n    interval: 30s @ Z5\n    recovery: 30s @ Z1_HR\n  recovery: 3min @ Z2_HR\ncooldown: 10min @ Z1_HR"
-               },
-               {
-                   "type": "Con descrizioni",
-                   "description": "Esempio con descrizioni per ogni passo",
-                   "steps": "warmup: 10min @ Z1_HR -- Inizia lentamente\ninterval: 20min @ Z3 -- Mantieni ritmo costante\ncooldown: 5min @ Z1_HR -- Rallenta gradualmente"
-               },
-               {
-                   "type": "Pulsante lap",
-                   "description": "Esempio con pulsante lap",
-                   "steps": "warmup: 10min @ Z1_HR\nrest: lap-button @ Z1_HR -- Premi lap quando sei pronto\ninterval: 5km @ Z3\ncooldown: 5min @ Z1_HR"
-               },
-               {
-                   "type": "Zone personalizzate",
-                   "description": "Esempio con zone personalizzate",
-                   "steps": "warmup: 10min @ Z1_HR\ninterval: 20min @ marathon\ninterval: 10min @ threshold\ncooldown: 5min @ Z1_HR"
-               },
-               {
-                   "type": "Combinato",
-                   "description": "Combinazione di vari tipi di passi",
-                   "steps": "warmup: 15min @ Z1_HR\ninterval: 10min @ Z2\nrepeat 3:\n  interval: 5min @ Z4\n  recovery: 3min @ Z2_HR\n  repeat 2:\n    interval: 30s @ Z5\n    recovery: 90s @ Z1_HR\ninterval: 5min @ Z3\ncooldown: 10min @ Z1_HR"
-               }
-           ]
-           
-           # Aggiungi gli esempi
-           row_idx = 3
-           for example in workout_examples:
-               examples_sheet[f'A{row_idx}'] = example["type"]
-               examples_sheet[f'B{row_idx}'] = example["description"]
-               examples_sheet[f'C{row_idx}'] = example["steps"]
-               
-               for col in ['A', 'B', 'C']:
-                   examples_sheet[f'{col}{row_idx}'].border = thin_border
-                   examples_sheet[f'{col}{row_idx}'].fill = example_fill
-                   examples_sheet[f'{col}{row_idx}'].alignment = Alignment(wrapText=True, vertical='top')
-               
-               # Calcola altezza appropriata
-               steps_text = example["steps"]
-               num_lines = 1 + steps_text.count('\n') + steps_text.count(';')
-               
-               # Considera indentazione per i ripetuti
-               if 'repeat' in steps_text and '\n' in steps_text:
-                   lines_after_repeat = steps_text.split('repeat')[1].count('\n')
-                   if lines_after_repeat > 0:
-                       num_lines += lines_after_repeat - 1
-               
-               row_height = max(20, 15 * num_lines)
-               examples_sheet.row_dimensions[row_idx].height = row_height
-               
-               row_idx += 1
-           
-           # Aggiunta di una riga di suggerimenti sulla sintassi
-           examples_sheet.merge_cells(f'A{row_idx}:C{row_idx}')
-           examples_sheet[f'A{row_idx}'] = "# SINTASSI SUPPORTATA NEGLI STEP"
-           examples_sheet[f'A{row_idx}'].font = comment_font
-           examples_sheet[f'A{row_idx}'].alignment = Alignment(horizontal='center')
-           row_idx += 1
-           
-           # Suggerimenti sulla sintassi
-           syntax_examples = [
-               "tipo: durata @ zona -- descrizione opzionale",
-               "Tipi: warmup, interval, recovery, cooldown, rest, repeat",
-               "Durate: tempo (s, min, h) o distanza (m, km)",
-               "Zone: Z1-Z5 (passo), Z1_HR-Z5_HR (freq. cardiaca), o qualsiasi zona definita nei fogli Paces/HeartRates",
-               "Repeat: repeat N: seguito da step indentati con 2 spazi"
-           ]
-           
-           for example in syntax_examples:
-               examples_sheet.merge_cells(f'A{row_idx}:C{row_idx}')
-               examples_sheet[f'A{row_idx}'] = example
-               examples_sheet[f'A{row_idx}'].font = comment_font
-               row_idx += 1
-           
-           # Aggiunta di un foglio di esempi avanzati per Paces e HeartRates
-           advanced_examples_sheet = wb.create_sheet(title='Advanced Examples')
-           
-           advanced_examples_sheet['A1'] = 'Tipo'
-           advanced_examples_sheet['B1'] = 'Nome'
-           advanced_examples_sheet['C1'] = 'Valore'
-           advanced_examples_sheet['D1'] = 'Note'
-           
-           # Format header
-           for col in ['A', 'B', 'C', 'D']:
-               advanced_examples_sheet[f'{col}1'].font = Font(bold=True)
-               advanced_examples_sheet[f'{col}1'].fill = header_fill
-               advanced_examples_sheet[f'{col}1'].border = thin_border
-           
-           # Aggiunta di una riga di descrizione
-           advanced_examples_sheet.merge_cells('A2:D2')
-           advanced_examples_sheet['A2'] = '# ESEMPI AVANZATI DI SINTASSI - Questo foglio è solo per scopo informativo e non viene importato'
-           advanced_examples_sheet['A2'].font = comment_font
-           
-           # Esempi avanzati di ritmi
-           advanced_paces = [
-               ('Intervallo di ritmi', 'threshold', '5:20-5:10', 'Intervallo tra due ritmi'),
-               ('Percentuale', 'interval', '105-110% threshold', 'Percentuale di un altro ritmo'),
-               ('Percentuale', 'recovery', '70% marathon', 'Percentuale di un altro ritmo'),
-               ('Basato su distanza', '10km', '45:00', 'Tempo per completare 10km'),
-               ('Basato su distanza', '5km', '21:00', 'Tempo per completare 5km'),
-               ('Basato su distanza', '1km', '4:00', 'Tempo per completare 1km'),
-               ('Basato su distanza', 'mile', '6:30', 'Tempo per completare un miglio'),
-               ('Basato su distanza', '400m', '1:30', 'Tempo per completare 400m'),
-               ('Calcolo', 'half_marathon', '10km + 10s', 'Basato su 10km + secondi')
-           ]
-           
-           # Esempi avanzati di HR
-           advanced_hr = [
-               ('HR base', 'resting_hr', '50', 'FC a riposo'),
-               ('HR base', 'lactate_threshold_HR', '165', 'Soglia lattato'),
-               ('Intervallo', 'recovery_HR', '120-130', 'Intervallo diretto di battiti'),
-               ('Comparazione', 'easy_HR', '<140', 'Minore di un valore'),
-               ('Intervallo', 'moderate_HR', '140-160', 'Intervallo diretto di battiti'),
-               ('Comparazione', 'hard_HR', '>160', 'Maggiore di un valore'),
-               ('Percentuale', 'lt_zone_HR', '95-100% lactate_threshold_HR', 'Percentuale della soglia lattato'),
-               ('Formula', 'reserve_85_HR', '85% [max_hr-resting_hr] + resting_hr', 'Formula FC di riserva')
-           ]
-           
-           # Aggiungi gli esempi di pace
-           row_idx = 3
-           for example in advanced_paces:
-               advanced_examples_sheet[f'A{row_idx}'] = 'Paces'
-               advanced_examples_sheet[f'B{row_idx}'] = example[1]
-               advanced_examples_sheet[f'C{row_idx}'] = example[2]
-               advanced_examples_sheet[f'D{row_idx}'] = example[3]
-               
-               for col in ['A', 'B', 'C', 'D']:
-                   advanced_examples_sheet[f'{col}{row_idx}'].border = thin_border
-                   advanced_examples_sheet[f'{col}{row_idx}'].fill = example_fill
-               
-               row_idx += 1
-               
-           # Aggiungi gli esempi di HR
-           for example in advanced_hr:
-               advanced_examples_sheet[f'A{row_idx}'] = 'HeartRates'
-               advanced_examples_sheet[f'B{row_idx}'] = example[1]
-               advanced_examples_sheet[f'C{row_idx}'] = example[2]
-               advanced_examples_sheet[f'D{row_idx}'] = example[3]
-               
-               for col in ['A', 'B', 'C', 'D']:
-                   advanced_examples_sheet[f'{col}{row_idx}'].border = thin_border
-                   advanced_examples_sheet[f'{col}{row_idx}'].fill = example_fill
-               
-               row_idx += 1
-           
-           # Set column widths
-           workouts_sheet.column_dimensions['A'].width = 10  # Week
-           workouts_sheet.column_dimensions['B'].width = 15  # Date
-           workouts_sheet.column_dimensions['C'].width = 10  # Session
-           workouts_sheet.column_dimensions['D'].width = 25  # Description
-           workouts_sheet.column_dimensions['E'].width = 60  # Steps
-           
-           # Imposta larghezze colonne nei fogli di esempi
-           examples_sheet.column_dimensions['A'].width = 20  # Type
-           examples_sheet.column_dimensions['B'].width = 40  # Description
-           examples_sheet.column_dimensions['C'].width = 60  # Steps
-           
-           advanced_examples_sheet.column_dimensions['A'].width = 15  # Tipo
-           advanced_examples_sheet.column_dimensions['B'].width = 20  # Nome
-           advanced_examples_sheet.column_dimensions['C'].width = 30  # Valore
-           advanced_examples_sheet.column_dimensions['D'].width = 40  # Note
-           
-           # Auto-adjust column widths in Config, Paces, and HR sheets
-           self.auto_adjust_column_widths(config_sheet)
-           self.auto_adjust_column_widths(paces_sheet)
-           self.auto_adjust_column_widths(hr_sheet)
-           
-           # Save the file
-           wb.save(output_file)
-           self.log(f"File Excel creato con {sessions_per_week} sessioni per settimana")
-           return output_file
-           
-       except Exception as e:
-           self.log(f"Errore nella creazione del file Excel: {str(e)}")
-           import traceback
-           traceback.print_exc()
-           raise
+            # Format header
+            for col in ['A', 'B', 'C', 'D', 'E']:
+                cell = workouts_sheet[f'{col}2']
+                cell.font = Font(bold=True)
+                cell.fill = header_fill
+                cell.border = thin_border  # Add border to all header cells
+            
+            # Definisci tipi di allenamento basati sul tipo di sport
+            if sport_type == "running":
+                # Allenamenti di corsa
+                if sessions_per_week == 1:
+                    # Piano minimo: solo una sessione lunga a settimana
+                    workout_types = [
+                        "Long slow run"
+                    ]
+                elif sessions_per_week == 2:
+                    # Piano base: una sessione lunga e una di intervalli
+                    workout_types = [
+                        "Interval training",
+                        "Long slow run"
+                    ]
+                elif sessions_per_week == 3:
+                    # Piano intermedio: più varietà
+                    workout_types = [
+                        "Easy run",
+                        "Interval training",
+                        "Long slow run"
+                    ]
+                elif sessions_per_week == 4:
+                    # Piano avanzato: aggiunta di un allenamento di recupero
+                    workout_types = [
+                        "Recovery run",
+                        "Tempo run",
+                        "Interval training",
+                        "Long slow run"
+                    ]
+                elif sessions_per_week == 5:
+                    # Piano molto avanzato
+                    workout_types = [
+                        "Easy run",
+                        "Recovery run", 
+                        "Tempo run",
+                        "Interval training",
+                        "Long slow run"
+                    ]
+                elif sessions_per_week >= 6:
+                    # Piano professionale
+                    workout_types = [
+                        "Easy run",
+                        "Recovery run", 
+                        "Tempo run",
+                        "Interval training",
+                        "Hill repeats",
+                        "Long slow run"
+                    ]
+                    # Aggiungi sessioni aggiuntive se necessario
+                    while len(workout_types) < sessions_per_week:
+                        workout_types.append("Extra session")
+                        
+                # Definisci dettagli degli allenamenti con distinzione chiara tra zone di passo e HR
+                workout_details = {
+                    "Easy run": {
+                        "steps": "warmup: 10min @ Z1_HR\ninterval: 30min @ Z2\ncooldown: 5min @ Z1_HR"
+                    },
+                    "Recovery run": {
+                        "steps": "interval: 30min @ Z1_HR"
+                    },
+                    "Tempo run": {
+                        "steps": "warmup: 15min @ Z1_HR\ninterval: 20min @ Z4\ncooldown: 10min @ Z1_HR"
+                    },
+                    "Interval training": {
+                        "steps": "warmup: 15min @ Z1_HR\nrepeat 5:\n  interval: 400m @ Z5\n  recovery: 2min @ Z1_HR\ncooldown: 10min @ Z1_HR"
+                    },
+                    "Hill repeats": {
+                        "steps": "warmup: 15min @ Z1_HR\nrepeat 6:\n  interval: 1min @ Z5 -- Salita\n  recovery: 2min @ Z1_HR -- Discesa\ncooldown: 10min @ Z1_HR"
+                    },
+                    "Long slow run": {
+                        "steps": "warmup: 10min @ Z1_HR\ninterval: 45min @ Z2\ncooldown: 5min @ Z1_HR"
+                    },
+                    "Extra session": {
+                        "steps": "warmup: 10min @ Z1_HR\ninterval: 20min @ Z2\ncooldown: 5min @ Z1_HR"
+                    },
+                    "Race day": {
+                        "steps": "warmup: 10min @ Z1_HR\ninterval: 3000m @ race_pace\ncooldown: 10min @ Z1_HR"
+                    }
+                }
+            else:  # cycling
+                # Allenamenti di ciclismo
+                if sessions_per_week == 1:
+                    # Piano minimo: solo una sessione lunga a settimana
+                    workout_types = [
+                        "Long endurance ride"
+                    ]
+                elif sessions_per_week == 2:
+                    # Piano base: una sessione lunga e una di intervalli
+                    workout_types = [
+                        "Interval training",
+                        "Long endurance ride"
+                    ]
+                elif sessions_per_week == 3:
+                    # Piano intermedio: più varietà
+                    workout_types = [
+                        "Easy ride",
+                        "Interval training",
+                        "Long endurance ride"
+                    ]
+                elif sessions_per_week == 4:
+                    # Piano avanzato: aggiunta di un allenamento di recupero
+                    workout_types = [
+                        "Recovery ride",
+                        "Tempo ride",
+                        "Interval training",
+                        "Long endurance ride"
+                    ]
+                elif sessions_per_week == 5:
+                    # Piano molto avanzato
+                    workout_types = [
+                        "Easy ride",
+                        "Recovery ride", 
+                        "Tempo ride",
+                        "Interval training",
+                        "Long endurance ride"
+                    ]
+                elif sessions_per_week >= 6:
+                    # Piano professionale
+                    workout_types = [
+                        "Easy ride",
+                        "Recovery ride", 
+                        "Tempo ride",
+                        "Interval training",
+                        "Hill repeats",
+                        "Long endurance ride"
+                    ]
+                    # Aggiungi sessioni aggiuntive se necessario
+                    while len(workout_types) < sessions_per_week:
+                        workout_types.append("Extra session")
+                        
+                # Definisci dettagli degli allenamenti con velocità per ciclismo
+                workout_details = {
+                    "Easy ride": {
+                        "steps": "warmup: 10min @hr Z1_HR\ninterval: 30min @spd Z2\ncooldown: 5min @hr Z1_HR"
+                    },
+                    "Recovery ride": {
+                        "steps": "interval: 30min @hr Z1_HR"
+                    },
+                    "Tempo ride": {
+                        "steps": "warmup: 15min @hr Z1_HR\ninterval: 20min @spd Z4\ncooldown: 10min @hr Z1_HR"
+                    },
+                    "Interval training": {
+                        "steps": "warmup: 15min @hr Z1_HR\nrepeat 5:\n  interval: 2min @spd Z5\n  recovery: 2min @hr Z1_HR\ncooldown: 10min @hr Z1_HR"
+                    },
+                    "Hill repeats": {
+                        "steps": "warmup: 15min @hr Z1_HR\nrepeat 6:\n  interval: 3min @spd Z5 -- Salita\n  recovery: 3min @hr Z1_HR -- Discesa\ncooldown: 10min @hr Z1_HR"
+                    },
+                    "Long endurance ride": {
+                        "steps": "warmup: 10min @hr Z1_HR\ninterval: 60min @spd Z2\ncooldown: 5min @hr Z1_HR"
+                    },
+                    "Extra session": {
+                        "steps": "warmup: 10min @hr Z1_HR\ninterval: 30min @spd Z2\ncooldown: 5min @hr Z1_HR"
+                    },
+                    "Race day": {
+                        "steps": "warmup: 20min @hr Z1_HR\ninterval: 10km @spd race\ncooldown: 10min @hr Z1_HR"
+                    }
+                }
+            
+            # Define alternating colors for weeks
+            week_colors = [
+                "FFF2CC",  # Light yellow
+                "DAEEF3",  # Light blue
+                "E2EFDA",  # Light green
+                "FCE4D6",  # Light orange
+                "EAD1DC",  # Light pink
+                "D9D9D9",  # Light gray
+            ]
+            
+            # Aggiungi allenamenti al foglio
+            row_index = 3  # Start from row 3 (after header and athlete row)
+            
+            # Generiamo 3 settimane di esempio
+            for week in range(1, 4):
+                # Determina il colore per questa settimana
+                color_index = (week - 1) % len(week_colors)
+                row_fill = PatternFill(start_color=week_colors[color_index], 
+                                      end_color=week_colors[color_index], 
+                                      fill_type="solid")
+                
+                # Aggiungi ciascuna sessione per questa settimana
+                for session in range(1, min(sessions_per_week, 3) + 1):  # Limitiamo a 3 sessioni per chiarezza
+                    # Usa l'indice corretto in base al numero di sessioni
+                    workout_type = workout_types[(session - 1) % len(workout_types)]
+                    
+                    # Se è l'ultima settimana e la prima sessione, rendiamola la gara
+                    if week == 3 and session == 1:
+                        workout_type = "Race day"
+                    
+                    # Crea la riga per questa sessione
+                    workouts_sheet[f'A{row_index}'] = week
+                    workouts_sheet[f'B{row_index}'] = None  # La data verrà impostata successivamente
+                    workouts_sheet[f'C{row_index}'] = session
+                    workouts_sheet[f'D{row_index}'] = workout_type
+                    workouts_sheet[f'E{row_index}'] = workout_details[workout_type]["steps"]
+                    
+                    # Applica lo stile a tutte le celle della riga
+                    for col in ['A', 'B', 'C', 'D', 'E']:
+                        cell = workouts_sheet[f'{col}{row_index}']
+                        cell.fill = row_fill
+                        cell.border = thin_border
+                        cell.alignment = Alignment(wrapText=True, vertical='top')
+                    
+                    # Calcola altezza appropriata per il contenuto
+                    steps_text = workout_details[workout_type]["steps"]
+                    num_lines = 1 + steps_text.count('\n') + steps_text.count(';')
+                    
+                    # Considera indentazione per i ripetuti
+                    if 'repeat' in steps_text and '\n' in steps_text:
+                        # Conta le righe indentate dopo un repeat
+                        lines_after_repeat = steps_text.split('repeat')[1].count('\n')
+                        if lines_after_repeat > 0:
+                            num_lines += lines_after_repeat - 1  # -1 perché la riga con repeat è già contata
+                    
+                    # Imposta altezza minima più altezza per ogni riga di testo (circa 15 punti per riga)
+                    row_height = max(20, 15 * num_lines)  # Altezza minima aumentata
+                    workouts_sheet.row_dimensions[row_index].height = row_height
+                    
+                    # Passa alla prossima riga
+                    row_index += 1
+                    
+            # Aggiungi una nota in fondo che rinvia al foglio degli esempi
+            workouts_sheet.merge_cells(f'A{row_index}:E{row_index}')
+            workouts_sheet[f'A{row_index}'] = '# Vedi il foglio "Examples" per esempi di sintassi avanzata'
+            workouts_sheet[f'A{row_index}'].font = comment_font
+            
+            # 5. Examples sheet (Questo foglio sarà completamente ignorato dalla conversione YAML)
+            examples_sheet = wb.create_sheet(title='Examples')
+            
+            # Intestazioni per il foglio degli esempi (formato non corrispondente a un formato riconosciuto)
+            examples_sheet['A1'] = 'Tipo di Esempio'
+            examples_sheet['B1'] = 'Descrizione'
+            examples_sheet['C1'] = 'Passi (Steps)'
+            
+            # Format header
+            for col in ['A', 'B', 'C']:
+                examples_sheet[f'{col}1'].font = Font(bold=True)
+                examples_sheet[f'{col}1'].fill = header_fill
+                examples_sheet[f'{col}1'].border = thin_border
+            
+            # Aggiunta di una riga di descrizione
+            examples_sheet.merge_cells('A2:C2')
+            examples_sheet['A2'] = '# ESEMPI DI SINTASSI - Questo foglio è solo per scopo informativo e non viene importato'
+            examples_sheet['A2'].font = comment_font
+            
+            # Esempi di sintassi per gli allenamenti specifica per il tipo di sport
+            if sport_type == "running":
+                workout_examples = [
+                    {
+                        "type": "Distanza",
+                        "description": "Esempio di allenamento basato su distanza",
+                        "steps": "warmup: 2km @ Z1_HR\ninterval: 5km @ Z3\ncooldown: 1km @ Z1_HR"
+                    },
+                    {
+                        "type": "Tempo",
+                        "description": "Esempio di allenamento basato su tempo",
+                        "steps": "warmup: 10min @ Z1_HR\ninterval: 30min @ Z2\ncooldown: 5min @ Z1_HR"
+                    },
+                    {
+                        "type": "Ripetute semplici",
+                        "description": "Esempio di allenamento con ripetute",
+                        "steps": "warmup: 10min @ Z1_HR\nrepeat 5:\n  interval: 1km @ Z4\n  recovery: 2min @ Z1_HR\ncooldown: 10min @ Z1_HR"
+                    },
+                    {
+                        "type": "Ripetute annidate",
+                        "description": "Esempio di ripetute annidate",
+                        "steps": "warmup: 10min @ Z1_HR\nrepeat 3:\n  interval: 5min @ Z3\n  repeat 4:\n    interval: 30s @ Z5\n    recovery: 30s @ Z1_HR\n  recovery: 3min @ Z2_HR\ncooldown: 10min @ Z1_HR"
+                    },
+                    {
+                        "type": "Con descrizioni",
+                        "description": "Esempio con descrizioni per ogni passo",
+                        "steps": "warmup: 10min @ Z1_HR -- Inizia lentamente\ninterval: 20min @ Z3 -- Mantieni ritmo costante\ncooldown: 5min @ Z1_HR -- Rallenta gradualmente"
+                    },
+                    {
+                        "type": "Pulsante lap",
+                        "description": "Esempio con pulsante lap",
+                        "steps": "warmup: 10min @ Z1_HR\nrest: lap-button @ Z1_HR -- Premi lap quando sei pronto\ninterval: 5km @ Z3\ncooldown: 5min @ Z1_HR"
+                    },
+                    {
+                        "type": "Zone personalizzate",
+                        "description": "Esempio con zone personalizzate",
+                        "steps": "warmup: 10min @ Z1_HR\ninterval: 20min @ marathon\ninterval: 10min @ threshold\ncooldown: 5min @ Z1_HR"
+                    }
+                ]
+            else:  # cycling
+                workout_examples = [
+                    {
+                        "type": "Distanza",
+                        "description": "Esempio di allenamento basato su distanza",
+                        "steps": "warmup: 5km @hr Z1_HR\ninterval: 20km @spd Z3\ncooldown: 5km @hr Z1_HR"
+                    },
+                    {
+                        "type": "Tempo",
+                        "description": "Esempio di allenamento basato su tempo",
+                        "steps": "warmup: 15min @hr Z1_HR\ninterval: 45min @spd Z2\ncooldown: 10min @hr Z1_HR"
+                    },
+                    {
+                        "type": "Ripetute semplici",
+                        "description": "Esempio di allenamento con ripetute",
+                        "steps": "warmup: 15min @hr Z1_HR\nrepeat 5:\n  interval: 2min @spd Z4\n  recovery: 3min @hr Z1_HR\ncooldown: 10min @hr Z1_HR"
+                    },
+                    {
+                        "type": "Ripetute annidate",
+                        "description": "Esempio di ripetute annidate",
+                        "steps": "warmup: 15min @hr Z1_HR\nrepeat 3:\n  interval: 10min @spd Z3\n  repeat 4:\n    interval: 30s @spd Z5\n    recovery: 90s @hr Z1_HR\n  recovery: 5min @hr Z2_HR\ncooldown: 10min @hr Z1_HR"
+                    },
+                    {
+                        "type": "Con descrizioni",
+                        "description": "Esempio con descrizioni per ogni passo",
+                        "steps": "warmup: 15min @hr Z1_HR -- Inizia lentamente\ninterval: 30min @spd Z3 -- Mantieni cadenza costante\ncooldown: 10min @hr Z1_HR -- Rallenta gradualmente"
+                    },
+                    {
+                        "type": "Pulsante lap",
+                        "description": "Esempio con pulsante lap",
+                        "steps": "warmup: 15min @hr Z1_HR\nrest: lap-button @hr Z1_HR -- Premi lap quando sei pronto\ninterval: 10km @spd Z3\ncooldown: 5min @hr Z1_HR"
+                    },
+                    {
+                        "type": "Zone personalizzate",
+                        "description": "Esempio con zone personalizzate",
+                        "steps": "warmup: 15min @hr Z1_HR\ninterval: 30min @spd ftp\ninterval: 15min @spd recovery\ncooldown: 10min @hr Z1_HR"
+                    }
+                ]
+            
+            # Aggiungi gli esempi
+            row_idx = 3
+            for example in workout_examples:
+                examples_sheet[f'A{row_idx}'] = example["type"]
+                examples_sheet[f'B{row_idx}'] = example["description"]
+                examples_sheet[f'C{row_idx}'] = example["steps"]
+                
+                for col in ['A', 'B', 'C']:
+                    examples_sheet[f'{col}{row_idx}'].border = thin_border
+                    examples_sheet[f'{col}{row_idx}'].fill = example_fill
+                    examples_sheet[f'{col}{row_idx}'].alignment = Alignment(wrapText=True, vertical='top')
+                
+                # Calcola altezza appropriata
+                steps_text = example["steps"]
+                num_lines = 1 + steps_text.count('\n') + steps_text.count(';')
+                
+                # Considera indentazione per i ripetuti
+                if 'repeat' in steps_text and '\n' in steps_text:
+                    lines_after_repeat = steps_text.split('repeat')[1].count('\n')
+                    if lines_after_repeat > 0:
+                        num_lines += lines_after_repeat - 1
+                
+                row_height = max(20, 15 * num_lines)
+                examples_sheet.row_dimensions[row_idx].height = row_height
+                
+                row_idx += 1
+            
+            # Aggiunta di una riga di suggerimenti sulla sintassi
+            examples_sheet.merge_cells(f'A{row_idx}:C{row_idx}')
+            examples_sheet[f'A{row_idx}'] = "# SINTASSI SUPPORTATA NEGLI STEP"
+            examples_sheet[f'A{row_idx}'].font = comment_font
+            examples_sheet[f'A{row_idx}'].alignment = Alignment(horizontal='center')
+            row_idx += 1
+            
+            # Suggerimenti sulla sintassi specifici per il tipo di sport
+            if sport_type == "running":
+                syntax_examples = [
+                    "tipo: durata @ zona -- descrizione opzionale",
+                    "Tipi: warmup, interval, recovery, cooldown, rest, repeat, other",
+                    "Durate: tempo (s, min, h) o distanza (m, km)",
+                    "Zone: Z1-Z5 (passo), Z1_HR-Z5_HR (freq. cardiaca), o qualsiasi zona definita nei fogli Paces/HeartRates",
+                    "Repeat: repeat N: seguito da step indentati con 2 spazi"
+                ]
+            else:  # cycling
+                syntax_examples = [
+                    "tipo: durata @spd zona -- descrizione opzionale (per velocità)",
+                    "tipo: durata @hr zona -- descrizione opzionale (per frequenza cardiaca)",
+                    "Tipi: warmup, interval, recovery, cooldown, rest, repeat, other",
+                    "Durate: tempo (s, min, h) o distanza (m, km)",
+                    "Zone velocità: Z1-Z5, o qualsiasi zona definita nel foglio Speeds",
+                    "Zone HR: Z1_HR-Z5_HR, o qualsiasi zona definita nel foglio HeartRates",
+                    "Repeat: repeat N: seguito da step indentati con 2 spazi"
+                ]
+            
+            for example in syntax_examples:
+                examples_sheet.merge_cells(f'A{row_idx}:C{row_idx}')
+                examples_sheet[f'A{row_idx}'] = example
+                examples_sheet[f'A{row_idx}'].font = comment_font
+                row_idx += 1
+            
+            # Set column widths
+            workouts_sheet.column_dimensions['A'].width = 10  # Week
+            workouts_sheet.column_dimensions['B'].width = 15  # Date
+            workouts_sheet.column_dimensions['C'].width = 10  # Session
+            workouts_sheet.column_dimensions['D'].width = 25  # Description
+            workouts_sheet.column_dimensions['E'].width = 60  # Steps
+            
+            # Imposta larghezze colonne nei fogli di esempi
+            examples_sheet.column_dimensions['A'].width = 20  # Type
+            examples_sheet.column_dimensions['B'].width = 40  # Description
+            examples_sheet.column_dimensions['C'].width = 60  # Steps
+            
+            # Auto-adjust column widths in Config, zones, and HR sheets
+            self.auto_adjust_column_widths(config_sheet)
+            self.auto_adjust_column_widths(zones_sheet)
+            self.auto_adjust_column_widths(hr_sheet)
+            
+            # Save the file
+            wb.save(output_file)
+            self.log(f"File Excel creato per {sport_type} con {sessions_per_week} sessioni per settimana")
+            return output_file
+            
+        except Exception as e:
+            self.log(f"Errore nella creazione del file Excel: {str(e)}")
+            import traceback
+            traceback.print_exc()
+            raise
 
 
 
@@ -2809,6 +2951,9 @@ class GarminPlannerGUI(tk.Tk):
                 args.name_filter = self.training_plan.get()
             else:
                 args.name_filter = None
+                
+            # Aggiungi il filtro per tipo di sport
+            args.sport_type = self.plan_sport_type.get() if hasattr(self, 'plan_sport_type') else None
             
             # Ottieni gli allenamenti pianificati
             from planner.manage import get_scheduled
@@ -2822,7 +2967,12 @@ class GarminPlannerGUI(tk.Tk):
             for item in calendar_data:
                 date = item.get('date', 'N/A')
                 workout_name = item.get('title', 'Senza nome')
-                self.calendar_tree.insert("", "end", values=(date, workout_name))
+                sport_type = item.get('sport_type', 'running')  # Aggiungi il tipo di sport
+                
+                # Visualizza il tipo di sport nella tabella
+                workout_display = f"{workout_name} ({sport_type})"
+                
+                self.calendar_tree.insert("", "end", values=(date, workout_display))
             
             self.log(f"Trovati {len(calendar_data)} allenamenti pianificati")
             
@@ -2830,6 +2980,7 @@ class GarminPlannerGUI(tk.Tk):
             self.log(f"Errore nell'aggiornamento del calendario: {str(e)}")
             import traceback
             self.log(traceback.format_exc())
+
 
     def verify_garmin_login(self):
         """Verifica che l'utente sia loggato a Garmin Connect"""
@@ -3003,7 +3154,7 @@ class GarminPlannerGUI(tk.Tk):
             self.excel_max_sessions = 0
 
 
-    def _schedule_excel_workouts_from_race_day(self, excel_file, race_date, selected_days, athlete_name=""):
+    def _schedule_excel_workouts_from_race_day(self, excel_file, race_date, selected_days, athlete_name="", sport_type="running"):
         """Pianifica gli allenamenti nel file Excel procedendo a ritroso dalla data della gara"""
         try:
             # Carica il file Excel
@@ -3095,6 +3246,36 @@ class GarminPlannerGUI(tk.Tk):
             selected_day_names = [day_names[day] for day in sorted(selected_days)]
             self.log(f"Giorni selezionati: {', '.join(selected_day_names)}")
             self.log(f"Data della gara: {race_date.strftime('%d/%m/%Y')} ({day_names[race_date.weekday()]})")
+            self.log(f"Tipo di sport: {sport_type}")
+            
+            # Aggiorna il tipo di sport nel foglio Config
+            if 'Config' in wb.sheetnames:
+                config_sheet = wb['Config']
+                
+                # Cerca se esiste già sport_type
+                sport_type_found = False
+                for row in range(1, config_sheet.max_row + 1):
+                    if config_sheet.cell(row=row, column=1).value == 'sport_type':
+                        config_sheet.cell(row=row, column=2).value = sport_type
+                        sport_type_found = True
+                        self.log(f"Aggiornato tipo di sport nel foglio Config: {sport_type}")
+                        break
+                
+                # Se non esiste, aggiungiamo
+                if not sport_type_found:
+                    next_row = 0
+                    # Cerca la prima riga libera
+                    for row in range(1, config_sheet.max_row + 10):  # Cerchiamo nelle prime 10 righe vuote
+                        if not config_sheet.cell(row=row, column=1).value:
+                            next_row = row
+                            break
+                    
+                    if next_row == 0:  # Se non trova una riga vuota, usa la riga successiva
+                        next_row = config_sheet.max_row + 1
+                        
+                    config_sheet.cell(row=next_row, column=1, value='sport_type')
+                    config_sheet.cell(row=next_row, column=2, value=sport_type)
+                    self.log(f"Aggiunto tipo di sport nel foglio Config: {sport_type}")
             
             # Raccogli ed ordina gli allenamenti per settimana e sessione
             workouts_by_week = {}
@@ -3306,6 +3487,7 @@ class GarminPlannerGUI(tk.Tk):
             import traceback
             traceback.print_exc()
             messagebox.showerror("Errore", f"Si è verificato un errore durante la pianificazione:\n{str(e)}")
+
 
 
     def browse_excel_input(self):
@@ -3779,6 +3961,20 @@ class GarminPlannerGUI(tk.Tk):
                         rel_path = os.path.relpath(os.path.join(root, file), plans_dir)
                         parts = rel_path.split(os.sep)
                         
+                        # Extract sport type from file if available
+                        sport_type = "running"  # Default
+                        
+                        try:
+                            with open(os.path.join(root, file), 'r', encoding='utf-8') as f:
+                                yaml_data = yaml.safe_load(f)
+                                if 'config' in yaml_data and 'sport_type' in yaml_data['config']:
+                                    sport_type = yaml_data['config']['sport_type']
+                        except Exception as e:
+                            self.log(f"Errore nella lettura del file YAML {file}: {str(e)}")
+                        
+                        # Converti in italiano per visualizzazione
+                        sport_display = "Corsa" if sport_type == "running" else "Ciclismo"
+                        
                         # Supporta sia la struttura gerarchica che quella semplice
                         if len(parts) >= 3:
                             # Struttura gerarchica originale: tipo/settimane/variante/file.yaml
@@ -3795,10 +3991,11 @@ class GarminPlannerGUI(tk.Tk):
                             
                             plan_name = f"{plan_type} - {variant}{target_time}"
                             
-                            # Add to treeview
+                            # Add to treeview with sport type
                             self.training_plans_tree.insert("", "end", 
                                                          values=(plan_name, weeks.replace("_", " "), 
-                                                                 os.path.join(root, file)))
+                                                                 os.path.join(root, file),
+                                                                 sport_display))
                         elif len(parts) == 2:
                             # Struttura semplice: cartella/file.yaml
                             folder = parts[0]     # e.g., frank
@@ -3807,21 +4004,23 @@ class GarminPlannerGUI(tk.Tk):
                             # Extract name without extension
                             plan_name = os.path.splitext(filename)[0]
                             
-                            # Add to treeview with folder name as the plan type
+                            # Add to treeview with folder name as the plan type and sport type
                             self.training_plans_tree.insert("", "end", 
                                                          values=(f"{plan_name} ({folder})", 
                                                                  "N/A", 
-                                                                 os.path.join(root, file)))
+                                                                 os.path.join(root, file),
+                                                                 sport_display))
                         elif len(parts) == 1:
                             # File direttamente nella cartella training_plans
                             filename = parts[0]
                             plan_name = os.path.splitext(filename)[0]
                             
-                            # Add to treeview
+                            # Add to treeview with sport type
                             self.training_plans_tree.insert("", "end", 
                                                          values=(plan_name, 
                                                                  "N/A", 
-                                                                 os.path.join(root, file)))
+                                                                 os.path.join(root, file),
+                                                                 sport_display))
             
             if not self.training_plans_tree.get_children():
                 self.log("Nessun piano di allenamento trovato")
@@ -3830,6 +4029,7 @@ class GarminPlannerGUI(tk.Tk):
         
         except Exception as e:
             self.log(f"Errore nel caricamento dei piani di allenamento: {str(e)}")
+
     
     def select_training_plan(self, event):
         """Gestisce il doppio click su un piano di allenamento nella tree view"""
@@ -3943,7 +4143,6 @@ class GarminPlannerGUI(tk.Tk):
         except Exception as e:
             self.log(f"Errore nell'aggiornamento dei selettori di data: {str(e)}")
 
-
     def analyze_yaml_plan(self, yaml_path):
         """Analizza il piano direttamente dal file YAML senza necessità di importarlo"""
         try:
@@ -3954,6 +4153,15 @@ class GarminPlannerGUI(tk.Tk):
                 
                 # Estrai la data della gara se presente nella configurazione
                 config = plan_data.get('config', {})
+                
+                # Estrai il tipo di sport
+                sport_type = config.get('sport_type', 'running')  # Default a running
+                
+                # Aggiorna l'interfaccia con il tipo di sport, se disponibile
+                if hasattr(self, 'sport_type_var'):
+                    self.sport_type_var.set(sport_type)
+                if hasattr(self, 'plan_sport_type'):
+                    self.plan_sport_type.set(sport_type)
                 
                 # Estrai l'ID del piano (prefisso)
                 if 'name_prefix' in config:
@@ -4115,6 +4323,10 @@ class GarminPlannerGUI(tk.Tk):
                 if workouts_with_dates:
                     num_dates = len(workouts_with_dates)
                     info_text += f"\nDate pianificate: {num_dates}/{workout_count} allenamenti"
+                    
+                # Aggiungi informazioni sul tipo di sport
+                info_text += f"\nTipo di sport: {sport_type} - "
+                info_text += "Corsa" if sport_type == "running" else "Ciclismo"
                 
                 # Aggiorna l'interfaccia
                 if hasattr(self, 'training_plan_info'):
@@ -4153,6 +4365,7 @@ class GarminPlannerGUI(tk.Tk):
                 self.excel_max_sessions = 0
                 
             return False
+
 
 
     def preselect_days(self, sessions_per_week):
@@ -4209,6 +4422,7 @@ class GarminPlannerGUI(tk.Tk):
             args.replace = self.import_replace.get()
             args.dry_run = False
             args.treadmill = False
+            args.sport_type = self.import_sport_type.get()  # Aggiungi il tipo di sport
             
             # Esegui la funzione direttamente
             cmd_import_workouts(args)
@@ -4224,6 +4438,7 @@ class GarminPlannerGUI(tk.Tk):
             import traceback
             self.log(traceback.format_exc())
             messagebox.showerror("Errore", f"Errore durante l'importazione: {str(e)}")
+
     
     def refresh_workouts(self):
         """Refresh the list of workouts from Garmin Connect"""
@@ -4263,11 +4478,20 @@ class GarminPlannerGUI(tk.Tk):
                 for item in self.workouts_tree.get_children():
                     self.workouts_tree.delete(item)
                 
-                # Aggiungi i nuovi allenamenti
+                # Aggiungi i nuovi allenamenti con il tipo di sport
                 for workout in workouts:
                     workout_id = workout.get('workoutId', 'N/A')
                     workout_name = workout.get('workoutName', 'Senza nome')
-                    self.workouts_tree.insert("", "end", values=(workout_id, workout_name))
+                    
+                    # Estrai il tipo di sport
+                    sport_type = "running"  # Default
+                    if 'sportType' in workout and workout['sportType'].get('sportTypeKey') in ["running", "cycling"]:
+                        sport_type = workout['sportType'].get('sportTypeKey')
+                    
+                    # Converti in italiano per visualizzazione
+                    sport_display = "Corsa" if sport_type == "running" else "Ciclismo"
+                    
+                    self.workouts_tree.insert("", "end", values=(workout_id, workout_name, sport_display))
                 
                 self.log(f"Trovati {len(workouts)} allenamenti su Garmin Connect")
             
@@ -4368,6 +4592,9 @@ class GarminPlannerGUI(tk.Tk):
         except ValueError:
             messagebox.showerror("Errore", "Formato data non valido. Usa YYYY-MM-DD")
             return
+        
+        # Ottieni il tipo di sport
+        sport_type = self.plan_sport_type.get() if hasattr(self, 'plan_sport_type') else "running"
         
         # Se abbiamo date già definite nel file YAML e non c'è stata nessuna modifica, usiamole direttamente
         yaml_dates_usable = (hasattr(self, 'original_workout_dates') and self.original_workout_dates and
@@ -4490,6 +4717,26 @@ class GarminPlannerGUI(tk.Tk):
                     # Imposta flag per usare le date aggiornate
                     use_original_dates = True
             
+            # Aggiorna il tipo di sport nel file YAML se specificato
+            if sport_type and yaml_path:
+                try:
+                    with open(yaml_path, 'r') as f:
+                        yaml_data = yaml.safe_load(f)
+                    
+                    # Aggiorna o aggiungi il tipo di sport nella configurazione
+                    if 'config' not in yaml_data:
+                        yaml_data['config'] = {}
+                    
+                    yaml_data['config']['sport_type'] = sport_type
+                    
+                    # Salva il file YAML aggiornato
+                    with open(yaml_path, 'w') as f:
+                        yaml.dump(yaml_data, f, default_flow_style=False)
+                    
+                    self.log(f"Tipo di sport aggiornato nel file YAML: {sport_type}")
+                except Exception as e:
+                    self.log(f"Errore nell'aggiornamento del tipo di sport nel YAML: {str(e)}")
+            
             # Conferma importazione all'utente
             if not messagebox.askyesno("Conferma importazione", 
                                       f"Prima di pianificare, gli allenamenti devono essere importati in Garmin Connect.\n\n"
@@ -4500,6 +4747,7 @@ class GarminPlannerGUI(tk.Tk):
             # Imposta il file di importazione e opzioni
             self.import_file.set(yaml_path)
             self.import_replace.set(True)  # Sostituisci eventuali allenamenti esistenti
+            self.import_sport_type.set(sport_type)  # Imposta il tipo di sport per l'importazione
             
             self.log(f"Importazione degli allenamenti da {yaml_path}...")
             
@@ -4531,6 +4779,7 @@ class GarminPlannerGUI(tk.Tk):
         self.log(f"Pianificazione allenamenti per il piano {training_plan_id}...")
         self.log(f"Data di gara: {self.race_day.get()}")
         self.log(f"Giorni selezionati: {[self.day_names[d] for d in selected_days]}")
+        self.log(f"Tipo di sport: {sport_type}")
         
         # Se stiamo usando le date originali dal YAML, pianificazione diretta
         if use_original_dates:
@@ -4538,7 +4787,7 @@ class GarminPlannerGUI(tk.Tk):
             self._schedule_with_yaml_dates()
         else:
             # Altrimenti esegui la pianificazione standard
-            self._do_schedule(selected_days, False)
+            self._do_schedule(selected_days, False, sport_type)
 
 
     def _schedule_with_yaml_dates(self):
@@ -5367,10 +5616,14 @@ class GarminPlannerGUI(tk.Tk):
             race_day = datetime.strptime(race_day_str, "%Y-%m-%d").date()
             today = datetime.today().date()
             
+            # Ottieni il tipo di sport
+            sport_type = self.plan_sport_type.get() if hasattr(self, 'plan_sport_type') else "running"
+            
             # Log per debug
             self.log(f"DEBUG: Data della gara (stringa): {race_day_str}")
             self.log(f"DEBUG: Data della gara (oggetto): {race_day}")
             self.log(f"DEBUG: Formato della data: {race_day.strftime('%Y-%m-%d')}")
+            self.log(f"DEBUG: Tipo di sport: {sport_type}")
             
             # Verifica che la data della gara sia valida
             if race_day < today:
@@ -5452,8 +5705,14 @@ class GarminPlannerGUI(tk.Tk):
                     with open(yaml_path, 'r') as f:
                         plan_data = yaml.safe_load(f)
                         
-                        # Rimuovi la configurazione
+                        # Estrai il tipo di sport dalla configurazione
                         config = plan_data.pop('config', {}) if 'config' in plan_data else {}
+                        yaml_sport_type = config.get('sport_type', 'running')  # Default a running
+                        
+                        # Utilizza il tipo di sport del YAML se disponibile e non scelto manualmente
+                        if not sport_type and yaml_sport_type:
+                            sport_type = yaml_sport_type
+                            self.log(f"Utilizzando il tipo di sport dal YAML: {sport_type}")
                         
                         # Crea una struttura di allenamenti dal YAML
                         for workout_name, steps in plan_data.items():
@@ -5469,7 +5728,8 @@ class GarminPlannerGUI(tk.Tk):
                                 workout_infos[week_id][session_id] = {
                                     'id': f"yaml-{workout_name.replace(' ', '-')}",  # ID fittizio
                                     'name': workout_name,
-                                    'week_num': week_num
+                                    'week_num': week_num,
+                                    'sport_type': sport_type
                                 }
                                 
                                 # Estrai la data se presente
@@ -5496,12 +5756,18 @@ class GarminPlannerGUI(tk.Tk):
                         for workout in all_workouts:
                             workout_name = workout.get('workoutName', '')
                             if training_plan_id in workout_name:
-                                plan_workouts.append(workout)
+                                # Filtra anche per tipo di sport se specificato
+                                workout_sport = workout.get('sportType', {}).get('sportTypeKey', 'running')
+                                if not sport_type or sport_type == workout_sport:
+                                    plan_workouts.append(workout)
                         
                         # Estrai informazioni settimana/sessione
                         for workout in plan_workouts:
                             workout_name = workout.get('workoutName', '')
                             workout_id = workout.get('workoutId', '')
+                            
+                            # Estrai il tipo di sport
+                            workout_sport = workout.get('sportType', {}).get('sportTypeKey', 'running')
                             
                             match = re.search(r'\s(W\d\d)S(\d\d)\s', workout_name)
                             if match:
@@ -5514,7 +5780,8 @@ class GarminPlannerGUI(tk.Tk):
                                 workout_infos[week_id][session_id] = {
                                     'id': workout_id,
                                     'name': workout_name,
-                                    'week_num': week_num
+                                    'week_num': week_num,
+                                    'sport_type': workout_sport
                                 }
             
             # Se non ci sono ancora allenamenti, non possiamo simulare
@@ -5588,7 +5855,8 @@ class GarminPlannerGUI(tk.Tk):
                             'date': existing_date,
                             'title': workout_info['name'],
                             'id': workout_info['id'],
-                            'day': "Data esistente"
+                            'day': "Data esistente",
+                            'sport_type': workout_info.get('sport_type', sport_type)
                         })
                         dates_used.add(existing_date)
                         continue
@@ -5658,7 +5926,8 @@ class GarminPlannerGUI(tk.Tk):
                         'date': date_str,
                         'title': workout_info['name'],
                         'id': workout_info['id'],
-                        'day': day_names[workout_date.weekday()]
+                        'day': day_names[workout_date.weekday()],
+                        'sport_type': workout_info.get('sport_type', sport_type)
                     })
                     
                     self.log(f"SIMULAZIONE: Allenamento {week_id}S{session_id:02d} pianificato per {day_names[workout_date.weekday()]} {date_str}")
@@ -5676,25 +5945,10 @@ class GarminPlannerGUI(tk.Tk):
             messagebox.showerror("Errore", f"Errore durante la simulazione: {str(e)}")
 
             
-    def _do_schedule(self, selected_days, is_dry_run=False):
-        """Esegue il comando di pianificazione degli allenamenti"""
-        # Assicurati che la cartella OAuth esista
-        oauth_folder = self.oauth_folder.get()
-        if not os.path.exists(oauth_folder):
-            try:
-                os.makedirs(oauth_folder, exist_ok=True)
-                self.log(f"Creata cartella OAuth: {oauth_folder}")
-            except Exception as e:
-                self.log(f"Errore nella creazione della cartella OAuth: {str(e)}")
-                return
-        
-        # Se siamo in modalità dry-run, usiamo un approccio diverso
-        if is_dry_run:
-            self._simulate_schedule(selected_days)
-            return
-                    
+    def _do_schedule(self, selected_days, dry_run=False, sport_type="running"):
+        """Schedula gli allenamenti in base ai giorni selezionati"""
         try:
-            self.log("Pianificazione allenamenti in corso...")
+            training_plan_id = self.training_plan.get().strip()
             
             # Crea un oggetto args simulato
             class Args:
@@ -5702,31 +5956,60 @@ class GarminPlannerGUI(tk.Tk):
                     
             args = Args()
             args.oauth_folder = self.oauth_folder.get()
-            args.training_plan = self.training_plan.get()
+            args.training_plan = training_plan_id
             args.race_day = self.race_day.get()
             args.workout_days = ",".join([str(day) for day in selected_days])
-            args.dry_run = False
+            args.dry_run = dry_run
+            args.sport_type = sport_type
+            args.start_day = None  # Iniziamo da oggi
             
-            # Se è specificata una data di inizio, aggiungila
-            if hasattr(self, 'start_day') and self.start_day.get():
-                args.start_day = self.start_day.get()
-            else:
-                args.start_day = None
+            # Verifica se c'è una selezione di data
+            custom_selection = [day_var.get() for day_var in self.day_selections]
+            if sum(custom_selection) > 0:
+                # C'è almeno un giorno selezionato diverso da ciò che è nel piano
+                custom_days = [i for i, checked in enumerate(custom_selection) if checked]
+                args.workout_days = ",".join([str(day) for day in custom_days])
+                self.log(f"Pianificazione con la tua selezione personalizzata di giorni: {args.workout_days}")
+            
+            # Se c'è una data di inizio nel selettore, usala
+            if hasattr(self, 'start_date_picker') and self.start_date_picker and hasattr(self.start_date_picker, 'get_date'):
+                start_date = self.start_date_picker.get_date()
+                if start_date:
+                    args.start_day = start_date.strftime("%Y-%m-%d")
+                    self.log(f"Data di inizio pianificazione: {args.start_day}")
+            
+            # Esegui la pianificazione
+            if not dry_run:
+                self.log(f"Pianificazione allenamenti per il piano {training_plan_id}...")
+                self.log(f"Data di gara: {args.race_day}")
+                self.log(f"Giorni selezionati: {args.workout_days}")
+                self.log(f"Tipo di sport: {args.sport_type}")
             
             # Esegui la funzione direttamente
-            cmd_schedule_workouts(args)
+            scheduled_count = cmd_schedule_workouts(args)
             
-            self.log("Pianificazione completata con successo")
-            messagebox.showinfo("Successo", "Pianificazione completata con successo")
+            if not dry_run:
+                if scheduled_count:
+                    self.log(f"Pianificazione completata: {scheduled_count} allenamenti pianificati.")
+                    messagebox.showinfo("Successo", f"Pianificazione completata: {scheduled_count} allenamenti pianificati.")
+                    
+                    # Aggiorna i calendari
+                    self.refresh_calendar()
+                    if hasattr(self, 'refresh_step4_calendar'):
+                        self.refresh_step4_calendar()
+                else:
+                    self.log("Nessun allenamento è stato pianificato.")
+                    messagebox.showinfo("Avviso", "Nessun allenamento è stato pianificato. Verifica i criteri di selezione.")
             
-            # Aggiorna il calendario
-            self.refresh_calendar()
+            return scheduled_count
             
         except Exception as e:
-            self.log(f"Errore durante la pianificazione: {str(e)}")
+            self.log(f"Errore nella pianificazione: {str(e)}")
             import traceback
             self.log(traceback.format_exc())
-            messagebox.showerror("Errore", f"Errore durante la pianificazione: {str(e)}")
+            traceback.print_exc()
+            messagebox.showerror("Errore", f"Si è verificato un errore durante la pianificazione:\n{str(e)}")
+            return 0
 
             
     def _parse_schedule_output(self, output):

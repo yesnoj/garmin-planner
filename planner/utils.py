@@ -231,6 +231,108 @@ def normalize_pace(orig_pace):
     else:
         raise ValueError('Invalid pace format: ' + orig_pace)
 
+# Aggiungiamo queste funzioni per il supporto al ciclismo
+def kmph_to_ms(kmph):
+    """Converts a speed in kilometers per hour (km/h) to meters per second (m/s).
+
+    Args:
+        kmph: The speed in kilometers per hour (float).
+
+    Returns:
+        The equivalent speed in meters per second (float).
+
+    Raises:
+        TypeError: If the input is not a number.
+        ValueError: If the input is negative.
+    """
+    if not isinstance(kmph, (int, float)):
+        raise TypeError("Input must be a number.")
+    if kmph < 0:
+        raise ValueError("Input must be non-negative.")
+    return kmph * (1000/3600)
+
+def ms_to_kmph(ms):
+    """Converts a speed in meters per second (m/s) to kilometers per hour (km/h).
+
+    Args:
+        ms: The speed in meters per second (float).
+
+    Returns:
+        The equivalent speed in kilometers per hour (float).
+
+    Raises:
+        TypeError: If the input is not a number.
+        ValueError: If the input is negative.
+    """
+    if not isinstance(ms, (int, float)):
+        raise TypeError("Input must be a number.")
+    if ms < 0:
+        raise ValueError("Input must be non-negative.")
+    return ms * (3600/1000)
+
+def get_speed_range(orig_speed, margins):
+    """Calculates a speed range based on an original speed and optional margins.
+
+    This function can handle single speeds (e.g., "30.0") or speed ranges (e.g., "28.0-32.0").
+    If a single speed is provided and margins are given, it calculates a range by adding/subtracting
+    the margin values. If a speed range is provided, it returns the range as is.
+
+    Args:
+        orig_speed: The original speed or speed range string (e.g., "30.0", "28.0-32.0").
+                   Can also be a tuple of speed strings.
+        margins: A dictionary containing 'faster_spd' and 'slower_spd' margin values in km/h format 
+                (e.g., {'faster_spd': '2.0', 'slower_spd': '2.0'}).
+                If None, no margins are applied.
+
+    Returns:
+        A tuple containing the slow and fast speed limits in km/h (slow_speed, fast_speed).
+
+    Raises:
+        ValueError: If the input speed is not in a valid format.
+    """
+    # Handle case where speed provided has already been converted to tuple
+    if isinstance(orig_speed, tuple):
+        if isinstance(orig_speed[0], str) and isinstance(orig_speed[1], str):
+            return orig_speed
+        else:
+            raise ValueError('Invalid speed format: ' + str(orig_speed))
+
+    # Check if it's a single value or range (e.g., "30.0" or "28.0-32.0")
+    if '-' in orig_speed:
+        # It's a range, parse it
+        parts = orig_speed.split('-')
+        if len(parts) != 2:
+            raise ValueError('Invalid speed range format: ' + orig_speed)
+        try:
+            slow_speed = float(parts[0].strip())
+            fast_speed = float(parts[1].strip())
+            return (str(slow_speed), str(fast_speed))
+        except ValueError:
+            raise ValueError('Invalid speed range format: ' + orig_speed)
+    else:
+        # It's a single value
+        try:
+            orig_speed_f = float(orig_speed)
+            # If we have margins to add/subtract
+            if margins:
+                try:
+                    # Usa i margini specifici per la velocità
+                    slow_margin = float(margins.get('slower_spd', '0'))
+                    fast_margin = float(margins.get('faster_spd', '0'))
+                    slow_speed = orig_speed_f - slow_margin
+                    fast_speed = orig_speed_f + fast_margin
+                    return (str(slow_speed), str(fast_speed))
+                except ValueError:
+                    # Se non riesce a convertire, potrebbe essere un formato di tempo - usa valori di default
+                    slow_speed = orig_speed_f - 2.0  # Default 2 km/h slower
+                    fast_speed = orig_speed_f + 2.0  # Default 2 km/h faster
+                    return (str(slow_speed), str(fast_speed))
+            # Single speed and no margins. We return the original speed for both limits.
+            else:
+                return (orig_speed, orig_speed)
+        except ValueError:
+            raise ValueError('Invalid speed format: ' + orig_speed)
+
 def get_pace_range(orig_pace, margins):
     """Calculates a pace range based on an original pace and optional margins.
 

@@ -1,0 +1,36 @@
+config:
+  paces: {}
+  speeds:
+    Z1: '15.0'
+    Z2: '20.0'
+    Z3: '25.0'
+    Z4: '30.0'
+    Z5: '35.0'
+    ftp: '32.0'
+    recovery: 15.0-20.0
+    race: '30.0'
+  heart_rates:
+    max_hr: 180
+    Z1_HR: 62-76% max_hr
+    Z2_HR: 76-85% max_hr
+    Z3_HR: 85-91% max_hr
+    Z4_HR: 91-95% max_hr
+    Z5_HR: 95-100% max_hr
+  margins:
+    faster: 0:03
+    slower: 0:03
+    faster_spd: '2.0'
+    slower_spd: '2.0'
+    hr_up: 5
+    hr_down: 5
+  name_prefix: 'MYRUN_2PZTWR_ '
+  sport_type: cycling
+  athlete_name: Nicola Citrulli
+  race_day: '2025-06-06'
+W01S01 Long endurance ride:
+- sport_type: cycling
+- warmup: 10min @hr Z1_HR
+- interval: 60min @spd Z2
+- cooldown: 5min @hr Z1_HR
+W01S02 Rest:
+- interval: 21min @spd Z1

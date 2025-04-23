@@ -9,10 +9,7 @@ in a format compatible with Garmin Connect.
 SPORT_TYPES = {
     "running": 1,
     "cycling": 2,
-    "swimming": 5,
-    "strength_training": 3,
-    "walking": 9,
-    "hiking": 10
+    "swimming": 5
 }
 
 STEP_TYPES = {
@@ -283,7 +280,7 @@ class Target:
     """
     Represents a target for a workout step.
     
-    A target can be pace, heart rate, power, or cadence.
+    A target can be pace, speed, heart rate, power, or cadence.
     """
     
     def __init__(self, target="no.target", to_value=None, from_value=None, zone=None):
@@ -291,7 +288,7 @@ class Target:
         Initialize a new target.
         
         Args:
-            target: Type of target (e.g., 'pace.zone', 'heart.rate.zone')
+            target: Type of target (e.g., 'pace.zone', 'speed.zone', 'heart.rate.zone')
             to_value: Upper bound of the target range
             from_value: Lower bound of the target range
             zone: Optional zone number (for predefined zones)

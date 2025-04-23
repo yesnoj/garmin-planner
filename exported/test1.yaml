@@ -1,0 +1,401 @@
+- avgTrainingSpeed: 0.0
+  estimatedDurationInSecs: 3480
+  sportType:
+    displayOrder: 2
+    sportTypeId: 2
+    sportTypeKey: cycling
+  workoutId: 331920313
+  workoutName: HO1 x8 + HO2 x20
+  workoutSegments:
+  - segmentOrder: 1
+    sportType:
+      displayOrder: 2
+      sportTypeId: 2
+      sportTypeKey: cycling
+    workoutSteps:
+    - description: RPM 95 Z1
+      endCondition:
+        conditionTypeId: 2
+        conditionTypeKey: time
+        displayOrder: 2
+        displayable: true
+      endConditionValue: 120.0
+      equipmentType:
+        displayOrder: 0
+        equipmentTypeId: 0
+      stepId: 2270975165
+      stepOrder: 1
+      stepType:
+        displayOrder: 1
+        stepTypeId: 1
+        stepTypeKey: warmup
+      strokeType:
+        displayOrder: 0
+        strokeTypeId: 0
+      targetType:
+        displayOrder: 2
+        workoutTargetTypeId: 2
+        workoutTargetTypeKey: power.zone
+      type: ExecutableStepDTO
+      weightUnit:
+        factor: 1000.0
+        unitId: 8
+        unitKey: kilogram
+      zoneNumber: 1
+    - description: RPM 90 Z2
+      endCondition:
+        conditionTypeId: 2
+        conditionTypeKey: time
+        displayOrder: 2
+        displayable: true
+      endConditionValue: 120.0
+      equipmentType:
+        displayOrder: 0
+        equipmentTypeId: 0
+      stepId: 2270975166
+      stepOrder: 2
+      stepType:
+        displayOrder: 1
+        stepTypeId: 1
+        stepTypeKey: warmup
+      strokeType:
+        displayOrder: 0
+        strokeTypeId: 0
+      targetType:
+        displayOrder: 2
+        workoutTargetTypeId: 2
+        workoutTargetTypeKey: power.zone
+      type: ExecutableStepDTO
+      weightUnit:
+        factor: 1000.0
+        unitId: 8
+        unitKey: kilogram
+      zoneNumber: 2
+    - description: RPM 95 Z3
+      endCondition:
+        conditionTypeId: 2
+        conditionTypeKey: time
+        displayOrder: 2
+        displayable: true
+      endConditionValue: 120.0
+      equipmentType:
+        displayOrder: 0
+        equipmentTypeId: 0
+      stepId: 2270975167
+      stepOrder: 3
+      stepType:
+        displayOrder: 1
+        stepTypeId: 1
+        stepTypeKey: warmup
+      strokeType:
+        displayOrder: 0
+        strokeTypeId: 0
+      targetType:
+        displayOrder: 2
+        workoutTargetTypeId: 2
+        workoutTargetTypeKey: power.zone
+      type: ExecutableStepDTO
+      weightUnit:
+        factor: 1000.0
+        unitId: 8
+        unitKey: kilogram
+      zoneNumber: 3
+    - description: RPM 90 Z1
+      endCondition:
+        conditionTypeId: 2
+        conditionTypeKey: time
+        displayOrder: 2
+        displayable: true
+      endConditionValue: 120.0
+      equipmentType:
+        displayOrder: 0
+        equipmentTypeId: 0
+      stepId: 2270975168
+      stepOrder: 4
+      stepType:
+        displayOrder: 1
+        stepTypeId: 1
+        stepTypeKey: warmup
+      strokeType:
+        displayOrder: 0
+        strokeTypeId: 0
+      targetType:
+        displayOrder: 2
+        workoutTargetTypeId: 2
+        workoutTargetTypeKey: power.zone
+      type: ExecutableStepDTO
+      weightUnit:
+        factor: 1000.0
+        unitId: 8
+        unitKey: kilogram
+      zoneNumber: 1
+    - description: RPM 95 Z4
+      endCondition:
+        conditionTypeId: 2
+        conditionTypeKey: time
+        displayOrder: 2
+        displayable: true
+      endConditionValue: 120.0
+      equipmentType:
+        displayOrder: 0
+        equipmentTypeId: 0
+      stepId: 2270975169
+      stepOrder: 5
+      stepType:
+        displayOrder: 1
+        stepTypeId: 1
+        stepTypeKey: warmup
+      strokeType:
+        displayOrder: 0
+        strokeTypeId: 0
+      targetType:
+        displayOrder: 2
+        workoutTargetTypeId: 2
+        workoutTargetTypeKey: power.zone
+      type: ExecutableStepDTO
+      weightUnit:
+        factor: 1000.0
+        unitId: 8
+        unitKey: kilogram
+      zoneNumber: 4
+    - description: RPM 90 Z1
+      endCondition:
+        conditionTypeId: 2
+        conditionTypeKey: time
+        displayOrder: 2
+        displayable: true
+      endConditionValue: 120.0
+      equipmentType:
+        displayOrder: 0
+        equipmentTypeId: 0
+      stepId: 2270975170
+      stepOrder: 6
+      stepType:
+        displayOrder: 1
+        stepTypeId: 1
+        stepTypeKey: warmup
+      strokeType:
+        displayOrder: 0
+        strokeTypeId: 0
+      targetType:
+        displayOrder: 2
+        workoutTargetTypeId: 2
+        workoutTargetTypeKey: power.zone
+      type: ExecutableStepDTO
+      weightUnit:
+        factor: 1000.0
+        unitId: 8
+        unitKey: kilogram
+      zoneNumber: 1
+    - childStepId: 1
+      endCondition:
+        conditionTypeId: 7
+        conditionTypeKey: iterations
+        displayOrder: 7
+        displayable: false
+      endConditionValue: 8.0
+      numberOfIterations: 8
+      smartRepeat: false
+      stepId: 2270975171
+      stepOrder: 7
+      stepType:
+        displayOrder: 6
+        stepTypeId: 6
+        stepTypeKey: repeat
+      type: RepeatGroupDTO
+      workoutSteps:
+      - childStepId: 1
+        description: RPM 90-95 Z5
+        endCondition:
+          conditionTypeId: 2
+          conditionTypeKey: time
+          displayOrder: 2
+          displayable: true
+        endConditionValue: 60.0
+        equipmentType:
+          displayOrder: 0
+          equipmentTypeId: 0
+        stepId: 2270975172
+        stepOrder: 8
+        stepType:
+          displayOrder: 3
+          stepTypeId: 3
+          stepTypeKey: interval
+        strokeType:
+          displayOrder: 0
+          strokeTypeId: 0
+        targetType:
+          displayOrder: 2
+          workoutTargetTypeId: 2
+          workoutTargetTypeKey: power.zone
+        type: ExecutableStepDTO
+        weightUnit:
+          factor: 1000.0
+          unitId: 8
+          unitKey: kilogram
+        zoneNumber: 5
+      - childStepId: 1
+        description: Circa 60W
+        endCondition:
+          conditionTypeId: 2
+          conditionTypeKey: time
+          displayOrder: 2
+          displayable: true
+        endConditionValue: 75.0
+        equipmentType:
+          displayOrder: 0
+          equipmentTypeId: 0
+        stepId: 2270975173
+        stepOrder: 9
+        stepType:
+          displayOrder: 4
+          stepTypeId: 4
+          stepTypeKey: recovery
+        strokeType:
+          displayOrder: 0
+          strokeTypeId: 0
+        targetType:
+          displayOrder: 2
+          workoutTargetTypeId: 2
+          workoutTargetTypeKey: power.zone
+        type: ExecutableStepDTO
+        weightUnit:
+          factor: 1000.0
+          unitId: 8
+          unitKey: kilogram
+        zoneNumber: 1
+    - description: Recupero molto leggero
+      endCondition:
+        conditionTypeId: 2
+        conditionTypeKey: time
+        displayOrder: 2
+        displayable: true
+      endConditionValue: 180.0
+      equipmentType:
+        displayOrder: 0
+        equipmentTypeId: 0
+      stepId: 2270975174
+      stepOrder: 10
+      stepType:
+        displayOrder: 4
+        stepTypeId: 4
+        stepTypeKey: recovery
+      strokeType:
+        displayOrder: 0
+        strokeTypeId: 0
+      targetType:
+        displayOrder: 2
+        workoutTargetTypeId: 2
+        workoutTargetTypeKey: power.zone
+      type: ExecutableStepDTO
+      weightUnit:
+        factor: 1000.0
+        unitId: 8
+        unitKey: kilogram
+      zoneNumber: 1
+    - childStepId: 2
+      endCondition:
+        conditionTypeId: 7
+        conditionTypeKey: iterations
+        displayOrder: 7
+        displayable: false
+      endConditionValue: 20.0
+      numberOfIterations: 20
+      smartRepeat: false
+      stepId: 2270975175
+      stepOrder: 11
+      stepType:
+        displayOrder: 6
+        stepTypeId: 6
+        stepTypeKey: repeat
+      type: RepeatGroupDTO
+      workoutSteps:
+      - childStepId: 2
+        description: RPM >90 Z5
+        endCondition:
+          conditionTypeId: 2
+          conditionTypeKey: time
+          displayOrder: 2
+          displayable: true
+        endConditionValue: 30.0
+        equipmentType:
+          displayOrder: 0
+          equipmentTypeId: 0
+        stepId: 2270975176
+        stepOrder: 12
+        stepType:
+          displayOrder: 3
+          stepTypeId: 3
+          stepTypeKey: interval
+        strokeType:
+          displayOrder: 0
+          strokeTypeId: 0
+        targetType:
+          displayOrder: 2
+          workoutTargetTypeId: 2
+          workoutTargetTypeKey: power.zone
+        type: ExecutableStepDTO
+        weightUnit:
+          factor: 1000.0
+          unitId: 8
+          unitKey: kilogram
+        zoneNumber: 5
+      - childStepId: 2
+        description: RPM 90 Z2
+        endCondition:
+          conditionTypeId: 2
+          conditionTypeKey: time
+          displayOrder: 2
+          displayable: true
+        endConditionValue: 30.0
+        equipmentType:
+          displayOrder: 0
+          equipmentTypeId: 0
+        stepId: 2270975177
+        stepOrder: 13
+        stepType:
+          displayOrder: 4
+          stepTypeId: 4
+          stepTypeKey: recovery
+        strokeType:
+          displayOrder: 0
+          strokeTypeId: 0
+        targetType:
+          displayOrder: 2
+          workoutTargetTypeId: 2
+          workoutTargetTypeKey: power.zone
+        type: ExecutableStepDTO
+        weightUnit:
+          factor: 1000.0
+          unitId: 8
+          unitKey: kilogram
+        zoneNumber: 2
+    - description: RPM 95 Z1
+      endCondition:
+        conditionTypeId: 2
+        conditionTypeKey: time
+        displayOrder: 2
+        displayable: true
+      endConditionValue: 300.0
+      equipmentType:
+        displayOrder: 0
+        equipmentTypeId: 0
+      stepId: 2270975178
+      stepOrder: 14
+      stepType:
+        displayOrder: 2
+        stepTypeId: 2
+        stepTypeKey: cooldown
+      strokeType:
+        displayOrder: 0
+        strokeTypeId: 0
+      targetType:
+        displayOrder: 2
+        workoutTargetTypeId: 2
+        workoutTargetTypeKey: power.zone
+      type: ExecutableStepDTO
+      weightUnit:
+        factor: 1000.0
+        unitId: 8
+        unitKey: kilogram
+      zoneNumber: 1

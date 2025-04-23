@@ -48,9 +48,10 @@ class ScheduleDialog(tk.Toplevel):
         self.parent = parent
         self.excel_file = excel_file
         self.result = None
+        self.sport_type = "running"  # Default
         
         self.title("Pianifica Allenamenti")
-        self.geometry("570x580")
+        self.geometry("570x630")  # Un po' più alta per il selettore di sport
         self.resizable(True, True)
         self.transient(parent)
         self.grab_set()
@@ -62,6 +63,9 @@ class ScheduleDialog(tk.Toplevel):
         x = (parent.winfo_screenwidth() // 2) - (width // 2)
         y = (parent.winfo_screenheight() // 2) - (height // 2)
         self.geometry(f"{width}x{height}+{x}+{y}")
+        
+        # Estrai il tipo di sport dal file Excel
+        self.extract_sport_type()
         
         # Crea l'interfaccia della finestra di dialogo
         self.create_widgets()
@@ -76,6 +80,35 @@ class ScheduleDialog(tk.Toplevel):
         # Attende che la finestra venga chiusa
         self.wait_window()
     
+
+    def extract_sport_type(self):
+        """Estrai il tipo di sport dal file Excel"""
+        try:
+            xls = pd.ExcelFile(self.excel_file)
+            if 'Config' in xls.sheet_names:
+                config_df = pd.read_excel(self.excel_file, sheet_name='Config')
+                sport_type_rows = config_df[config_df.iloc[:, 0] == 'sport_type']
+                
+                if not sport_type_rows.empty and pd.notna(sport_type_rows.iloc[0, 1]):
+                    extracted_sport_type = str(sport_type_rows.iloc[0, 1]).strip().lower()
+                    if extracted_sport_type in ["running", "cycling"]:
+                        self.sport_type = extracted_sport_type
+                        print(f"Sport type extracted from Excel: {self.sport_type}")
+                        return
+            
+            # Se arriviamo qui, non abbiamo trovato un tipo di sport esplicito
+            # Proviamo a dedurlo dalla presenza di fogli Paces o Speeds
+            if 'Speeds' in xls.sheet_names and 'Paces' not in xls.sheet_names:
+                self.sport_type = "cycling"
+                print("Sport type inferred as 'cycling' from Speeds sheet presence")
+            elif 'Paces' in xls.sheet_names and 'Speeds' not in xls.sheet_names:
+                self.sport_type = "running"
+                print("Sport type inferred as 'running' from Paces sheet presence")
+            
+        except Exception as e:
+            print(f"Error extracting sport type: {str(e)}")
+            # In caso di errore, manteniamo il valore predefinito
+
     def create_custom_date_picker(self, parent, date_var):
         """Create a custom date picker with separate widgets for year, month, and day"""
         frame = ttk.Frame(parent)
@@ -154,6 +187,7 @@ class ScheduleDialog(tk.Toplevel):
         day_var.trace_add("write", update_date)
         
         return frame
+
     
     def create_widgets(self):
         """Crea i widget dell'interfaccia"""
@@ -164,8 +198,27 @@ class ScheduleDialog(tk.Toplevel):
         ttk.Label(main_frame, text="Pianifica Allenamenti", font=("", 14, "bold")).pack(pady=10)
         
         # Descrizione
-        ttk.Label(main_frame, text="Imposta la data di inizio e seleziona i giorni della settimana per gli allenamenti.",
+        if self.sport_type == "cycling":
+            activity_type = "ciclismo"
+        else:
+            activity_type = "corsa"
+            
+        ttk.Label(main_frame, text=f"Imposta la data di inizio e seleziona i giorni della settimana per gli allenamenti di {activity_type}.",
                  wraplength=450).pack(pady=5)
+        
+        # Frame per il tipo di sport
+        sport_frame = ttk.LabelFrame(main_frame, text="Tipo di Sport")
+        sport_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        self.sport_type_var = tk.StringVar(value=self.sport_type)
+        ttk.Label(sport_frame, text="Tipo di allenamento:").pack(side=tk.LEFT, padx=5, pady=5)
+        
+        # Rendere il tipo di sport read-only per evitare confusione
+        sport_display = ttk.Label(sport_frame, text=self.sport_type, font=("", 10, "bold"))
+        sport_display.pack(side=tk.LEFT, padx=5, pady=5)
+        
+        # Aggiunta di una nota informativa
+        ttk.Label(sport_frame, text="(determinato dal file Excel)", foreground="gray").pack(side=tk.LEFT, padx=5, pady=5)
         
         # Frame per nome atleta
         athlete_frame = ttk.LabelFrame(main_frame, text="Atleta")
@@ -174,8 +227,7 @@ class ScheduleDialog(tk.Toplevel):
         ttk.Label(athlete_frame, text="Nome dell'atleta:").pack(side=tk.LEFT, padx=5, pady=5)
         self.athlete_name_var = tk.StringVar()
         ttk.Entry(athlete_frame, textvariable=self.athlete_name_var, width=30).pack(side=tk.LEFT, padx=5, pady=5, fill=tk.X, expand=True)
-        
-        # Frame per la data di inizio
+
         date_frame = ttk.LabelFrame(main_frame, text="Data di Inizio")
         date_frame.pack(fill=tk.X, padx=5, pady=10)
         
@@ -211,6 +263,23 @@ class ScheduleDialog(tk.Toplevel):
         buttons_frame = ttk.Frame(days_frame)
         buttons_frame.pack(fill=tk.X, padx=5, pady=5)
         
+        # Preseleziona i giorni in base al tipo di sport
+        if self.sport_type == "cycling":
+            # Pattern comuni di allenamento per ciclismo
+            ttk.Button(buttons_frame, text="Weekend", 
+                     command=lambda: self.select_days([5, 6])).pack(side=tk.LEFT, padx=5)
+            ttk.Button(buttons_frame, text="Mar-Gio-Sab", 
+                     command=lambda: self.select_days([1, 3, 5])).pack(side=tk.LEFT, padx=5)
+            ttk.Button(buttons_frame, text="Lun-Mer-Ven-Dom", 
+                     command=lambda: self.select_days([0, 2, 4, 6])).pack(side=tk.LEFT, padx=5)
+        else:  # running
+            # Pattern comuni di allenamento per corsa
+            ttk.Button(buttons_frame, text="Mar-Gio-Sab", 
+                     command=lambda: self.select_days([1, 3, 5])).pack(side=tk.LEFT, padx=5)
+            ttk.Button(buttons_frame, text="Lun-Mer-Ven", 
+                     command=lambda: self.select_days([0, 2, 4])).pack(side=tk.LEFT, padx=5)
+            ttk.Button(buttons_frame, text="Mar-Mer-Ven-Dom", 
+                     command=lambda: self.select_days([1, 2, 4, 6])).pack(side=tk.LEFT, padx=5)
     
         # Frame per le sessioni per settimana
         sessions_frame = ttk.LabelFrame(main_frame, text="Sessioni per Settimana")
@@ -288,22 +357,38 @@ class ScheduleDialog(tk.Toplevel):
             unique_weeks = df['Week'].nunique()
             max_sessions = df.groupby('Week').size().max()
             
-            self.workouts_info.config(text=f"Il piano contiene {unique_weeks} settimane con un massimo di {max_sessions} sessioni per settimana.")
+            # Aggiorna il messaggio informativo con il tipo di sport
+            sport_display = "ciclismo" if self.sport_type == "cycling" else "corsa"
+            self.workouts_info.config(text=f"Il piano di {sport_display} contiene {unique_weeks} settimane con un massimo di {max_sessions} sessioni per settimana.")
             
             # Imposta il numero di sessioni
             self.sessions_var.set(str(max_sessions))
             
-            # Preseleziona i giorni in base al numero di sessioni
-            if max_sessions == 1:
-                self.select_days([2])  # Mercoledì
-            elif max_sessions == 2:
-                self.select_days([1, 4])  # Martedì, Venerdì
-            elif max_sessions == 3:
-                self.select_days([1, 3, 5])  # Martedì, Giovedì, Sabato
-            elif max_sessions == 4:
-                self.select_days([1, 3, 5, 6])  # Martedì, Giovedì, Sabato, Domenica
-            elif max_sessions >= 5:
-                self.select_days([0, 1, 3, 4, 6])  # L, M, G, V, D
+            # Preseleziona i giorni in base al numero di sessioni e al tipo di sport
+            if self.sport_type == "cycling":
+                # Pattern per ciclismo
+                if max_sessions == 1:
+                    self.select_days([5])  # Sabato
+                elif max_sessions == 2:
+                    self.select_days([3, 5])  # Giovedì, Sabato
+                elif max_sessions == 3:
+                    self.select_days([1, 3, 5])  # Martedì, Giovedì, Sabato
+                elif max_sessions == 4:
+                    self.select_days([0, 2, 4, 6])  # Lun, Mer, Ven, Dom
+                elif max_sessions >= 5:
+                    self.select_days([0, 1, 3, 4, 6])  # L, M, G, V, D
+            else:
+                # Pattern per corsa
+                if max_sessions == 1:
+                    self.select_days([2])  # Mercoledì
+                elif max_sessions == 2:
+                    self.select_days([1, 4])  # Martedì, Venerdì
+                elif max_sessions == 3:
+                    self.select_days([1, 3, 5])  # Martedì, Giovedì, Sabato
+                elif max_sessions == 4:
+                    self.select_days([1, 3, 5, 6])  # Martedì, Giovedì, Sabato, Domenica
+                elif max_sessions >= 5:
+                    self.select_days([0, 1, 3, 4, 6])  # L, M, G, V, D
 
 
 
@@ -492,7 +577,45 @@ class ScheduleDialog(tk.Toplevel):
             # Salva il file
             wb.save(self.excel_file)
             
-            messagebox.showinfo("Successo", f"Date pianificate con successo per {len(workouts)} allenamenti.")
+            # Aggiorna il tipo di sport se necessario
+            if 'Config' in wb.sheetnames:
+                config_sheet = wb['Config']
+                sport_type_found = False
+                
+                # Cerca la riga con il tipo di sport
+                for row in range(1, config_sheet.max_row + 1):
+                    if config_sheet.cell(row=row, column=1).value == 'sport_type':
+                        sport_type_found = True
+                        if config_sheet.cell(row=row, column=2).value != self.sport_type:
+                            config_sheet.cell(row=row, column=2).value = self.sport_type
+                            print(f"Sport type updated to {self.sport_type} in Config sheet")
+                        break
+                
+                # Se non esiste, aggiungiamo una riga per il tipo di sport
+                if not sport_type_found:
+                    next_row = config_sheet.max_row + 1
+                    config_sheet.cell(row=next_row, column=1).value = 'sport_type'
+                    config_sheet.cell(row=next_row, column=2).value = self.sport_type
+                    print(f"Sport type added as {self.sport_type} in Config sheet")
+                    
+                    # Formattazione
+                    config_sheet.cell(row=next_row, column=1).border = openpyxl.styles.Border(
+                        left=openpyxl.styles.Side(style="thin"),
+                        right=openpyxl.styles.Side(style="thin"),
+                        top=openpyxl.styles.Side(style="thin"),
+                        bottom=openpyxl.styles.Side(style="thin")
+                    )
+                    config_sheet.cell(row=next_row, column=2).border = openpyxl.styles.Border(
+                        left=openpyxl.styles.Side(style="thin"),
+                        right=openpyxl.styles.Side(style="thin"),
+                        top=openpyxl.styles.Side(style="thin"),
+                        bottom=openpyxl.styles.Side(style="thin")
+                    )
+                
+                # Salva nuovamente il file dopo le modifiche al foglio Config
+                wb.save(self.excel_file)
+            
+            messagebox.showinfo("Successo", f"Date pianificate con successo per {len(workouts)} allenamenti di {self.sport_type}.")
             self.result = True
             self.destroy()
             
@@ -532,12 +655,13 @@ class ExcelToYamlGUI(tk.Tk):
         super().__init__()
         
         self.title("Excel to YAML Converter for Garmin Planner")
-        self.geometry("700x550")
-        self.minsize(600, 400)
+        self.geometry("700x600")  # Leggermente più alta per aggiungere il selettore di sport
+        self.minsize(600, 450)
         
         # Imposta variabili
         self.excel_file = tk.StringVar()
         self.yaml_file = tk.StringVar()
+        self.sport_type = tk.StringVar(value="running")  # Default a running
         
         # Crea l'interfaccia
         self.create_widgets()
@@ -569,6 +693,23 @@ class ExcelToYamlGUI(tk.Tk):
         )
         desc_label = ttk.Label(main_frame, text=description, wraplength=600, justify="center")
         desc_label.pack(pady=5)
+        
+        # Frame per i file e opzioni
+        options_frame = ttk.LabelFrame(main_frame, text="Opzioni", padding="10")
+        options_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Sport type selector
+        sport_type_frame = ttk.Frame(options_frame)
+        sport_type_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(sport_type_frame, text="Tipo di sport:").grid(row=0, column=0, sticky=tk.W, padx=5)
+        sport_combo = ttk.Combobox(sport_type_frame, textvariable=self.sport_type, 
+                                  values=["running", "cycling"], state="readonly", width=15)
+        sport_combo.grid(row=0, column=1, padx=5, sticky=tk.W)
+        
+        # Aggiungi una descrizione chiara
+        sport_desc = "running = corsa, cycling = ciclismo"
+        ttk.Label(sport_type_frame, text=sport_desc, foreground="gray").grid(row=0, column=2, padx=5, sticky=tk.W)
         
         # Frame per i file
         file_frame = ttk.LabelFrame(main_frame, text="File", padding="10")
@@ -625,14 +766,14 @@ class ExcelToYamlGUI(tk.Tk):
         
         # Versione
         version_label = ttk.Label(main_frame, 
-                                text=f"v1.2.0 - {datetime.now().year}", 
+                                text=f"v1.3.0 - {datetime.now().year}", 
                                 foreground="gray")
         version_label.pack(side=tk.RIGHT, padx=10, pady=5)
         
         # Aggiungi un messaggio iniziale al log
         self.log("Benvenuto nel convertitore Excel-YAML per Garmin Planner!")
         self.log("Seleziona un file Excel o crea un file di esempio per iniziare.")
-        self.log("La nuova funzionalità 'Pianifica Allenamenti' ti permette di assegnare date agli allenamenti.")
+        self.log("Supporta sia allenamenti di corsa (running) che di ciclismo (cycling).")
     
     def log(self, message):
         """Aggiunge un messaggio all'area di log"""
@@ -657,7 +798,44 @@ class ExcelToYamlGUI(tk.Tk):
             if not self.yaml_file.get():
                 yaml_path = os.path.splitext(file_path)[0] + ".yaml"
                 self.yaml_file.set(yaml_path)
+            
+            # Esegui l'estrazione del tipo di sport se presente nel file
+            self.extract_sport_type_from_excel(file_path)
     
+
+
+    def extract_sport_type_from_excel(self, excel_path):
+        """Estrai il tipo di sport dal foglio Config se esiste"""
+        try:
+            if os.path.exists(excel_path):
+                # Carica il foglio Config
+                xls = pd.ExcelFile(excel_path)
+                if 'Config' in xls.sheet_names:
+                    config_df = pd.read_excel(excel_path, sheet_name='Config')
+                    sport_type_rows = config_df[config_df.iloc[:, 0] == 'sport_type']
+                    
+                    if not sport_type_rows.empty and pd.notna(sport_type_rows.iloc[0, 1]):
+                        extracted_sport_type = str(sport_type_rows.iloc[0, 1]).strip().lower()
+                        if extracted_sport_type in ["running", "cycling"]:
+                            self.sport_type.set(extracted_sport_type)
+                            self.log(f"Tipo di sport rilevato nel file: {extracted_sport_type}")
+                            return
+                
+                # Se arriviamo qui, non abbiamo trovato un tipo di sport esplicito
+                # Proviamo a dedurlo dalla presenza di fogli Paces o Speeds
+                if 'Speeds' in xls.sheet_names and 'Paces' not in xls.sheet_names:
+                    self.sport_type.set("cycling")
+                    self.log("Dedotto tipo di sport 'cycling' dalla presenza del foglio Speeds")
+                elif 'Paces' in xls.sheet_names and 'Speeds' not in xls.sheet_names:
+                    self.sport_type.set("running")
+                    self.log("Dedotto tipo di sport 'running' dalla presenza del foglio Paces")
+                else:
+                    # Usa il valore predefinito attuale
+                    self.log(f"Tipo di sport non rilevato nel file, usiamo il default: {self.sport_type.get()}")
+        except Exception as e:
+            self.log(f"Errore nell'estrazione del tipo di sport: {str(e)}")
+
+
     def browse_yaml(self):
         """Apre il dialogo per selezionare il file YAML di output"""
         file_path = filedialog.asksaveasfilename(
@@ -680,8 +858,10 @@ class ExcelToYamlGUI(tk.Tk):
         if not os.path.exists(excel_path):
             if messagebox.askyesno("File non trovato", 
                                   f"Il file {excel_path} non esiste.\n\nVuoi creare un file di esempio?"):
-                excel_path = create_sample_excel(excel_path)
+                sport_type = self.sport_type.get()
+                excel_path = create_sample_excel(excel_path, sport_type)
                 self.excel_file.set(excel_path)
+                self.log(f"Creato file Excel di esempio per {sport_type} in: {excel_path}")
             else:
                 return
         
@@ -696,11 +876,13 @@ class ExcelToYamlGUI(tk.Tk):
         except Exception as e:
             self.log(f"Errore durante la pianificazione: {str(e)}")
             messagebox.showerror("Errore", f"Si è verificato un errore durante la pianificazione:\n{str(e)}")
+
     
     def create_sample(self):
         """Crea un file Excel di esempio"""
+        sport_type = self.sport_type.get()
         file_path = filedialog.asksaveasfilename(
-            title="Salva file Excel di esempio",
+            title=f"Salva file Excel di esempio per {sport_type}",
             filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
             defaultextension=".xlsx"
         )
@@ -708,27 +890,28 @@ class ExcelToYamlGUI(tk.Tk):
             return
         
         try:
-            self.log(f"Creazione file Excel di esempio: {file_path}")
+            self.log(f"Creazione file Excel di esempio per {sport_type}: {file_path}")
             
             # Esegui la creazione in un thread separato per non bloccare l'interfaccia
-            threading.Thread(target=self._create_sample_thread, args=(file_path,)).start()
+            threading.Thread(target=self._create_sample_thread, args=(file_path, sport_type)).start()
         except Exception as e:
             self.log(f"Errore: {str(e)}")
             messagebox.showerror("Errore", f"Si è verificato un errore durante la creazione del file:\n{str(e)}")
     
-    def _create_sample_thread(self, file_path):
+    
+    def _create_sample_thread(self, file_path, sport_type):
         """Thread per la creazione del file di esempio"""
         try:
-            create_sample_excel(file_path)
+            create_sample_excel(file_path, sport_type)
             
             # Aggiorna l'interfaccia nel thread principale
-            self.after(0, lambda: self._sample_created(file_path))
+            self.after(0, lambda: self._sample_created(file_path, sport_type))
         except Exception as e:
             self.after(0, lambda: self._sample_error(str(e)))
     
-    def _sample_created(self, file_path):
+    def _sample_created(self, file_path, sport_type):
         """Chiamato quando il file di esempio è stato creato"""
-        self.log(f"File Excel di esempio creato con successo!")
+        self.log(f"File Excel di esempio creato con successo per {sport_type}!")
         self.excel_file.set(file_path)
         
         # Proponi un file YAML con lo stesso nome
@@ -736,8 +919,9 @@ class ExcelToYamlGUI(tk.Tk):
         self.yaml_file.set(yaml_path)
         
         messagebox.showinfo("Successo", 
-                          f"File Excel di esempio creato con successo:\n{file_path}\n\n"
+                          f"File Excel di esempio per {sport_type} creato con successo:\n{file_path}\n\n"
                           f"Ora puoi utilizzare il pulsante 'Pianifica Allenamenti' per assegnare date agli allenamenti.")
+  
     
     def _sample_error(self, error_msg):
         """Chiamato in caso di errore nella creazione del file di esempio"""
@@ -748,6 +932,7 @@ class ExcelToYamlGUI(tk.Tk):
         """Converte il file Excel in YAML"""
         excel_path = self.excel_file.get()
         yaml_path = self.yaml_file.get()
+        sport_type = self.sport_type.get()
         
         if not excel_path:
             messagebox.showerror("Errore", "Seleziona un file Excel da convertire")
@@ -763,36 +948,38 @@ class ExcelToYamlGUI(tk.Tk):
             self.yaml_file.set(yaml_path)
         
         try:
-            self.log(f"Conversione di {excel_path} in {yaml_path}...")
+            self.log(f"Conversione di {excel_path} in {yaml_path} per {sport_type}...")
             
             # Esegui la conversione in un thread separato per non bloccare l'interfaccia
-            threading.Thread(target=self._convert_thread, args=(excel_path, yaml_path)).start()
+            threading.Thread(target=self._convert_thread, args=(excel_path, yaml_path, sport_type)).start()
         except Exception as e:
             self.log(f"Errore: {str(e)}")
             messagebox.showerror("Errore", f"Si è verificato un errore durante la conversione:\n{str(e)}")
+
     
-    def _convert_thread(self, excel_path, yaml_path):
+    def _convert_thread(self, excel_path, yaml_path, sport_type):
         """Thread per la conversione"""
         try:
-            plan = excel_to_yaml(excel_path, yaml_path)
+            plan = excel_to_yaml(excel_path, yaml_path, sport_type)
             
             # Aggiorna l'interfaccia nel thread principale
-            self.after(0, lambda: self._conversion_success(yaml_path, len(plan) - 1))  # -1 per escludere config
+            self.after(0, lambda: self._conversion_success(yaml_path, len(plan) - 1, sport_type))  # -1 per escludere config
         except Exception as e:
             # Cattura l'errore e memorizza il messaggio
             error_msg = str(e)
             # Usa una variabile locale invece di riferirsi a 'e' nella lambda
             self.after(0, lambda msg=error_msg: self._conversion_error(msg))
     
-    def _conversion_success(self, yaml_path, workout_count):
+    def _conversion_success(self, yaml_path, workout_count, sport_type):
         """Chiamato quando la conversione è stata completata con successo"""
         self.log(f"Conversione completata con successo!")
         self.log(f"File YAML salvato: {yaml_path}")
-        self.log(f"Piano di allenamento con {workout_count} allenamenti")
+        self.log(f"Piano di allenamento per {sport_type} con {workout_count} allenamenti")
         
         messagebox.showinfo("Successo", 
                           f"Conversione completata con successo!\n\n"
                           f"File YAML salvato: {yaml_path}\n"
+                          f"Tipo di sport: {sport_type}\n"
                           f"Allenamenti creati: {workout_count}")
     
     def _conversion_error(self, error_msg):

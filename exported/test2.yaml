@@ -1,0 +1,166 @@
+- avgTrainingSpeed: 0.0
+  consumer: 6d3229e6-03ec-4cf4-bf24-18f74b2212fe
+  consumerImageURL: https://assets.trainingpeaks.com/images/icons/app-icon-167x167.png
+  consumerName: TrainingPeaks
+  consumerWebsiteURL: http://www.trainingpeaks.com/
+  description: "3 x 3\u2019 @5:20, rec. 90\u201D @6:30"
+  estimatedDurationInSecs: 1410
+  sportType:
+    displayOrder: 1
+    sportTypeId: 1
+    sportTypeKey: running
+  workoutId: 1183283722
+  workoutName: "3 x 3\u2019 @5:20, rec. 90\u201D @6:30"
+  workoutProvider: TrainingPeaks
+  workoutSegments:
+  - segmentOrder: 1
+    sportType:
+      displayOrder: 1
+      sportTypeId: 1
+      sportTypeKey: running
+    workoutSteps:
+    - description: Warm up
+      endCondition:
+        conditionTypeId: 2
+        conditionTypeKey: time
+        displayOrder: 2
+        displayable: true
+      endConditionValue: 300.0
+      equipmentType:
+        displayOrder: 0
+        equipmentTypeId: 0
+      stepId: 9643160377
+      stepOrder: 1
+      stepType:
+        displayOrder: 1
+        stepTypeId: 1
+        stepTypeKey: warmup
+      strokeType:
+        displayOrder: 0
+        strokeTypeId: 0
+      targetType:
+        displayOrder: 6
+        workoutTargetTypeId: 6
+        workoutTargetTypeKey: pace.zone
+      targetValueOne: 2.274
+      targetValueTwo: 2.513
+      type: ExecutableStepDTO
+    - childStepId: 1
+      endCondition:
+        conditionTypeId: 7
+        conditionTypeKey: iterations
+        displayOrder: 7
+        displayable: false
+      endConditionValue: 3.0
+      numberOfIterations: 3
+      smartRepeat: false
+      stepId: 9643160378
+      stepOrder: 2
+      stepType:
+        displayOrder: 6
+        stepTypeId: 6
+        stepTypeKey: repeat
+      type: RepeatGroupDTO
+      workoutSteps:
+      - childStepId: 1
+        description: Hard
+        endCondition:
+          conditionTypeId: 2
+          conditionTypeKey: time
+          displayOrder: 2
+          displayable: true
+        endConditionValue: 180.0
+        equipmentType:
+          displayOrder: 0
+          equipmentTypeId: 0
+        stepId: 9643160379
+        stepOrder: 3
+        stepType:
+          displayOrder: 3
+          stepTypeId: 3
+          stepTypeKey: interval
+        strokeType:
+          displayOrder: 0
+          strokeTypeId: 0
+        targetType:
+          displayOrder: 6
+          workoutTargetTypeId: 6
+          workoutTargetTypeKey: pace.zone
+        targetValueOne: 2.99
+        targetValueTwo: 3.305
+        type: ExecutableStepDTO
+      - childStepId: 1
+        description: Easy
+        endCondition:
+          conditionTypeId: 2
+          conditionTypeKey: time
+          displayOrder: 2
+          displayable: true
+        endConditionValue: 90.0
+        equipmentType:
+          displayOrder: 0
+          equipmentTypeId: 0
+        stepId: 9643160380
+        stepOrder: 4
+        stepType:
+          displayOrder: 5
+          stepTypeId: 5
+          stepTypeKey: rest
+        strokeType:
+          displayOrder: 0
+          strokeTypeId: 0
+        targetType:
+          displayOrder: 6
+          workoutTargetTypeId: 6
+          workoutTargetTypeKey: pace.zone
+        targetValueOne: 2.43
+        targetValueTwo: 2.685
+        type: ExecutableStepDTO
+    - description: Cool Down
+      endCondition:
+        conditionTypeId: 2
+        conditionTypeKey: time
+        displayOrder: 2
+        displayable: true
+      endConditionValue: 300.0
+      equipmentType:
+        displayOrder: 0
+        equipmentTypeId: 0
+      stepId: 9643160381
+      stepOrder: 5
+      stepType:
+        displayOrder: 2
+        stepTypeId: 2
+        stepTypeKey: cooldown
+      strokeType:
+        displayOrder: 0
+        strokeTypeId: 0
+      targetType:
+        displayOrder: 6
+        workoutTargetTypeId: 6
+        workoutTargetTypeKey: pace.zone
+      targetValueOne: 2.274
+      targetValueTwo: 2.513
+      type: ExecutableStepDTO
+    - endCondition:
+        conditionTypeId: 1
+        conditionTypeKey: lap.button
+        displayOrder: 1
+        displayable: true
+      equipmentType:
+        displayOrder: 0
+        equipmentTypeId: 0
+      stepId: 9643160382
+      stepOrder: 6
+      stepType:
+        displayOrder: 2
+        stepTypeId: 2
+        stepTypeKey: cooldown
+      strokeType:
+        displayOrder: 0
+        strokeTypeId: 0
+      targetType:
+        displayOrder: 1
+        workoutTargetTypeId: 1
+        workoutTargetTypeKey: no.target
+      type: ExecutableStepDTO

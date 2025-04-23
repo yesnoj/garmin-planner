@@ -15,6 +15,8 @@ import copy
 from .utils import ms_to_pace, dist_time_to_ms, get_pace_range, pace_to_ms
 from .workout import Target, Workout, WorkoutStep
 from planner.garmin_client import GarminClient
+from planner.constants import SPORT_TYPES
+from planner.utils import get_pace_range, ms_to_pace, pace_to_ms, dist_time_to_ms, get_speed_range, kmph_to_ms, ms_to_kmph
 
 # Keys to remove when cleaning workout data for export
 CLEAN_KEYS = ['author', 'createdDate', 'ownerId', 'shared', 'updatedDate']
@@ -34,16 +36,23 @@ def cmd_import_workouts(args):
             - dry_run: If True, only show what would be imported
             - replace: If True, replace existing workouts with the same name
             - treadmill: If True, convert distance end conditions to time
+            - sport_type: Type of sport ('running' or 'cycling')
     """
     logging.info('Importing workouts from ' + args.workouts_file)
     existing_workouts = []
+
+    # Get the sport type from args, default to "running"
+    sport_type = getattr(args, 'sport_type', 'running')
+    if sport_type not in SPORT_TYPES:
+        logging.warning(f"Unsupported sport type: {sport_type}. Using 'running' as default.")
+        sport_type = 'running'
 
     client = GarminClient(args.oauth_folder)
     if not args.dry_run:
         if args.replace:
             existing_workouts = client.list_workouts()
 
-    for workout in import_workouts(args.workouts_file, args.name_filter):
+    for workout in import_workouts(args.workouts_file, args.name_filter, sport_type):
         if args.treadmill or workout.workout_name.strip().endswith('(T)'):
             workout.dist_to_time()
 
@@ -208,13 +217,15 @@ def clean_workout_data(wo_dict):
                     del wo_dict[k]
     return len(wo_dict)
 
-def import_workouts(plan_file, name_filter=None):
+
+def import_workouts(plan_file, name_filter=None, sport_type="running"):
     """
     Import workouts from a YAML file.
     
     Args:
         plan_file: Path to the YAML file
         name_filter: Optional regex to filter workout names
+        sport_type: Type of sport ('running' or 'cycling')
         
     Returns:
         List of Workout objects
@@ -237,7 +248,11 @@ def import_workouts(plan_file, name_filter=None):
         # Remove the config entry, if present
         global config
         config = import_json.pop('config', {})
-
+        
+        # Check if sport type is specified in the config
+        if 'sport_type' in config and config['sport_type'] in SPORT_TYPES:
+            sport_type = config['sport_type']
+        
         # Fix the configuration before expanding it
         fix_config(config)
         expand_config(config)
@@ -251,19 +266,30 @@ def import_workouts(plan_file, name_filter=None):
 
             # Fix repeat steps before creating the workout
             fix_steps(steps)
-
-            w = Workout("running", config.get('name_prefix', '') + name, descriptions.get(name, None))
             
-            # Estrai la data, se presente, come primo elemento
+            # Check if this workout has its own sport type
+            workout_sport_type = sport_type
+            if isinstance(steps, list) and len(steps) > 0:
+                # Check first item for metadata
+                first_step = steps[0]
+                if isinstance(first_step, dict) and 'sport_type' in first_step:
+                    if first_step['sport_type'] in SPORT_TYPES:
+                        workout_sport_type = first_step['sport_type']
+                        # Remove this metadata step
+                        steps = steps[1:]
+
+            w = Workout(workout_sport_type, config.get('name_prefix', '') + name, descriptions.get(name, None))
+            
+            # Extract date, if present, as first element
             workout_date = None
             if steps and isinstance(steps, list) and len(steps) > 0:
                 first_step = steps[0]
                 if isinstance(first_step, dict) and 'date' in first_step:
                     workout_date = first_step['date']
-                    # Rimuovi l'elemento date dalla lista degli step
+                    # Remove the date element from the steps list
                     steps = steps[1:]
             
-            # Aggiungi la data alla descrizione del workout se presente
+            # Add date to workout description if present
             if workout_date:
                 if w.description:
                     w.description += f" (Data: {workout_date})"
@@ -290,7 +316,7 @@ def import_workouts(plan_file, name_filter=None):
                         for substep in substeps:
                             for sk, sv in substep.items():
                                 sub_end_condition = get_end_condition(sv)
-                                sub_target = get_target(sv)
+                                sub_target = get_target(sv, False, workout_sport_type)
                                 rws = WorkoutStep(
                                     0,
                                     sk,
@@ -304,7 +330,7 @@ def import_workouts(plan_file, name_filter=None):
                         w.add_step(ws)
                     elif not k.startswith('repeat') and k != 'steps':
                         end_condition = get_end_condition(v)
-                        ws_target = get_target(v)
+                        ws_target = get_target(v, False, workout_sport_type)
                         ws = WorkoutStep(
                             0,
                             k,
@@ -442,13 +468,14 @@ def get_end_condition_value(step_txt, condition_type=None):
         return str(cv)
     return None
 
-def get_target(step_txt, verbose=False):
+def get_target(step_txt, verbose=False, sport_type="running"):
     """
     Extract a target from a step text.
     
     Args:
         step_txt: Text describing the step
         verbose: If True, print verbose information
+        sport_type: Type of sport ('running' or 'cycling')
         
     Returns:
         Target object
@@ -463,8 +490,15 @@ def get_target(step_txt, verbose=False):
         print(f"Processing step: {step_txt}")
     
     if ' in ' in step_txt:
-        target_type = 'pace.zone'
-        target = ms_to_pace(dist_time_to_ms(step_txt))
+        # For cycling use speed.zone, for running use pace.zone
+        if sport_type == "cycling":
+            target_type = 'speed.zone'
+            # Assume target is in km/h, convert to m/s for Garmin
+            speed_kmh = float(step_txt.split(' in ')[1].strip())
+            target = str(speed_kmh)
+        else:  # default to running
+            target_type = 'pace.zone'
+            target = ms_to_pace(dist_time_to_ms(step_txt))
     elif ' @ ' in step_txt:
         parts = [p.strip() for p in step_txt.split(' @ ')]
         target = parts[1]
@@ -506,75 +540,172 @@ def get_target(step_txt, verbose=False):
             # Convert integer target to range format
             if isinstance(target, int):
                 target = f'{target}-{target}'
-                
-        # Check if target refers to a pace zone key in the paces config
-        elif target in config.get('paces', {}):
-            target_type = 'pace.zone'
-            target_value = config['paces'][target]
-            if verbose:
-                print(f"Found in paces config: {target} -> {target_value}")
-            target = target_value
+        
+        # Check for cycling specific speed target (_SPD suffix)
+        elif '_SPD' in target or (sport_type == "cycling" and target in config.get('speeds', {})):
+            target_type = 'speed.zone'
             
-        # Check if this is a plain Zx format (like Z1, Z2) - these should be pace zones by default
-        # unless they're only defined in heart_rates
+            # Look up directly in config.speeds with the _SPD suffix included
+            if target in config.get('speeds', {}):
+                target_value = config['speeds'][target]
+                if verbose:
+                    print(f"Found in speeds with _SPD suffix: {target} -> {target_value}")
+                target = target_value
+            else:
+                # Try removing the _SPD suffix and look up in speeds
+                clean_target = target.replace('_SPD', '')
+                if clean_target in config.get('speeds', {}):
+                    target_value = config['speeds'][clean_target]
+                    if verbose:
+                        print(f"Found in speeds after removing _SPD: {clean_target} -> {target_value}")
+                    target = target_value
+                    
+            # Handle directly specified speed in format "X km/h" or "X-Y km/h"
+            if isinstance(target, str) and "km/h" in target:
+                target = target.replace("km/h", "").strip()
+                
+        # Check if target refers to a pace zone key in the paces config (for running)
+        elif target in config.get('paces', {}):
+            if sport_type == "cycling":
+                target_type = 'speed.zone'
+                # Check if there's a matching key in speeds
+                if target in config.get('speeds', {}):
+                    target_value = config['speeds'][target]
+                    if verbose:
+                        print(f"Found in speeds config: {target} -> {target_value}")
+                    target = target_value
+                else:
+                    # Default zone speeds if not specified
+                    zone_speeds = {
+                        'Z1': "15.0",
+                        'Z2': "20.0",
+                        'Z3': "25.0",
+                        'Z4': "30.0",
+                        'Z5': "35.0"
+                    }
+                    target = zone_speeds.get(target.upper(), "25.0")  # Default to 25 km/h if unknown
+            else:  # running
+                target_type = 'pace.zone'
+                target_value = config['paces'][target]
+                if verbose:
+                    print(f"Found in paces config: {target} -> {target_value}")
+                target = target_value
+            
+        # Check if this is a plain Zx format (like Z1, Z2)
         elif re.match(r'^[zZ][1-5]$', target):
             zone_key = target.upper()  # Normalize to uppercase
             
-            # Check if it exists in paces config
-            if zone_key in config.get('paces', {}):
-                target_type = 'pace.zone'
-                target_value = config['paces'][zone_key]
-                if verbose:
-                    print(f"Found zone in paces config: {zone_key} -> {target_value}")
-                target = target_value
-            # If not in paces but is in heart_rates with _HR suffix, use heart rate
-            elif zone_key + "_HR" in config.get('heart_rates', {}):
-                target_type = 'heart.rate.zone'
-                target_value = config['heart_rates'][zone_key + "_HR"]
-                if verbose:
-                    print(f"Zone not in paces but found in heart_rates: {zone_key}_HR -> {target_value}")
-                target = target_value
-                # Convert integer target to range format
-                if isinstance(target, int):
-                    target = f'{target}-{target}'
-            # Last resort: map Z1-Z5 directly to pace zones
-            else:
-                target_type = 'pace.zone'
-                zone_num = int(target[1:])
-                if verbose:
-                    print(f"Using zone number directly for pace zone: {zone_num}")
-                # Map zones 1-5 to pace ranges
-                zone_paces = {
-                    1: "6:30",
-                    2: "6:00",
-                    3: "5:30",
-                    4: "5:00",
-                    5: "4:30"
-                }
-                target = zone_paces.get(zone_num, "5:00")  # Default to 5:00 if unknown
-                if verbose:
-                    print(f"Mapped to pace: {target}")
+            if sport_type == "cycling":
+                # For cycling, check if in speeds config first
+                if zone_key in config.get('speeds', {}):
+                    target_type = 'speed.zone'
+                    target_value = config['speeds'][zone_key]
+                    if verbose:
+                        print(f"Found zone in speeds config: {zone_key} -> {target_value}")
+                    target = target_value
+                # If not in speeds but is in heart_rates, use heart rate
+                elif zone_key + "_HR" in config.get('heart_rates', {}):
+                    target_type = 'heart.rate.zone'
+                    target_value = config['heart_rates'][zone_key + "_HR"]
+                    if verbose:
+                        print(f"Zone not in speeds but found in heart_rates: {zone_key}_HR -> {target_value}")
+                    target = target_value
+                    # Convert integer target to range format
+                    if isinstance(target, int):
+                        target = f'{target}-{target}'
+                # Default zone speeds if not specified
+                else:
+                    target_type = 'speed.zone'
+                    zone_num = int(target[1:])
+                    # Map zones 1-5 to speed ranges
+                    zone_speeds = {
+                        1: "15.0",
+                        2: "20.0",
+                        3: "25.0",
+                        4: "30.0",
+                        5: "35.0"
+                    }
+                    target = zone_speeds.get(zone_num, "25.0")  # Default to 25 km/h if unknown
+                    if verbose:
+                        print(f"Mapped to default speed: {target}")
+            else:  # running
+                # Check if it exists in paces config
+                if zone_key in config.get('paces', {}):
+                    target_type = 'pace.zone'
+                    target_value = config['paces'][zone_key]
+                    if verbose:
+                        print(f"Found zone in paces config: {zone_key} -> {target_value}")
+                    target = target_value
+                # If not in paces but is in heart_rates with _HR suffix, use heart rate
+                elif zone_key + "_HR" in config.get('heart_rates', {}):
+                    target_type = 'heart.rate.zone'
+                    target_value = config['heart_rates'][zone_key + "_HR"]
+                    if verbose:
+                        print(f"Zone not in paces but found in heart_rates: {zone_key}_HR -> {target_value}")
+                    target = target_value
+                    # Convert integer target to range format
+                    if isinstance(target, int):
+                        target = f'{target}-{target}'
+                # Last resort: map Z1-Z5 directly to pace zones
+                else:
+                    target_type = 'pace.zone'
+                    zone_num = int(target[1:])
+                    if verbose:
+                        print(f"Using zone number directly for pace zone: {zone_num}")
+                    # Map zones 1-5 to pace ranges
+                    zone_paces = {
+                        1: "6:30",
+                        2: "6:00",
+                        3: "5:30",
+                        4: "5:00",
+                        5: "4:30"
+                    }
+                    target = zone_paces.get(zone_num, "5:00")  # Default to 5:00 if unknown
+                    if verbose:
+                        print(f"Mapped to pace: {target}")
         else:
-            # Process as pace zone for all other targets
-            target_type = 'pace.zone'
-            if re.compile(r'^\d{1,2}:\d{1,2}(?:-\d{1,2}:\d{1,2})?').match(target):
-                pass  # Target is already in the correct format
-            else:
-                while not re.compile(r'^\d{1,2}:\d{1,2}(?:-\d{1,2}:\d{1,2})?').match(target):
-                    # Check if the target is of type 75% marathon_pace
-                    tm = re.compile(r'^(\d+-?\d+)%\s*(\S+)$').match(target)
-                    if tm:
-                        # Get the scale in the form 75% or 70-80%
-                        scales = sorted([float(s)/100 for s in tm.group(1).split('-')])
-                        scale_min = scale_max = scales[0]
-                        if len(scales) == 2:
-                            scale_max = scales[1]
-                        target = tm.group(2).strip()
-                    # Check if the target is found in the paces config block
-                    if target in config.get('paces', {}):
-                        target = config['paces'][target]
-                    else:
-                        raise ValueError(f'Cannot find pace target \'{target}\' in workout step \'{step_txt}\'')
+            # Process as either pace zone or speed zone based on sport type
+            if sport_type == "cycling":
+                target_type = 'speed.zone'
+                # Try to parse as a speed value (e.g., "30" or "25-35")
+                if re.compile(r'^\d+(?:\.\d+)?(?:-\d+(?:\.\d+)?)?$').match(target):
+                    pass  # Target is already in the correct format
+                else:
+                    while not re.compile(r'^\d+(?:\.\d+)?(?:-\d+(?:\.\d+)?)?$').match(target):
+                        # Check if the target is of type 75% ftp
+                        tm = re.compile(r'^(\d+-?\d+)%\s*(\S+)$').match(target)
+                        if tm:
+                            # Get the scale in the form 75% or 70-80%
+                            scales = sorted([float(s)/100 for s in tm.group(1).split('-')])
+                            scale_min = scale_max = scales[0]
+                            if len(scales) == 2:
+                                scale_max = scales[1]
+                            target = tm.group(2).strip()
+                        # Check if the target is found in the speeds config block
+                        if target in config.get('speeds', {}):
+                            target = config['speeds'][target]
+                        else:
+                            raise ValueError(f'Cannot find speed target \'{target}\' in workout step \'{step_txt}\'')
+            else:  # running
+                target_type = 'pace.zone'
+                if re.compile(r'^\d{1,2}:\d{1,2}(?:-\d{1,2}:\d{1,2})?').match(target):
+                    pass  # Target is already in the correct format
+                else:
+                    while not re.compile(r'^\d{1,2}:\d{1,2}(?:-\d{1,2}:\d{1,2})?').match(target):
+                        # Check if the target is of type 75% marathon_pace
+                        tm = re.compile(r'^(\d+-?\d+)%\s*(\S+)$').match(target)
+                        if tm:
+                            # Get the scale in the form 75% or 70-80%
+                            scales = sorted([float(s)/100 for s in tm.group(1).split('-')])
+                            scale_min = scale_max = scales[0]
+                            if len(scales) == 2:
+                                scale_max = scales[1]
+                            target = tm.group(2).strip()
+                        # Check if the target is found in the paces config block
+                        if target in config.get('paces', {}):
+                            target = config['paces'][target]
+                        else:
+                            raise ValueError(f'Cannot find pace target \'{target}\' in workout step \'{step_txt}\'')
     elif ' @hr ' in step_txt:
         target_type = 'heart.rate.zone'
         parts = [p.strip() for p in step_txt.split(' @hr ')]
@@ -588,12 +719,43 @@ def get_target(step_txt, verbose=False):
             
         if isinstance(target, int):
             target = f'{target}-{target}'
+    elif ' @spd ' in step_txt:  # Specific for cycling speed
+        target_type = 'speed.zone'
+        parts = [p.strip() for p in step_txt.split(' @spd ')]
+        target = parts[1]
+        
+        # Check for direct key in speeds config
+        if target in config.get('speeds', {}):
+            target = config['speeds'][target]
+        
+        # Handle direct speed values (can include "km/h")
+        if isinstance(target, str) and "km/h" in target:
+            target = target.replace("km/h", "").strip()
+            
+        # Convert to the format Garmin expects (e.g., "30" or "25-35")
+        if re.compile(r'^\d+(?:\.\d+)?(?:-\d+(?:\.\d+)?)?$').match(target):
+            pass  # Already in correct format
+        elif re.compile(r'^[zZ][1-5]$', target):
+            # Convert zone to default speed
+            zone_num = int(target[1:])
+            zone_speeds = {
+                1: "15.0",
+                2: "20.0",
+                3: "25.0",
+                4: "30.0",
+                5: "35.0"
+            }
+            target = zone_speeds.get(zone_num, "25.0")  # Default to 25 km/h if unknown
     else: # No target
         return None
     
     if target_type == 'pace.zone':
         target_range = get_pace_range(target, config.get('margins', None))
         return Target(target_type, scale_min*pace_to_ms(target_range[0]), scale_max*pace_to_ms(target_range[1]))
+    elif target_type == 'speed.zone':
+        # For cycling - convert km/h to m/s for Garmin
+        target_range = get_speed_range(target, config.get('margins', None))
+        return Target(target_type, scale_min*kmph_to_ms(float(target_range[0])), scale_max*kmph_to_ms(float(target_range[1])))
     elif target_type == 'heart.rate.zone':
         if re.compile(r'^\d{2,3}-\d{2,3}$').match(target):
             target_range = [int(t) for t in target.split('-')]
@@ -644,11 +806,69 @@ def expand_config(config):
     Args:
         config: Configuration dictionary to expand
     """
+    # Initialize speeds section if not present
+    if 'speeds' not in config:
+        config['speeds'] = {}
+    
     # Expand paces
     paces = config.get('paces', {})
     for pk, pv in paces.items():
         if isinstance(pv, str) and re.compile('^.+ in .+$').match(pv.strip()):
             paces[pk] = ms_to_pace(dist_time_to_ms(pv))
+    
+    # Expand speeds for cycling
+    speeds = config.get('speeds', {})
+    for sk, sv in list(speeds.items()):
+        # Handle percentage references for speed
+        if isinstance(sv, str):
+            m = re.compile(r'^\s*(\d+(?:-\d+)?)%\s*(.+)\s*$').match(sv)
+            if m:
+                ref_speed_key = m.group(2).strip()
+                if ref_speed_key in speeds:
+                    ref_speed = speeds[ref_speed_key]
+                    
+                    # Make sure ref_speed is a number
+                    if isinstance(ref_speed, str):
+                        # Handle range format "25-30"
+                        if '-' in ref_speed:
+                            low, high = ref_speed.split('-')
+                            ref_speed = (float(low) + float(high)) / 2  # Use average
+                        # Handle "X km/h" format
+                        elif "km/h" in ref_speed:
+                            ref_speed = float(ref_speed.replace("km/h", "").strip())
+                        else:
+                            try:
+                                ref_speed = float(ref_speed)
+                            except ValueError:
+                                logging.warning(f"Cannot convert '{ref_speed_key}' to number: {ref_speed}")
+                                continue
+                    
+                    speed_range_str = m.group(1)
+                    speed_range = speed_range_str.split('-')
+                    
+                    # With a single percentage
+                    if len(speed_range) == 1:
+                        try:
+                            percent = float(speed_range[0]) / 100
+                            speeds[sk] = str(ref_speed * percent)
+                        except (ValueError, TypeError) as e:
+                            logging.warning(f"Error in speed percentage conversion: {speed_range[0]} - {str(e)}")
+                    # With a percentage range
+                    else:
+                        try:
+                            low_percent = float(speed_range[0]) / 100
+                            high_percent = float(speed_range[1]) / 100
+                            low_speed = ref_speed * low_percent
+                            high_speed = ref_speed * high_percent
+                            speeds[sk] = f"{low_speed}-{high_speed}"
+                        except (ValueError, TypeError) as e:
+                            logging.warning(f"Error in speed percentage range conversion: {speed_range} - {str(e)}")
+                else:
+                    logging.warning(f"Error: Speed reference '{ref_speed_key}' not found for '{sk}'")
+            
+            # Remove "km/h" suffix if present
+            if "km/h" in sv:
+                speeds[sk] = sv.replace("km/h", "").strip()
     
     # Expand heart rates
     heart_rates = config.get('heart_rates', {})

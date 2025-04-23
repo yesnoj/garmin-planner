@@ -39,23 +39,35 @@ STEP_ICONS = {
 
 workout_config = {
     'paces': {},
+    'speeds': {},
     'heart_rates': {},
     'margins': {
         'faster': '0:03',
         'slower': '0:03',
+        'faster_spd': '2.0',
+        'slower_spd': '2.0',
         'hr_up': 5,
         'hr_down': 5
     },
-    'name_prefix': ''
+    'name_prefix': '',
+    'sport_type': 'running'  # Default sport type
 }
 
 class StepDialog(tk.Toplevel):
     """Dialog for adding/editing a workout step"""
     
-    def __init__(self, parent, step_type=None, step_detail=None):
+    def __init__(self, parent, step_type=None, step_detail=None, sport_type="running"):
         super().__init__(parent)
         self.parent = parent
         self.result = None
+        self.sport_type = sport_type
+        
+        # Verifica se stiamo tentando di modificare un metadato
+        metadata_keys = ["sport_type", "date"]
+        if step_type in metadata_keys:
+            messagebox.showinfo("Informazione", f"I metadati di tipo '{step_type}' non possono essere modificati in questa schermata.")
+            self.destroy()
+            return
         
         self.title("Dettagli del passo")
         self.geometry("500x300")
@@ -72,7 +84,7 @@ class StepDialog(tk.Toplevel):
         ttk.Label(type_frame, text="Tipo di passo:").grid(row=0, column=0, padx=5, pady=5)
         
         step_types = ["warmup", "interval", "recovery", "cooldown", "rest", "other"]
-        self.step_type = tk.StringVar(value=step_type if step_type else "interval")
+        self.step_type = tk.StringVar(value=step_type if step_type and step_type not in ["sport_type", "date"] else "interval")
         
         # Usa un combobox invece di dropdown
         step_type_combo = ttk.Combobox(type_frame, textvariable=self.step_type, values=step_types, state="readonly", width=15)
@@ -94,9 +106,14 @@ class StepDialog(tk.Toplevel):
         self.measure_entry = ttk.Entry(measure_frame, textvariable=self.measure_var, width=10)
         self.measure_entry.grid(row=0, column=1, padx=5, pady=5)
         
-        # Dropdown per unità (min, km, m)
+        # Dropdown per unità (adattato per sport_type)
+        if sport_type == "cycling":
+            unit_values = ["min", "km", "m", "lap-button"]
+        else:  # running
+            unit_values = ["min", "km", "m", "lap-button"]
+            
         self.unit_var = tk.StringVar(value="min")
-        self.unit_combo = ttk.Combobox(measure_frame, textvariable=self.unit_var, values=["min", "km", "m", "lap-button"], width=10, state="readonly")
+        self.unit_combo = ttk.Combobox(measure_frame, textvariable=self.unit_var, values=unit_values, width=10, state="readonly")
         self.unit_combo.grid(row=0, column=2, padx=5, pady=5)
         self.unit_combo.bind('<<ComboboxSelected>>', self.on_unit_change)
         
@@ -104,8 +121,14 @@ class StepDialog(tk.Toplevel):
         zone_frame = ttk.Frame(detail_frame)
         zone_frame.pack(fill=tk.X, padx=5, pady=5)
         
+        # Cambia le etichette in base al tipo di sport
+        if sport_type == "cycling":
+            pace_label = "Velocità"
+        else:  # running
+            pace_label = "Ritmo"
+            
         self.zone_type = tk.StringVar(value="pace")
-        ttk.Radiobutton(zone_frame, text="Ritmo", variable=self.zone_type, value="pace", 
+        ttk.Radiobutton(zone_frame, text=pace_label, variable=self.zone_type, value="pace", 
                         command=self.update_zone_options).grid(row=0, column=0, padx=5, pady=5)
         ttk.Radiobutton(zone_frame, text="Frequenza Cardiaca", variable=self.zone_type, value="hr", 
                         command=self.update_zone_options).grid(row=0, column=1, padx=5, pady=5)
@@ -162,6 +185,14 @@ class StepDialog(tk.Toplevel):
         # Adatta l'interfaccia in base al tipo selezionato
         step_type = self.step_type.get()
         
+        # Verifica se è un metadato
+        metadata_keys = ["sport_type", "date"]
+        if step_type in metadata_keys:
+            messagebox.showinfo("Informazione", f"I metadati di tipo '{step_type}' non possono essere selezionati.")
+            # Reimposta il tipo a un valore accettabile
+            self.step_type.set("interval")
+            return
+        
         # Aggiorna le unità di default
         if step_type in ["warmup", "cooldown", "recovery"]:
             self.unit_var.set("min")
@@ -193,23 +224,42 @@ class StepDialog(tk.Toplevel):
             widget.destroy()
         
         if zone_type == "pace":
-            # Carica le opzioni per il ritmo dal config globale
-            pace_zones = list(workout_config.get('paces', {}).keys())
-            
-            # Se non ci sono zone definite, usa le predefinite
-            if not pace_zones:
-                pace_zones = ["Z1", "Z2", "Z3", "Z4", "Z5", "6:00", "5:30", "5:00", "4:30", "4:00"]
-            
-            self.zone_var = tk.StringVar()
-            self.zone_combo = ttk.Combobox(self.zone_options_frame, textvariable=self.zone_var, values=pace_zones, width=15)
-            self.zone_combo.pack(side=tk.LEFT, padx=5)
-            
-            # Aggiungi simbolo @
-            ttk.Label(self.zone_options_frame, text="@").pack(side=tk.LEFT)
-            
-            # Il primo valore come default
-            if pace_zones:
-                self.zone_var.set(pace_zones[0])
+            if self.sport_type == "cycling":
+                # Carica le opzioni per la velocità dal config globale
+                speed_zones = list(workout_config.get('speeds', {}).keys())
+                
+                # Se non ci sono zone definite, usa le predefinite
+                if not speed_zones:
+                    speed_zones = ["Z1", "Z2", "Z3", "Z4", "Z5", "15.0", "20.0", "25.0", "30.0", "35.0"]
+                
+                self.zone_var = tk.StringVar()
+                self.zone_combo = ttk.Combobox(self.zone_options_frame, textvariable=self.zone_var, values=speed_zones, width=15)
+                self.zone_combo.pack(side=tk.LEFT, padx=5)
+                
+                # Aggiungi simbolo @spd per velocità
+                ttk.Label(self.zone_options_frame, text="@spd").pack(side=tk.LEFT)
+                
+                # Il primo valore come default
+                if speed_zones:
+                    self.zone_var.set(speed_zones[0])
+            else:  # running
+                # Carica le opzioni per il ritmo dal config globale
+                pace_zones = list(workout_config.get('paces', {}).keys())
+                
+                # Se non ci sono zone definite, usa le predefinite
+                if not pace_zones:
+                    pace_zones = ["Z1", "Z2", "Z3", "Z4", "Z5", "6:00", "5:30", "5:00", "4:30", "4:00"]
+                
+                self.zone_var = tk.StringVar()
+                self.zone_combo = ttk.Combobox(self.zone_options_frame, textvariable=self.zone_var, values=pace_zones, width=15)
+                self.zone_combo.pack(side=tk.LEFT, padx=5)
+                
+                # Aggiungi simbolo @
+                ttk.Label(self.zone_options_frame, text="@").pack(side=tk.LEFT)
+                
+                # Il primo valore come default
+                if pace_zones:
+                    self.zone_var.set(pace_zones[0])
                 
         elif zone_type == "hr":
             # Carica le opzioni per la frequenza cardiaca dal config globale
@@ -273,6 +323,84 @@ class StepDialog(tk.Toplevel):
             self.update_zone_options()
             return
         
+        # Gestione @spd per velocità (cycling)
+        if " @spd " in detail:
+            parts = detail.split(" @spd ", 1)
+            measure = parts[0].strip()
+            zone = parts[1].strip()
+            
+            # Estrai descrizione se presente
+            if " -- " in zone:
+                zone, description = zone.split(" -- ", 1)
+                self.description_var.set(description.strip())
+            
+            # Imposta il tipo di zona a pace
+            self.zone_type.set("pace")
+            
+            # Aggiorna le opzioni di zona
+            self.update_zone_options()
+            
+            # Imposta la zona
+            self.zone_var.set(zone.strip())
+            
+            # Estrai la misura e l'unità
+            measure = measure.strip()
+            if "min" in measure:
+                value = measure.replace("min", "").strip()
+                self.measure_var.set(value)
+                self.unit_var.set("min")
+            elif "km" in measure:
+                value = measure.replace("km", "").strip()
+                self.measure_var.set(value)
+                self.unit_var.set("km")
+            elif "m" in measure:
+                value = measure.replace("m", "").strip()
+                self.measure_var.set(value)
+                self.unit_var.set("m")
+            else:
+                self.measure_var.set(measure)
+            
+            return
+            
+        # Gestione @hr per frequenza cardiaca
+        if " @hr " in detail:
+            parts = detail.split(" @hr ", 1)
+            measure = parts[0].strip()
+            zone = parts[1].strip()
+            
+            # Estrai descrizione se presente
+            if " -- " in zone:
+                zone, description = zone.split(" -- ", 1)
+                self.description_var.set(description.strip())
+            
+            # Imposta il tipo di zona a frequenza cardiaca
+            self.zone_type.set("hr")
+            
+            # Aggiorna le opzioni di zona
+            self.update_zone_options()
+            
+            # Imposta la zona
+            self.zone_var.set(zone.strip())
+            
+            # Estrai la misura e l'unità
+            measure = measure.strip()
+            if "min" in measure:
+                value = measure.replace("min", "").strip()
+                self.measure_var.set(value)
+                self.unit_var.set("min")
+            elif "km" in measure:
+                value = measure.replace("km", "").strip()
+                self.measure_var.set(value)
+                self.unit_var.set("km")
+            elif "m" in measure:
+                value = measure.replace("m", "").strip()
+                self.measure_var.set(value)
+                self.unit_var.set("m")
+            else:
+                self.measure_var.set(measure)
+            
+            return
+        
         # Esempio: "10min @ Z1 -- Riscaldamento iniziale"
         
         # Cerca la descrizione
@@ -291,9 +419,6 @@ class StepDialog(tk.Toplevel):
             # Identifica se è HR o pace basato sul suffisso _HR
             if "_HR" in zone:
                 self.zone_type.set("hr")
-            elif "@hr" in detail:
-                self.zone_type.set("hr")
-                zone = zone.replace("hr ", "")
             else:
                 self.zone_type.set("pace")
             
@@ -343,7 +468,7 @@ class StepDialog(tk.Toplevel):
             # Aggiorna la UI
             self.update_zone_options()
 
-    
+
     def on_ok(self):
         """Handle OK button click"""
         # Caso speciale per lap-button
@@ -378,7 +503,10 @@ class StepDialog(tk.Toplevel):
             zone = f"@hr {self.zone_var.get()}"
             detail = f"{measure} {zone}"
         elif self.zone_type.get() == "pace":
-            zone = f"@ {self.zone_var.get()}"
+            if self.sport_type == "cycling":
+                zone = f"@spd {self.zone_var.get()}"
+            else:  # running
+                zone = f"@ {self.zone_var.get()}"
             detail = f"{measure} {zone}"
         else:
             # No zone
@@ -394,13 +522,15 @@ class StepDialog(tk.Toplevel):
         # Chiudi la finestra
         self.destroy()
     
+
+    
     def on_cancel(self):
         """Handle Cancel button click"""
         self.destroy()
 
 
 class ConfigEditorDialog(tk.Toplevel):
-    """Dialog for editing paces, heart rates, and other configuration options"""
+    """Dialog for editing paces, heart rates, speeds, and other configuration options"""
     
     def __init__(self, parent):
         super().__init__(parent)
@@ -418,9 +548,13 @@ class ConfigEditorDialog(tk.Toplevel):
         self.notebook = ttk.Notebook(self)
         self.notebook.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         
-        # Scheda per i ritmi (paces)
+        # Scheda per i ritmi (paces) - solo per running
         self.paces_frame = ttk.Frame(self.notebook)
-        self.notebook.add(self.paces_frame, text="Ritmi")
+        self.notebook.add(self.paces_frame, text="Ritmi (Corsa)")
+        
+        # Scheda per velocità (speeds) - solo per cycling
+        self.speeds_frame = ttk.Frame(self.notebook)
+        self.notebook.add(self.speeds_frame, text="Velocità (Ciclismo)")
         
         # Scheda per le frequenze cardiache (heart rates)
         self.hr_frame = ttk.Frame(self.notebook)
@@ -430,10 +564,16 @@ class ConfigEditorDialog(tk.Toplevel):
         self.margins_frame = ttk.Frame(self.notebook)
         self.notebook.add(self.margins_frame, text="Margini")
         
+        # Scheda generale per il tipo di sport
+        self.general_frame = ttk.Frame(self.notebook)
+        self.notebook.add(self.general_frame, text="Generale")
+        
         # Inizializza le schede
         self.init_paces_tab()
+        self.init_speeds_tab()
         self.init_hr_tab()
         self.init_margins_tab()
+        self.init_general_tab()
         
         # Bottoni
         button_frame = ttk.Frame(self)
@@ -451,6 +591,71 @@ class ConfigEditorDialog(tk.Toplevel):
         # Attendi la chiusura della finestra
         self.wait_window()
     
+
+    def init_speeds_tab(self):
+        """Initialize the speeds tab for cycling"""
+        # Frame per la lista
+        list_frame = ttk.Frame(self.speeds_frame)
+        list_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Crea la treeview
+        self.speeds_tree = ttk.Treeview(list_frame, columns=("name", "value"), show="headings")
+        self.speeds_tree.heading("name", text="Nome")
+        self.speeds_tree.heading("value", text="Valore (km/h)")
+        self.speeds_tree.column("name", width=150)
+        self.speeds_tree.column("value", width=250)
+        
+        # Aggiungi scrollbar
+        scrollbar = ttk.Scrollbar(list_frame, orient=tk.VERTICAL, command=self.speeds_tree.yview)
+        self.speeds_tree.configure(yscrollcommand=scrollbar.set)
+        
+        # Packing
+        self.speeds_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Bottoni
+        button_frame = ttk.Frame(self.speeds_frame)
+        button_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        ttk.Button(button_frame, text="Aggiungi", command=lambda: self.add_item('speeds')).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Modifica", command=lambda: self.edit_item('speeds')).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Elimina", command=lambda: self.delete_item('speeds')).pack(side=tk.LEFT, padx=5)
+        
+        # Double-click to edit
+        self.speeds_tree.bind("<Double-1>", lambda e: self.edit_item('speeds'))
+        
+        # Aggiungi una label informativa
+        info_text = "Specifica le velocità in km/h. Puoi inserire un valore singolo (es. '30.0') o un intervallo (es. '25.0-35.0')."
+        ttk.Label(self.speeds_frame, text=info_text, wraplength=600).pack(pady=5)
+
+
+    def init_general_tab(self):
+        """Initialize the general tab with sport type selection"""
+        # Grid per i campi
+        grid_frame = ttk.Frame(self.general_frame)
+        grid_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
+        
+        # Sport type
+        ttk.Label(grid_frame, text="Tipo di sport:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        self.sport_type_var = tk.StringVar(value="running")  # Default to running
+        sport_combo = ttk.Combobox(grid_frame, textvariable=self.sport_type_var, values=["running", "cycling"], state="readonly", width=15)
+        sport_combo.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
+        
+        # Name prefix
+        ttk.Label(grid_frame, text="Prefisso nome:").grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
+        self.name_prefix_var = tk.StringVar()
+        ttk.Entry(grid_frame, textvariable=self.name_prefix_var, width=40).grid(row=1, column=1, columnspan=3, padx=5, pady=5, sticky=tk.W+tk.E)
+        
+        # Help text
+        help_text = ("Queste impostazioni controllano il tipo di sport predefinito per i nuovi allenamenti.\n\n"
+                     "Running: utilizza ritmi espressi in min/km\n"
+                     "Cycling: utilizza velocità espresse in km/h\n\n"
+                     "Il prefisso nome viene aggiunto automaticamente a tutti gli allenamenti generati.")
+        
+        ttk.Label(grid_frame, text=help_text, wraplength=600, justify=tk.LEFT).grid(row=2, column=0, columnspan=4, padx=5, pady=15, sticky=tk.W)
+
+
+
     def center_window(self):
         """Center the window on screen"""
         self.update_idletasks()
@@ -524,45 +729,64 @@ class ConfigEditorDialog(tk.Toplevel):
         # Double-click to edit
         self.hr_tree.bind("<Double-1>", lambda e: self.edit_item('heart_rates'))
     
+
     def init_margins_tab(self):
         """Initialize the margins tab"""
         # Grid per i campi
         grid_frame = ttk.Frame(self.margins_frame)
         grid_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         
+        # Running: Faster/Slower margins
+        ttk.Label(grid_frame, text="CORSA:", font=("", 10, "bold")).grid(row=0, column=0, columnspan=2, padx=5, pady=5, sticky=tk.W)
+        
         # Faster margin
-        ttk.Label(grid_frame, text="Ritmo più veloce (mm:ss):").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        ttk.Label(grid_frame, text="Ritmo più veloce (mm:ss):").grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
         self.faster_var = tk.StringVar()
-        ttk.Entry(grid_frame, textvariable=self.faster_var, width=10).grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
+        ttk.Entry(grid_frame, textvariable=self.faster_var, width=10).grid(row=1, column=1, padx=5, pady=5, sticky=tk.W)
         
         # Slower margin
-        ttk.Label(grid_frame, text="Ritmo più lento (mm:ss):").grid(row=1, column=0, padx=5, pady=5, sticky=tk.W)
+        ttk.Label(grid_frame, text="Ritmo più lento (mm:ss):").grid(row=2, column=0, padx=5, pady=5, sticky=tk.W)
         self.slower_var = tk.StringVar()
-        ttk.Entry(grid_frame, textvariable=self.slower_var, width=10).grid(row=1, column=1, padx=5, pady=5, sticky=tk.W)
+        ttk.Entry(grid_frame, textvariable=self.slower_var, width=10).grid(row=2, column=1, padx=5, pady=5, sticky=tk.W)
+        
+        # Cycling: Faster/Slower speed margins
+        ttk.Label(grid_frame, text="CICLISMO:", font=("", 10, "bold")).grid(row=0, column=2, columnspan=2, padx=5, pady=5, sticky=tk.W)
+        
+        # Faster speed margin
+        ttk.Label(grid_frame, text="Velocità maggiore (km/h):").grid(row=1, column=2, padx=5, pady=5, sticky=tk.W)
+        self.faster_spd_var = tk.StringVar()
+        ttk.Entry(grid_frame, textvariable=self.faster_spd_var, width=10).grid(row=1, column=3, padx=5, pady=5, sticky=tk.W)
+        
+        # Slower speed margin
+        ttk.Label(grid_frame, text="Velocità minore (km/h):").grid(row=2, column=2, padx=5, pady=5, sticky=tk.W)
+        self.slower_spd_var = tk.StringVar()
+        ttk.Entry(grid_frame, textvariable=self.slower_spd_var, width=10).grid(row=2, column=3, padx=5, pady=5, sticky=tk.W)
+        
+        # HR margins (comuni a entrambi gli sport)
+        ttk.Label(grid_frame, text="FREQUENZA CARDIACA:", font=("", 10, "bold")).grid(row=3, column=0, columnspan=4, padx=5, pady=(15,5), sticky=tk.W)
         
         # HR up margin
-        ttk.Label(grid_frame, text="FC sopra target (%):").grid(row=0, column=2, padx=5, pady=5, sticky=tk.W)
+        ttk.Label(grid_frame, text="FC sopra target (bpm):").grid(row=4, column=0, padx=5, pady=5, sticky=tk.W)
         self.hr_up_var = tk.IntVar()
-        ttk.Entry(grid_frame, textvariable=self.hr_up_var, width=10).grid(row=0, column=3, padx=5, pady=5, sticky=tk.W)
+        ttk.Entry(grid_frame, textvariable=self.hr_up_var, width=10).grid(row=4, column=1, padx=5, pady=5, sticky=tk.W)
         
         # HR down margin
-        ttk.Label(grid_frame, text="FC sotto target (%):").grid(row=1, column=2, padx=5, pady=5, sticky=tk.W)
+        ttk.Label(grid_frame, text="FC sotto target (bpm):").grid(row=4, column=2, padx=5, pady=5, sticky=tk.W)
         self.hr_down_var = tk.IntVar()
-        ttk.Entry(grid_frame, textvariable=self.hr_down_var, width=10).grid(row=1, column=3, padx=5, pady=5, sticky=tk.W)
-        
-        # Name prefix
-        ttk.Label(grid_frame, text="Prefisso nome:").grid(row=2, column=0, padx=5, pady=5, sticky=tk.W)
-        self.name_prefix_var = tk.StringVar()
-        ttk.Entry(grid_frame, textvariable=self.name_prefix_var, width=40).grid(row=2, column=1, columnspan=3, padx=5, pady=5, sticky=tk.W+tk.E)
+        ttk.Entry(grid_frame, textvariable=self.hr_down_var, width=10).grid(row=4, column=3, padx=5, pady=5, sticky=tk.W)
         
         # Help text
-        help_text = ("Queste impostazioni controllano i margini di tolleranza per ritmi e frequenze cardiache.\n"
-                     "Ad esempio, un margine di '0:03' permette di correre fino a 3 secondi più veloce o più lento\n"
-                     "rispetto al ritmo target. Similarmente, una tolleranza del 5% permette che la frequenza cardiaca\n"
-                     "vari del 5% sopra o sotto il target impostato.")
+        help_text = ("Queste impostazioni controllano i margini di tolleranza per ritmi, velocità e frequenze cardiache.\n\n"
+                     "Per la corsa: un margine di '0:03' permette di correre fino a 3 secondi più veloce o più lento\n"
+                     "rispetto al ritmo target.\n\n"
+                     "Per il ciclismo: un margine di '2.0' permette di pedalare fino a 2 km/h più veloce o più lento\n"
+                     "rispetto alla velocità target.\n\n"
+                     "Per la frequenza cardiaca: una tolleranza di 5 bpm permette variazioni di 5 battiti\n"
+                     "sopra o sotto il target impostato.")
         
-        ttk.Label(grid_frame, text=help_text, wraplength=600, justify=tk.LEFT).grid(row=3, column=0, columnspan=4, padx=5, pady=15, sticky=tk.W)
-    
+        ttk.Label(grid_frame, text=help_text, wraplength=600, justify=tk.LEFT).grid(row=5, column=0, columnspan=4, padx=5, pady=15, sticky=tk.W)
+
+
     def load_data(self):
         """Load configuration data"""
         global workout_config
@@ -570,6 +794,10 @@ class ConfigEditorDialog(tk.Toplevel):
         # Load paces
         for name, value in workout_config.get('paces', {}).items():
             self.paces_tree.insert("", "end", values=(name, value))
+        
+        # Load speeds
+        for name, value in workout_config.get('speeds', {}).items():
+            self.speeds_tree.insert("", "end", values=(name, value))
         
         # Load heart rates
         for name, value in workout_config.get('heart_rates', {}).items():
@@ -579,21 +807,38 @@ class ConfigEditorDialog(tk.Toplevel):
         margins = workout_config.get('margins', {})
         self.faster_var.set(margins.get('faster', '0:03'))
         self.slower_var.set(margins.get('slower', '0:03'))
+        self.faster_spd_var.set(margins.get('faster_spd', '2.0'))
+        self.slower_spd_var.set(margins.get('slower_spd', '2.0'))
         self.hr_up_var.set(margins.get('hr_up', 5))
         self.hr_down_var.set(margins.get('hr_down', 5))
         
-        # Load name prefix
-        self.name_prefix_var.set(workout_config.get('name_prefix', ''))
+        # Load sport type and name prefix
+        self.sport_type_var.set(workout_config.get('sport_type', 'running'))
+        self.name_prefix_var.set(workout_config.get('name_prefix', ''))    
+
     
     def add_item(self, item_type):
-        """Add a new pace or heart rate"""
-        dialog = ConfigItemDialog(self, "Aggiungi " + ("Ritmo" if item_type == 'paces' else "Frequenza Cardiaca"))
+        """Add a new pace, speed, or heart rate"""
+        if item_type == 'paces':
+            title = "Aggiungi Ritmo"
+        elif item_type == 'speeds':
+            title = "Aggiungi Velocità"
+        else:  # heart_rates
+            title = "Aggiungi Frequenza Cardiaca"
+            
+        dialog = ConfigItemDialog(self, title)
         
         if dialog.result:
             name, value = dialog.result
             
             # Add to treeview
-            tree = self.paces_tree if item_type == 'paces' else self.hr_tree
+            if item_type == 'paces':
+                tree = self.paces_tree
+            elif item_type == 'speeds':
+                tree = self.speeds_tree
+            else:  # heart_rates
+                tree = self.hr_tree
+                
             tree.insert("", "end", values=(name, value))
     
     def edit_item(self, item_type):
@@ -621,13 +866,22 @@ class ConfigEditorDialog(tk.Toplevel):
             tree.item(selection[0], values=(new_name, new_value))
     
     def delete_item(self, item_type):
-        """Delete a pace or heart rate"""
+        """Delete a pace, speed, or heart rate"""
         # Get the selected item
-        tree = self.paces_tree if item_type == 'paces' else self.hr_tree
+        if item_type == 'paces':
+            tree = self.paces_tree
+            type_name = "ritmo"
+        elif item_type == 'speeds':
+            tree = self.speeds_tree
+            type_name = "velocità"
+        else:  # heart_rates
+            tree = self.hr_tree
+            type_name = "frequenza cardiaca"
+            
         selection = tree.selection()
         
         if not selection:
-            messagebox.showwarning("Nessuna selezione", f"Seleziona un {'ritmo' if item_type == 'paces' else 'frequenza cardiaca'} da eliminare", parent=self)
+            messagebox.showwarning("Nessuna selezione", f"Seleziona un {type_name} da eliminare", parent=self)
             return
         
         # Get the name
@@ -647,12 +901,18 @@ class ConfigEditorDialog(tk.Toplevel):
         
         # Create new dictionaries
         paces = {}
+        speeds = {}
         heart_rates = {}
         
         # Get paces from treeview
         for item_id in self.paces_tree.get_children():
             name, value = self.paces_tree.item(item_id, "values")
             paces[name] = value
+        
+        # Get speeds from treeview
+        for item_id in self.speeds_tree.get_children():
+            name, value = self.speeds_tree.item(item_id, "values")
+            speeds[name] = value
         
         # Get heart rates from treeview
         for item_id in self.hr_tree.get_children():
@@ -663,17 +923,22 @@ class ConfigEditorDialog(tk.Toplevel):
         margins = {
             'faster': self.faster_var.get(),
             'slower': self.slower_var.get(),
+            'faster_spd': self.faster_spd_var.get(),
+            'slower_spd': self.slower_spd_var.get(),
             'hr_up': self.hr_up_var.get(),
             'hr_down': self.hr_down_var.get()
         }
         
-        # Get name prefix
+        # Get sport type and name prefix
+        sport_type = self.sport_type_var.get()
         name_prefix = self.name_prefix_var.get()
         
         # Update config
         workout_config['paces'] = paces
+        workout_config['speeds'] = speeds
         workout_config['heart_rates'] = heart_rates
         workout_config['margins'] = margins
+        workout_config['sport_type'] = sport_type
         workout_config['name_prefix'] = name_prefix
         
         return True
@@ -727,20 +992,33 @@ class ConfigItemDialog(tk.Toplevel):
         desc_frame = ttk.Frame(self)
         desc_frame.pack(fill=tk.X, padx=10, pady=10)
         
-        # Testo di aiuto
-        help_text = """
-        Esempi di formati validi:
-        
-        Per ritmi (paces):
-        - '5:30-5:10' (intervallo di ritmo)
-        - '10km in 45:00' (distanza in tempo)
-        - '80-85% marathon' (percentuale di un altro ritmo)
-        
-        Per frequenze cardiache (heart rates):
-        - '150-160' (intervallo di battiti)
-        - '70-76% max_hr' (percentuale di FC massima)
-        - '160' (valore singolo)
-        """
+        # Adatta il testo di aiuto in base al tipo (dedotto dal titolo)
+        if "Ritmo" in title:
+            help_text = """
+            Esempi di formati validi per ritmi (corsa):
+            
+            - '5:30-5:10' (intervallo di ritmo)
+            - '10km in 45:00' (distanza in tempo)
+            - '80-85% marathon' (percentuale di un altro ritmo)
+            - '5:30' (ritmo singolo)
+            """
+        elif "Velocità" in title:
+            help_text = """
+            Esempi di formati validi per velocità (ciclismo):
+            
+            - '25-30' (intervallo di velocità in km/h)
+            - '30.0' (velocità singola in km/h)
+            - '80-90% ftp' (percentuale di un'altra velocità)
+            - '25 km/h' (velocità con unità di misura)
+            """
+        else:  # Frequenza Cardiaca
+            help_text = """
+            Esempi di formati validi per frequenze cardiache:
+            
+            - '150-160' (intervallo di battiti)
+            - '70-76% max_hr' (percentuale di FC massima)
+            - '160' (valore singolo)
+            """
         
         ttk.Label(desc_frame, text=help_text, wraplength=400, justify=tk.LEFT).pack(padx=5, pady=5, fill=tk.X)
         
@@ -790,10 +1068,11 @@ class ConfigItemDialog(tk.Toplevel):
 class RepeatDialog(tk.Toplevel):
     """Dialog for adding/editing a repeat section"""
     
-    def __init__(self, parent, iterations=None, steps=None):
+    def __init__(self, parent, iterations=None, steps=None, sport_type="running"):
         super().__init__(parent)
         self.parent = parent
         self.result = None
+        self.sport_type = sport_type
         
         self.title("Definisci ripetizione")
         self.geometry("700x500")
@@ -861,7 +1140,7 @@ class RepeatDialog(tk.Toplevel):
     
     def add_step(self):
         """Add a new step to the repeat"""
-        dialog = StepDialog(self)
+        dialog = StepDialog(self, sport_type=self.sport_type)
         
         if dialog.result:
             step_type, step_detail = dialog.result
@@ -926,7 +1205,6 @@ class RepeatDialog(tk.Toplevel):
         """Handle Cancel button click"""
         self.destroy()
 
-
     def edit_step(self):
         """Edit the selected step"""
         selection = self.steps_tree.selection()
@@ -935,8 +1213,14 @@ class RepeatDialog(tk.Toplevel):
             messagebox.showwarning("Nessuna selezione", "Seleziona un passo da modificare", parent=self)
             return
         
-        # Get the selected step
+        # Get the selected step index
         index = self.steps_tree.index(selection[0])
+        
+        # Verifica che l'indice sia valido
+        if index < 0 or index >= len(self.repeat_steps):
+            messagebox.showwarning("Errore", "Indice del passo non valido.", parent=self)
+            return
+            
         step = self.repeat_steps[index]
         
         # Get step type and detail
@@ -944,7 +1228,7 @@ class RepeatDialog(tk.Toplevel):
         step_detail = step[step_type]
         
         # Open the step dialog
-        dialog = StepDialog(self, step_type, step_detail)
+        dialog = StepDialog(self, step_type, step_detail, sport_type=self.sport_type)
         
         if dialog.result:
             new_type, new_detail = dialog.result
@@ -1011,7 +1295,7 @@ class RepeatDialog(tk.Toplevel):
 class WorkoutEditor(tk.Toplevel):
     """Main workout editor window"""
     
-    def __init__(self, parent, workout_name=None, workout_steps=None):
+    def __init__(self, parent, workout_name=None, workout_steps=None, sport_type=None):
         super().__init__(parent)
         self.parent = parent
         self.result = None
@@ -1023,6 +1307,10 @@ class WorkoutEditor(tk.Toplevel):
         # Stato dell'editor
         self.workout_name = workout_name if workout_name else "Nuovo allenamento"
         self.workout_steps = workout_steps if workout_steps else []
+        
+        # Sport type (default from global config or passed parameter)
+        global workout_config
+        self.sport_type = sport_type if sport_type else workout_config.get('sport_type', 'running')
         
         # Inizializza l'interfaccia
         self.init_ui()
@@ -1050,16 +1338,23 @@ class WorkoutEditor(tk.Toplevel):
         name_frame = ttk.Frame(self)
         name_frame.pack(fill=tk.X, padx=10, pady=5)
 
-        ttk.Label(name_frame, text="Nome allenamento:").grid(row=0, column=0, padx=5, pady=5)
+        # Tipo di sport
+        ttk.Label(name_frame, text="Tipo di sport:").grid(row=0, column=0, padx=5, pady=5, sticky=tk.W)
+        self.sport_type_var = tk.StringVar(value=self.sport_type)
+        sport_combo = ttk.Combobox(name_frame, textvariable=self.sport_type_var, values=["running", "cycling"], state="readonly", width=10)
+        sport_combo.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
+        sport_combo.bind("<<ComboboxSelected>>", self.on_sport_type_change)
 
+        # Nome allenamento
+        ttk.Label(name_frame, text="Nome allenamento:").grid(row=0, column=2, padx=(20,5), pady=5, sticky=tk.W)
         self.name_var = tk.StringVar(value=self.workout_name)
         name_entry = ttk.Entry(name_frame, textvariable=self.name_var, width=40)
-        name_entry.grid(row=0, column=1, padx=5, pady=5)
+        name_entry.grid(row=0, column=3, padx=5, pady=5, sticky=tk.W+tk.E)
 
         # Aggiungiamo un suggerimento sulla formattazione
         format_label = ttk.Label(name_frame, text="(Formato consigliato: W01S01 Descrizione)", 
                                font=("Arial", 9), foreground="gray")
-        format_label.grid(row=0, column=2, padx=5, pady=5, sticky=tk.W)
+        format_label.grid(row=0, column=4, padx=5, pady=5, sticky=tk.W)
 
         # Aggiungiamo anche una funzione di placeholder per il campo nome
         if self.workout_name == "Nuovo allenamento":
@@ -1071,15 +1366,12 @@ class WorkoutEditor(tk.Toplevel):
             
             name_entry.bind("<FocusIn>", on_entry_click)
         
-        self.name_var = tk.StringVar(value=self.workout_name)
-        ttk.Entry(name_frame, textvariable=self.name_var, width=40).grid(row=0, column=1, padx=5, pady=5)
-        
         # Canvas per visualizzare graficamente i passi
         canvas_frame = ttk.LabelFrame(self, text="Anteprima allenamento")
         canvas_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
         # Crea il canvas
-        self.canvas = tk.Canvas(canvas_frame, bg=COLORS["bg_light"], highlightthickness=0, height=140)  # Aggiunta height=140
+        self.canvas = tk.Canvas(canvas_frame, bg=COLORS["bg_light"], highlightthickness=0, height=140)
         self.canvas.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
         
         # Aggiungi i binding dopo aver creato il canvas
@@ -1148,6 +1440,21 @@ class WorkoutEditor(tk.Toplevel):
         
         # Programmazione del disegno iniziale dopo che l'interfaccia è stata completamente inizializzata
         self.after(100, self.initial_draw)
+
+
+    def on_sport_type_change(self, event):
+        """Handle sport type change"""
+        # Aggiorna l'interfaccia o esegui azioni quando il tipo di sport cambia
+        self.sport_type = self.sport_type_var.get()
+        self.draw_workout()  # Ridisegna il workout
+        
+        # Puoi anche aggiungere avvisi o conferme per cambiamenti rilevanti
+        if self.workout_steps:
+            messagebox.showinfo("Cambio tipo di sport", 
+                              f"Hai cambiato il tipo di sport in {self.sport_type}.\n"
+                              f"Ricorda che le zone di ritmo e velocità hanno unità di misura diverse.")
+
+
     
     def initial_draw(self):
         """Force an initial drawing of the canvas to ensure dimensions are set correctly"""
@@ -1174,7 +1481,6 @@ class WorkoutEditor(tk.Toplevel):
             self.canvas.update_idletasks()
             width = self.canvas.winfo_width()
             height = self.canvas.winfo_height()
-            print(f"Canvas dimensions updated: {width}x{height}")
         
         margin = 5
         draw_width = width - 2 * margin
@@ -1183,52 +1489,45 @@ class WorkoutEditor(tk.Toplevel):
         center_y = height // 2
         click_zone_height = 80  # Aumentata per essere più permissiva
         
-        # Debug info
-        print(f"Canvas click at: ({event.x}, {event.y})")
-        print(f"Canvas dimensions: {width}x{height}, center: {center_y}")
-        print(f"Step count: {len(self.workout_steps)}")
-        print(f"Click zone: {center_y - click_zone_height/2} to {center_y + click_zone_height/2}")
+        # Lista degli step visibili (filtrando i metadati)
+        metadata_keys = ["sport_type", "date"]
+        visible_steps = []
+        
+        for step in self.workout_steps:
+            # Salta i metadati
+            if not (isinstance(step, dict) and len(step) == 1 and list(step.keys())[0] in metadata_keys):
+                visible_steps.append(step)
         
         # Verifica che ci siano step
-        if not self.workout_steps or len(self.workout_steps) == 0:
-            print("No steps to select")
+        if not visible_steps:
             return
         
         # Verifica se il click è nella zona degli step (fascia centrale con tolleranza)
         if center_y - click_zone_height/2 <= event.y <= center_y + click_zone_height/2:
-            print("Click is in the step area (vertically)")
-            
             # Calcola la larghezza di ciascun blocco e determina quale è stato cliccato
-            base_width = draw_width / len(self.workout_steps)
+            base_width = draw_width / len(visible_steps)
             
             # Calcola l'indice dello step cliccato (correzione per i margini)
             relative_x = event.x - margin
-            step_index = int(relative_x / base_width)
-            
-            print(f"Calculated step index: {step_index}")
-            print(f"Base width: {base_width}")
-            print(f"Relative X: {relative_x}")
+            step_visual_index = int(relative_x / base_width)
             
             # Verifica e limita l'indice per sicurezza
-            if 0 <= step_index < len(self.workout_steps):
-                print(f"Valid step index: {step_index}")
-                
+            if 0 <= step_visual_index < len(visible_steps):
                 # Seleziona anche nella TreeView
                 try:
-                    tree_item = self.steps_tree.get_children()[step_index]
+                    tree_item = self.steps_tree.get_children()[step_visual_index]
                     self.steps_tree.selection_set(tree_item)
                     self.steps_tree.see(tree_item)
-                    print(f"Selected item in tree: {tree_item}")
                 except Exception as e:
-                    print(f"Error selecting in tree: {e}")
+                    print(f"Errore nella selezione dell'elemento: {str(e)}")
                 
                 # Memorizza i dettagli dell'elemento per il trascinamento
-                step = self.workout_steps[step_index]
+                step = visible_steps[step_visual_index]
                 
                 # Inizializza i dati di trascinamento
                 self.canvas_drag_data = {
                     "item": step,
-                    "index": step_index,
+                    "index": step_visual_index,
                     "start_x": event.x,
                     "start_y": event.y,
                     "current_x": event.x,
@@ -1245,13 +1544,8 @@ class WorkoutEditor(tk.Toplevel):
                     self.canvas_drag_data["color"] = COLORS.get(step_type, COLORS["other"])
                 
                 # Ridisegna con l'elemento evidenziato
-                self.draw_workout(highlight_index=step_index)
-                print(f"Drag data set: {self.canvas_drag_data}")
+                self.draw_workout(highlight_index=step_visual_index)
                 return
-            else:
-                print(f"Step index {step_index} out of range (0-{len(self.workout_steps)-1})")
-        else:
-            print(f"Click outside step area (y={event.y}, center={center_y}, zone={click_zone_height})")
         
         # Se arriviamo qui, nessuno step è stato selezionato
         self.canvas_drag_data = {
@@ -1264,7 +1558,6 @@ class WorkoutEditor(tk.Toplevel):
             "type": "",
             "color": ""
         }
-        print("No step selected")
 
 
     def on_canvas_motion(self, event):
@@ -1297,6 +1590,7 @@ class WorkoutEditor(tk.Toplevel):
             # Ridisegna il grafico con l'indicatore di trascinamento
             self.draw_workout(drag_from=self.canvas_drag_data["index"], drag_to=new_index, event_x=event.x, event_y=event.y)
 
+
     def on_canvas_release(self, event):
         """Handle release to complete drag-and-drop on canvas"""
         # Solo se abbiamo un elemento selezionato
@@ -1307,36 +1601,65 @@ class WorkoutEditor(tk.Toplevel):
             margin = 5
             draw_width = width - 2 * margin
             
-            # Lista degli step visibili
+            # Lista degli step visibili (filtrando i metadati)
+            metadata_keys = ["sport_type", "date"]
             visible_steps = []
-            for step in self.workout_steps:
-                visible_steps.append(step)
+            visible_to_real_index = {}
+            real_to_visible_index = {}
+            
+            visible_idx = 0
+            for i, step in enumerate(self.workout_steps):
+                # Salta i metadati
+                if not (isinstance(step, dict) and len(step) == 1 and list(step.keys())[0] in metadata_keys):
+                    visible_steps.append(step)
+                    visible_to_real_index[visible_idx] = i
+                    real_to_visible_index[i] = visible_idx
+                    visible_idx += 1
             
             # Larghezza di base per ogni step
             base_width = draw_width / max(1, len(visible_steps))
             
             # Determina la nuova posizione in base alla coordinata x
             x = event.x
-            new_index = int((x - margin) / base_width)
+            new_visual_index = int((x - margin) / base_width)
             
             # Limita l'indice all'intervallo valido
-            new_index = max(0, min(new_index, len(visible_steps) - 1))
+            new_visual_index = max(0, min(new_visual_index, len(visible_steps) - 1))
             
             # Sposta l'elemento solo se la posizione è cambiata
-            if new_index != self.canvas_drag_data["index"]:
-                source_index = self.canvas_drag_data["index"]
+            source_visual_index = self.canvas_drag_data["index"]
+            
+            if new_visual_index != source_visual_index:
+                # Converti gli indici visibili in indici reali
+                source_real_index = visible_to_real_index.get(source_visual_index)
+                target_real_index = visible_to_real_index.get(new_visual_index)
                 
-                # Esegui lo spostamento nella lista di step
-                item = self.workout_steps.pop(source_index)
-                self.workout_steps.insert(new_index, item)
-                
-                # Aggiorna sia il grafico che la lista
-                self.load_steps()
-                
-                # Seleziona l'elemento spostato nella lista
-                target_item = self.steps_tree.get_children()[new_index]
-                self.steps_tree.selection_set(target_item)
-                self.steps_tree.see(target_item)
+                if source_real_index is not None and target_real_index is not None:
+                    # Esegui lo spostamento nella lista di step
+                    item = self.workout_steps.pop(source_real_index)
+                    
+                    # Aggiusta l'indice target se necessario
+                    if source_real_index < target_real_index:
+                        target_real_index -= 1  # Compensa la rimozione dell'elemento
+                    
+                    self.workout_steps.insert(target_real_index, item)
+                    
+                    # Aggiorna sia il grafico che la lista
+                    self.load_steps()
+                    
+                    # Tenta di selezionare l'elemento spostato nella lista
+                    try:
+                        children = self.steps_tree.get_children()
+                        if 0 <= new_visual_index < len(children):
+                            target_item = children[new_visual_index]
+                            self.steps_tree.selection_set(target_item)
+                            self.steps_tree.see(target_item)
+                    except Exception as e:
+                        print(f"Errore nella selezione dell'elemento: {str(e)}")
+                else:
+                    # Log se ci sono problemi con gli indici
+                    print(f"Indice non trovato: source={source_visual_index}, target={new_visual_index}")
+                    print(f"Mappatura indici: {visible_to_real_index}")
             else:
                 # Se non c'è stato spostamento, ridisegna semplicemente senza evidenziazione
                 self.draw_workout()
@@ -1393,251 +1716,299 @@ class WorkoutEditor(tk.Toplevel):
 
 
     def load_steps(self):
-        """Load steps into the treeview and update the canvas"""
-        # Clear existing items
+        """Carica i passi dell'allenamento nella treeview e nel canvas"""
+        # Cancella i passi esistenti
         for item in self.steps_tree.get_children():
             self.steps_tree.delete(item)
         
-        # Add steps to the tree
-        for i, step in enumerate(self.workout_steps):  # Questo è corretto
-            if 'repeat' in step and 'steps' in step:
-                # It's a repeat step
+        # Metadati da ignorare nella visualizzazione
+        metadata_keys = ["sport_type", "date"]
+        
+        # Indice per numerare i passi (solo quelli effettivamente mostrati)
+        index = 1
+        
+        # Mappa degli indici visualizzati agli indici reali
+        self.visual_to_real_index = {}
+        
+        # Aggiungi i passi alla treeview, ignorando i metadati
+        for i, step in enumerate(self.workout_steps):
+            # Salta i metadati
+            if isinstance(step, dict) and len(step) == 1 and list(step.keys())[0] in metadata_keys:
+                continue
+                
+            # Per i passi regolari, determina tipo e dettagli
+            if isinstance(step, dict) and 'repeat' in step and 'steps' in step:
+                # È un passo di ripetizione
+                step_type = "repeat"
                 iterations = step['repeat']
                 substeps = step['steps']
-                details = f"{iterations}x [{len(substeps)} passi]"
-                self.steps_tree.insert("", "end", values=(i+1, "repeat", details))
-            else:
-                # Regular step
+                
+                details = f"{iterations} ripetizioni ({len(substeps)} passi)"
+                
+                # Aggiungi alla treeview (senza i sottopassi)
+                item = self.steps_tree.insert("", "end", values=(index, step_type, details))
+                
+                # Salva il mapping dell'indice
+                self.visual_to_real_index[index] = i
+                
+                # Incrementa l'indice solo per i passi visibili
+                index += 1
+                
+                # Non aggiungiamo più i substeps come figli
+                # Commentiamo o rimuoviamo il codice che aggiungeva i sottopassi
+                # for j, substep in enumerate(substeps, 1):
+                #     if isinstance(substep, dict) and len(substep) == 1:
+                #         sub_type = list(substep.keys())[0]
+                #         sub_detail = substep[sub_type]
+                #         sub_item = self.steps_tree.insert(item, "end", values=(f"{index-1}.{j}", sub_type, sub_detail))
+            elif isinstance(step, dict) and len(step) == 1:
+                # È un passo normale
                 step_type = list(step.keys())[0]
-                step_detail = step[step_type]
-                self.steps_tree.insert("", "end", values=(i+1, step_type, step_detail))
+                details = step[step_type]
+                
+                # Aggiungi alla treeview
+                self.steps_tree.insert("", "end", values=(index, step_type, details))
+                
+                # Salva il mapping dell'indice
+                self.visual_to_real_index[index] = i
+                
+                # Incrementa l'indice solo per i passi visibili
+                index += 1
+            else:
+                # Salta passi con formato sconosciuto
+                continue
         
-        # Update the visual representation
+        # Disegna l'anteprima dell'allenamento
         self.draw_workout()
     
 
     def draw_workout(self, highlight_index=None, drag_from=None, drag_to=None, event_x=None, event_y=None):
-            """Draw a visual representation of the workout on the canvas with visible separators between steps"""
-            self.canvas.delete("all")
-            
-            # Canvas dimensions
+        """Draw a visual representation of the workout on the canvas with visible separators between steps"""
+        self.canvas.delete("all")
+        
+        # Canvas dimensions
+        width = self.canvas.winfo_width()
+        height = self.canvas.winfo_height()
+        
+        if width <= 1 or height <= 1:  # Canvas not yet realized
+            self.canvas.update_idletasks()
             width = self.canvas.winfo_width()
             height = self.canvas.winfo_height()
             
-            if width <= 1 or height <= 1:  # Canvas not yet realized
-                self.canvas.update_idletasks()
-                width = self.canvas.winfo_width()
-                height = self.canvas.winfo_height()
+            # If still not realized, use default dimensions
+            if width <= 1:
+                width = 700
+            if height <= 1:
+                height = 150
+        
+        # Margin
+        margin = 5
+        
+        # Available drawing area
+        draw_width = width - 2 * margin
+        draw_height = height - 2 * margin
+        
+        # Lista degli step visibili (filtrando i metadati)
+        metadata_keys = ["sport_type", "date"]
+        visible_steps = []
+        for step in self.workout_steps:
+            # Salta i metadati
+            if not (isinstance(step, dict) and len(step) == 1 and list(step.keys())[0] in metadata_keys):
+                visible_steps.append(step)
+        
+        # Calcola la larghezza totale disponibile
+        total_width = draw_width
+        
+        # Larghezza di base per ogni step
+        base_width = total_width / max(1, len(visible_steps))
+        
+        # Current x position
+        x = margin
+        y = height // 2
+        
+        # Numerazione progressiva degli step
+        step_number = 1
+        
+        # Se stiamo trascinando, disegna un indicatore per la posizione target
+        if drag_from is not None and drag_to is not None:
+            # Calcola la posizione x dell'indicatore di trascinamento
+            indicator_x = margin + drag_to * base_width
+            
+            # Disegna una linea verticale per indicare dove verrà inserito l'elemento
+            self.canvas.create_line(
+                indicator_x, y - 30, 
+                indicator_x, y + 30,
+                fill=COLORS["accent"], width=2, dash=(6, 4)
+            )
+        
+        # Draw representation
+        for i, step in enumerate(visible_steps):
+            try:
+                # Calcola se questo step deve essere evidenziato
+                is_highlighted = (i == highlight_index)
                 
-                # If still not realized, use default dimensions
-                if width <= 1:
-                    width = 700
-                if height <= 1:
-                    height = 150
-            
-            # Margin
-            margin = 5
-            
-            # Available drawing area
-            draw_width = width - 2 * margin
-            draw_height = height - 2 * margin
-            
-            # Lista degli step visibili
-            visible_steps = self.workout_steps
-            
-            # Calcola la larghezza totale disponibile
-            total_width = draw_width
-            
-            # Larghezza di base per ogni step
-            base_width = total_width / max(1, len(visible_steps))
-            
-            # Current x position
-            x = margin
-            y = height // 2
-            
-            # Numerazione progressiva degli step
-            step_number = 1
-            
-            # Se stiamo trascinando, disegna un indicatore per la posizione target
-            if drag_from is not None and drag_to is not None:
-                # Calcola la posizione x dell'indicatore di trascinamento
-                indicator_x = margin + drag_to * base_width
+                # Salta temporaneamente il disegno dell'elemento che stiamo trascinando
+                if i == drag_from and event_x is not None and event_y is not None:
+                    x += base_width  # Salta avanti
+                    continue  # Non disegnare questo elemento nella sua posizione originale
                 
-                # Disegna una linea verticale per indicare dove verrà inserito l'elemento
-                self.canvas.create_line(
-                    indicator_x, y - 30, 
-                    indicator_x, y + 30,
-                    fill=COLORS["accent"], width=2, dash=(6, 4)
-                )
-            
-            # Draw representation
-            for i, step in enumerate(visible_steps):
-                try:
-                    # Calcola se questo step deve essere evidenziato
-                    is_highlighted = (i == highlight_index)
+                outline_width = 2 if is_highlighted else 0
+                outline_color = COLORS["accent"] if is_highlighted else ""
+                
+                if 'repeat' in step and 'steps' in step:
+                    # Repeat step
+                    iterations = step['repeat']
+                    substeps = step['steps']
                     
-                    # Salta temporaneamente il disegno dell'elemento che stiamo trascinando
-                    if i == drag_from and event_x is not None and event_y is not None:
-                        x += base_width  # Salta avanti
-                        continue  # Non disegnare questo elemento nella sua posizione originale
+                    # Larghezza per ogni ripetizione
+                    repeat_width = base_width
                     
-                    outline_width = 2 if is_highlighted else 0
-                    outline_color = COLORS["accent"] if is_highlighted else ""
+                    # Draw repeat box
+                    repeat_x = x
+                    repeat_y = y - 30
+                    self.canvas.create_rectangle(
+                        repeat_x, repeat_y, 
+                        repeat_x + repeat_width, repeat_y + 60,
+                        outline=COLORS["repeat"], width=2, dash=(5, 2)
+                    )
                     
-                    if 'repeat' in step and 'steps' in step:
-                        # Repeat step
-                        iterations = step['repeat']
-                        substeps = step['steps']
-                        
-                        # Larghezza per ogni ripetizione
-                        repeat_width = base_width
-                        
-                        # Draw repeat box
-                        repeat_x = x
-                        repeat_y = y - 30
-                        self.canvas.create_rectangle(
-                            repeat_x, repeat_y, 
-                            repeat_x + repeat_width, repeat_y + 60,
-                            outline=COLORS["repeat"], width=2, dash=(5, 2)
-                        )
-                        
-                        # Draw repeat label
-                        self.canvas.create_text(
-                            repeat_x + 10, repeat_y - 10,
-                            text=f"{STEP_ICONS['repeat']} {iterations}x",
-                            fill=COLORS["repeat"], 
-                            font=("Arial", 10, "bold"),
-                            anchor=tk.W
-                        )
-                        
-                        # Draw substeps
-                        sub_width = repeat_width / max(1, len(substeps)) # Distribuisci uniformemente
-                        sub_x = x
-                        sub_number = 1  # Numerazione dei substep all'interno della ripetizione
-                        
-                        for substep in substeps:
-                            if isinstance(substep, dict):
-                                substep_type = list(substep.keys())[0]
-                                
-                                # Color for this type
-                                color = COLORS.get(substep_type, COLORS["other"])
-                                
-                                # Draw box
-                                self.canvas.create_rectangle(
-                                    sub_x, y - 20, sub_x + sub_width, y + 20,
-                                    fill=color, outline=outline_color, width=outline_width
+                    # Draw repeat label
+                    self.canvas.create_text(
+                        repeat_x + 10, repeat_y - 10,
+                        text=f"{STEP_ICONS['repeat']} {iterations}x",
+                        fill=COLORS["repeat"], 
+                        font=("Arial", 10, "bold"),
+                        anchor=tk.W
+                    )
+                    
+                    # Draw substeps
+                    sub_width = repeat_width / max(1, len(substeps)) # Distribuisci uniformemente
+                    sub_x = x
+                    sub_number = 1  # Numerazione dei substep all'interno della ripetizione
+                    
+                    for substep in substeps:
+                        if isinstance(substep, dict):
+                            substep_type = list(substep.keys())[0]
+                            
+                            # Color for this type
+                            color = COLORS.get(substep_type, COLORS["other"])
+                            
+                            # Draw box
+                            self.canvas.create_rectangle(
+                                sub_x, y - 20, sub_x + sub_width, y + 20,
+                                fill=color, outline=outline_color, width=outline_width
+                            )
+                            
+                            # Draw text
+                            self.canvas.create_text(
+                                sub_x + sub_width // 2, y,
+                                text=f"{STEP_ICONS.get(substep_type, '📝')} {sub_number}",
+                                fill=COLORS["text_light"],
+                                font=("Arial", 9, "bold")
+                            )
+                            
+                            # Disegna separatore tra substep (eccetto l'ultimo)
+                            if sub_number < len(substeps):
+                                self.canvas.create_line(
+                                    sub_x + sub_width, y - 20,
+                                    sub_x + sub_width, y + 20,
+                                    fill="white", width=1
                                 )
-                                
-                                # Draw text
-                                self.canvas.create_text(
-                                    sub_x + sub_width // 2, y,
-                                    text=f"{STEP_ICONS.get(substep_type, '📝')} {sub_number}",
-                                    fill=COLORS["text_light"],
-                                    font=("Arial", 9, "bold")
-                                )
-                                
-                                # Disegna separatore tra substep (eccetto l'ultimo)
-                                if sub_number < len(substeps):
-                                    self.canvas.create_line(
-                                        sub_x + sub_width, y - 20,
-                                        sub_x + sub_width, y + 20,
-                                        fill="white", width=1
-                                    )
-                                
-                                # Move to next position
-                                sub_x += sub_width
-                                sub_number += 1
-                        
-                        # Aggiorna la posizione x per il prossimo step principale
-                        x += repeat_width
-                        step_number += 1
-                        
-                    else:
-                        # Regular step
-                        step_type = list(step.keys())[0]
-                        
-                        # Calculate width based on base_width
-                        step_width = base_width
-                        
-                        # Color for this type
-                        color = COLORS.get(step_type, COLORS["other"])
-                        
-                        # Draw box
-                        self.canvas.create_rectangle(
-                            x, y - 20, x + step_width, y + 20,
-                            fill=color, outline=outline_color, width=outline_width
-                        )
-                        
-                        # Draw text
-                        self.canvas.create_text(
-                            x + step_width // 2, y,
-                            text=f"{STEP_ICONS.get(step_type, '📝')} {step_number}",
-                            fill=COLORS["text_light"],
-                            font=("Arial", 9, "bold")
-                        )
-                        
-                        # Move to next position
-                        x += step_width
-                        step_number += 1
-                        
-                except Exception as e:
-                    # Skip drawing problematic steps
+                            
+                            # Move to next position
+                            sub_x += sub_width
+                            sub_number += 1
+                    
+                    # Aggiorna la posizione x per il prossimo step principale
+                    x += repeat_width
+                    step_number += 1
+                    
+                else:
+                    # Regular step
+                    step_type = list(step.keys())[0]
+                    
+                    # Calculate width based on base_width
                     step_width = base_width
+                    
+                    # Color for this type
+                    color = COLORS.get(step_type, COLORS["other"])
+                    
+                    # Draw box
                     self.canvas.create_rectangle(
                         x, y - 20, x + step_width, y + 20,
-                        fill=COLORS["other"], outline=outline_color, width=outline_width
+                        fill=color, outline=outline_color, width=outline_width
                     )
                     
+                    # Draw text
                     self.canvas.create_text(
                         x + step_width // 2, y,
-                        text=f"[?]",
+                        text=f"{STEP_ICONS.get(step_type, '📝')} {step_number}",
                         fill=COLORS["text_light"],
-                        font=("Arial", 9)
+                        font=("Arial", 9, "bold")
                     )
                     
+                    # Move to next position
                     x += step_width
                     step_number += 1
                     
-                # Disegna separatori tra step principali (linea verticale)
-                if i < len(visible_steps) - 1:  # Non disegnare dopo l'ultimo step
-                    self.canvas.create_line(
-                        x, y - 22,  # Leggermente oltre il bordo del rettangolo
-                        x, y + 22,
-                        fill="#333333", width=1, dash=(2, 2)  # Linea tratteggiata grigia
-                    )
-            
-            # Se stiamo trascinando, disegna l'elemento trascinato sotto il cursore
-            if drag_from is not None and event_x is not None and event_y is not None and 'type' in self.canvas_drag_data:
-                block_width = base_width
-                block_height = 40
-                
-                # Disegna un rettangolo semitrasparente che rappresenta l'elemento trascinato
-                element_type = self.canvas_drag_data["type"]
-                color = self.canvas_drag_data["color"]
-                
-                # Per ottenere un effetto semitrasparente, usiamo un colore leggermente più chiaro
-                # Questo non è vera trasparenza (richiederebbe il supporto alpha), ma è un buon sostituto
-                light_color = self.lighten_color(color)
-                
-                # Disegna il rettangolo centrato sul cursore
+            except Exception as e:
+                # Skip drawing problematic steps
+                step_width = base_width
                 self.canvas.create_rectangle(
-                    event_x - block_width/2, event_y - block_height/2,
-                    event_x + block_width/2, event_y + block_height/2,
-                    fill=light_color, outline=COLORS["accent"], width=2
+                    x, y - 20, x + step_width, y + 20,
+                    fill=COLORS["other"], outline=outline_color, width=outline_width
                 )
-                
-                # Aggiunge anche un'icona o un numero all'elemento trascinato
-                if element_type == "repeat":
-                    icon = STEP_ICONS["repeat"]
-                else:
-                    icon = STEP_ICONS.get(element_type, '📝')
                 
                 self.canvas.create_text(
-                    event_x, event_y,
-                    text=f"{icon} {drag_from + 1}",
-                    fill=COLORS["text_dark"],
-                    font=("Arial", 9, "bold")
+                    x + step_width // 2, y,
+                    text=f"[?]",
+                    fill=COLORS["text_light"],
+                    font=("Arial", 9)
                 )
+                
+                x += step_width
+                step_number += 1
+                
+            # Disegna separatori tra step principali (linea verticale)
+            if i < len(visible_steps) - 1:  # Non disegnare dopo l'ultimo step
+                self.canvas.create_line(
+                    x, y - 22,  # Leggermente oltre il bordo del rettangolo
+                    x, y + 22,
+                    fill="#333333", width=1, dash=(2, 2)  # Linea tratteggiata grigia
+                )
+        
+        # Se stiamo trascinando, disegna l'elemento trascinato sotto il cursore
+        if drag_from is not None and event_x is not None and event_y is not None and 'type' in self.canvas_drag_data:
+            block_width = base_width
+            block_height = 40
+            
+            # Disegna un rettangolo semitrasparente che rappresenta l'elemento trascinato
+            element_type = self.canvas_drag_data["type"]
+            color = self.canvas_drag_data["color"]
+            
+            # Per ottenere un effetto semitrasparente, usiamo un colore leggermente più chiaro
+            # Questo non è vera trasparenza (richiederebbe il supporto alpha), ma è un buon sostituto
+            light_color = self.lighten_color(color)
+            
+            # Disegna il rettangolo centrato sul cursore
+            self.canvas.create_rectangle(
+                event_x - block_width/2, event_y - block_height/2,
+                event_x + block_width/2, event_y + block_height/2,
+                fill=light_color, outline=COLORS["accent"], width=2
+            )
+            
+            # Aggiunge anche un'icona o un numero all'elemento trascinato
+            if element_type == "repeat":
+                icon = STEP_ICONS["repeat"]
+            else:
+                icon = STEP_ICONS.get(element_type, '📝')
+            
+            self.canvas.create_text(
+                event_x, event_y,
+                text=f"{icon} {drag_from + 1}",
+                fill=COLORS["text_dark"],
+                font=("Arial", 9, "bold")
+            )
 
 
     def lighten_color(self, hex_color):
@@ -1720,7 +2091,7 @@ class WorkoutEditor(tk.Toplevel):
     
     def add_step(self):
         """Add a new step to the workout"""
-        dialog = StepDialog(self)
+        dialog = StepDialog(self, sport_type=self.sport_type)
         
         if dialog.result:
             step_type, step_detail = dialog.result
@@ -1729,7 +2100,7 @@ class WorkoutEditor(tk.Toplevel):
     
     def add_repeat(self):
         """Add a repeat section"""
-        dialog = RepeatDialog(self)
+        dialog = RepeatDialog(self, sport_type=self.sport_type)
         
         if dialog.result:
             iterations, steps = dialog.result
@@ -1754,30 +2125,39 @@ class WorkoutEditor(tk.Toplevel):
         # Get the selected step index
         item = selection[0]
         item_values = self.steps_tree.item(item, "values")
-        index = int(item_values[0]) - 1
+        visual_index = int(item_values[0])  # Indice visualizzato
+        
+        # Verifica che sia un indice numerico intero (non un sottopasso)
+        if "." in str(visual_index):
+            messagebox.showinfo("Informazione", "Seleziona un passo principale (non un sottopasso).", parent=self)
+            return
+        
+        # Converti l'indice visualizzato in indice reale
+        if not hasattr(self, 'visual_to_real_index') or visual_index not in self.visual_to_real_index:
+            messagebox.showwarning("Errore", "Indice del passo non valido.", parent=self)
+            return
+        
+        real_index = self.visual_to_real_index[visual_index]
         
         # Check if it's a repeat step
-        step = self.workout_steps[index]
+        step = self.workout_steps[real_index]
         if 'repeat' in step and 'steps' in step:
             # It's a repeat step, edit it with RepeatDialog
             iterations = step['repeat']
             steps = step['steps']
             
-            # Aggiungi un debug qui per vedere cosa contiene steps
-            print(f"Steps prima di RepeatDialog: {steps}")
-            
-            dialog = RepeatDialog(self, iterations, steps)
+            dialog = RepeatDialog(self, iterations, steps, sport_type=self.sport_type)
             
             if dialog.result:
                 new_iterations, new_steps = dialog.result
                 
                 # Update the repeat step with correct structure
-                self.workout_steps[index] = {'repeat': new_iterations, 'steps': new_steps}
+                self.workout_steps[real_index] = {'repeat': new_iterations, 'steps': new_steps}
                 
                 # Reload the steps
                 self.load_steps()
         else:
-            # Regular step or old format step
+            # Regular step
             if isinstance(step, dict):
                 step_type = list(step.keys())[0]
                 step_detail = step[step_type]
@@ -1789,13 +2169,13 @@ class WorkoutEditor(tk.Toplevel):
                                        f"Ti suggeriamo di eliminarlo e ricrearlo.", parent=self)
                     return
                 
-                dialog = StepDialog(self, step_type, step_detail)
+                dialog = StepDialog(self, step_type, step_detail, sport_type=self.sport_type)
                 
                 if dialog.result:
                     new_type, new_detail = dialog.result
                     
                     # Update the step
-                    self.workout_steps[index] = {new_type: new_detail}
+                    self.workout_steps[real_index] = {new_type: new_detail}
                     
                     # Reload the steps
                     self.load_steps()
@@ -1804,6 +2184,7 @@ class WorkoutEditor(tk.Toplevel):
                 messagebox.showinfo("Formato non supportato", 
                                    f"Questo passo ha un formato che non può essere modificato direttamente.\n"
                                    f"Ti suggeriamo di eliminarlo e ricrearlo.", parent=self)
+
     
     def remove_step(self):
         """Remove the selected step"""
@@ -1821,58 +2202,119 @@ class WorkoutEditor(tk.Toplevel):
         # Remove the step
         self.workout_steps.pop(index)
         self.load_steps()
-    
+        
     def move_step_up(self):
-        """Move the selected step up"""
+        """Move the selected step up in the list"""
         selection = self.steps_tree.selection()
         
         if not selection:
+            messagebox.showwarning("Nessuna selezione", "Seleziona un passo da spostare", parent=self)
             return
-        
-        # Get the selected step index
+            
+        # Get the selected step visual index
         item = selection[0]
         item_values = self.steps_tree.item(item, "values")
-        index = int(item_values[0]) - 1
+        visual_index = int(item_values[0]) - 1  # -1 perché gli indici visualizzati partono da 1
         
-        # Can't move up if already at the top
-        if index == 0:
+        # Converti in indice reale
+        if not hasattr(self, 'visual_to_real_index') or visual_index + 1 not in self.visual_to_real_index:
+            messagebox.showwarning("Errore", "Indice del passo non valido.", parent=self)
+            return
+            
+        real_index = self.visual_to_real_index[visual_index + 1]
+        
+        # Impossibile spostare il primo elemento in alto
+        if real_index == 0:
+            return
+            
+        # Trova l'indice reale precedente (che non sia un metadato)
+        metadata_keys = ["sport_type", "date"]
+        prev_real_index = real_index - 1
+        
+        while prev_real_index >= 0:
+            prev_step = self.workout_steps[prev_real_index]
+            if not (isinstance(prev_step, dict) and len(prev_step) == 1 and list(prev_step.keys())[0] in metadata_keys):
+                # Trovato il precedente step visibile
+                break
+            prev_real_index -= 1
+        
+        if prev_real_index < 0:
+            # Non c'è un elemento precedente valido
             return
         
-        # Swap with the step above
-        self.workout_steps[index], self.workout_steps[index - 1] = self.workout_steps[index - 1], self.workout_steps[index]
+        # Swap steps
+        self.workout_steps[real_index], self.workout_steps[prev_real_index] = \
+            self.workout_steps[prev_real_index], self.workout_steps[real_index]
+            
+        # Reload the steps
         self.load_steps()
         
-        # Re-select the step
-        for item in self.steps_tree.get_children():
-            if int(self.steps_tree.item(item, "values")[0]) == index:
-                self.steps_tree.selection_set(item)
-                break
+        # Try to select the moved item
+        try:
+            new_visual_index = visual_index - 1
+            if new_visual_index >= 0:
+                new_item = self.steps_tree.get_children()[new_visual_index]
+                self.steps_tree.selection_set(new_item)
+                self.steps_tree.see(new_item)
+        except Exception as e:
+            print(f"Errore nella selezione dell'elemento: {str(e)}")
     
     def move_step_down(self):
-        """Move the selected step down"""
+        """Move the selected step down in the list"""
         selection = self.steps_tree.selection()
         
         if not selection:
+            messagebox.showwarning("Nessuna selezione", "Seleziona un passo da spostare", parent=self)
             return
-        
-        # Get the selected step index
+            
+        # Get the selected step visual index
         item = selection[0]
         item_values = self.steps_tree.item(item, "values")
-        index = int(item_values[0]) - 1
+        visual_index = int(item_values[0]) - 1  # -1 perché gli indici visualizzati partono da 1
         
-        # Can't move down if already at the bottom
-        if index >= len(self.workout_steps) - 1:
+        # Converti in indice reale
+        if not hasattr(self, 'visual_to_real_index') or visual_index + 1 not in self.visual_to_real_index:
+            messagebox.showwarning("Errore", "Indice del passo non valido.", parent=self)
+            return
+            
+        real_index = self.visual_to_real_index[visual_index + 1]
+        
+        # Impossibile spostare l'ultimo elemento più in basso
+        if real_index >= len(self.workout_steps) - 1:
+            return
+            
+        # Trova l'indice reale successivo (che non sia un metadato)
+        metadata_keys = ["sport_type", "date"]
+        next_real_index = real_index + 1
+        
+        while next_real_index < len(self.workout_steps):
+            next_step = self.workout_steps[next_real_index]
+            if not (isinstance(next_step, dict) and len(next_step) == 1 and list(next_step.keys())[0] in metadata_keys):
+                # Trovato il successivo step visibile
+                break
+            next_real_index += 1
+        
+        if next_real_index >= len(self.workout_steps):
+            # Non c'è un elemento successivo valido
             return
         
-        # Swap with the step below
-        self.workout_steps[index], self.workout_steps[index + 1] = self.workout_steps[index + 1], self.workout_steps[index]
+        # Swap steps
+        self.workout_steps[real_index], self.workout_steps[next_real_index] = \
+            self.workout_steps[next_real_index], self.workout_steps[real_index]
+            
+        # Reload the steps
         self.load_steps()
         
-        # Re-select the step
-        for item in self.steps_tree.get_children():
-            if int(self.steps_tree.item(item, "values")[0]) == index + 2:
-                self.steps_tree.selection_set(item)
-                break
+        # Try to select the moved item
+        try:
+            new_visual_index = visual_index + 1
+            children = self.steps_tree.get_children()
+            if new_visual_index < len(children):
+                new_item = children[new_visual_index]
+                self.steps_tree.selection_set(new_item)
+                self.steps_tree.see(new_item)
+        except Exception as e:
+            print(f"Errore nella selezione dell'elemento: {str(e)}")
     
     def on_step_double_click(self, event):
         """Handle double-click on a step"""
@@ -1896,8 +2338,11 @@ class WorkoutEditor(tk.Toplevel):
             messagebox.showerror("Errore", "Aggiungi almeno un passo all'allenamento", parent=self)
             return
         
-        # Set the result
-        self.result = (workout_name, self.workout_steps)
+        # Get the final sport type
+        sport_type = self.sport_type_var.get()
+        
+        # Set the result - now includes sport type
+        self.result = (workout_name, self.workout_steps, sport_type)
         
         # Close the editor
         self.destroy()
@@ -2055,9 +2500,23 @@ def add_workout_editor_tab(notebook, parent):
         result = create_workout(parent)
         
         if result:
-            name, steps = result
+            # Gestire il caso in cui result contiene anche sport_type
+            if len(result) == 3:
+                name, steps, sport_type = result
+            else:
+                name, steps = result
+                sport_type = None  # valore predefinito se non fornito
+            
+            # Aggiungi alla lista degli allenamenti in memoria
             workouts.append((name, copy.deepcopy(steps)))
+            
+            # Aggiorna la vista
             load_workouts_to_tree()
+            
+            # Opzionale: mostra un messaggio di conferma
+            messagebox.showinfo("Allenamento aggiunto", 
+                                f"L'allenamento '{name}' è stato aggiunto alla lista.",
+                                parent=parent)
     
     def edit_selected_workout():
         """Edit the selected workout"""
@@ -2075,7 +2534,13 @@ def add_workout_editor_tab(notebook, parent):
         result = edit_workout(parent, name, copy.deepcopy(steps))
         
         if result:
-            new_name, new_steps = result
+            # Gestire il caso in cui result contiene anche sport_type
+            if len(result) == 3:
+                new_name, new_steps, sport_type = result
+            else:
+                new_name, new_steps = result
+                sport_type = None  # valore predefinito se non fornito
+                
             workouts[index] = (new_name, copy.deepcopy(new_steps))
             load_workouts_to_tree()
     

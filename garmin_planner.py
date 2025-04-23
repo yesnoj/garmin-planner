@@ -49,6 +49,10 @@ def parse_args(argv):
                       choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'],
                       default='INFO',
                       help='Set log level')
+    parser.add_argument('--sport-type', required=False,
+                      choices=['running', 'cycling'],
+                      default='running',
+                      help='Set the sport type (running or cycling)')
 
     # Add sub commands
     subparsers = parser.add_subparsers(dest='command', help='Available commands')
@@ -67,6 +71,9 @@ def parse_args(argv):
     import_wo.add_argument('--name-filter', required=False, help='Only import workouts whose name matches the filter')
     import_wo.add_argument('--replace', action='store_true', default=False, 
                          help='Replace any existing workouts with the same name (only if workout was created)')
+    import_wo.add_argument('--sport-type', required=False,
+                        choices=['running', 'cycling'],
+                        help='Override the sport type for this import')
 
     # Export command
     export_wos = subparsers.add_parser('export', help='Export workouts from Garmin Connect')
@@ -82,6 +89,9 @@ def parse_args(argv):
                           help='Name (or pattern) of workouts to export. Accepts regular expressions.')
     export_wos.add_argument('--workout-ids', required=False, 
                           help='Comma-separated list of workouts to export')
+    export_wos.add_argument('--sport-type', required=False,
+                          choices=['running', 'cycling'],
+                          help='Filter exports by sport type')
 
     # Delete command
     delete_wo = subparsers.add_parser('delete', help='Delete workouts from Garmin Connect')
@@ -90,6 +100,9 @@ def parse_args(argv):
                          help='Comma-separated list of workouts to delete')
     delete_wo.add_argument('--name-filter', required=False, 
                          help='Name (or pattern) of workouts to delete. Accepts regular expressions.')
+    delete_wo.add_argument('--sport-type', required=False,
+                         choices=['running', 'cycling'],
+                         help='Filter deletions by sport type')
 
     # Schedule command
     schedule = subparsers.add_parser('schedule', 
@@ -103,6 +116,9 @@ def parse_args(argv):
                         help='Comma-separated list of day indices (0=Monday, 6=Sunday) for each session in a week')
     schedule.add_argument('--start-day', required=False, 
                         help='The date from which to start planning the training sessions. Format: YYYY-MM-DD')
+    schedule.add_argument('--sport-type', required=False,
+                        choices=['running', 'cycling'],
+                        help='Filter workouts by sport type when scheduling')
 
     # Unschedule command
     unschedule = subparsers.add_parser('unschedule', help='Unschedule workouts from calendar.')
@@ -111,6 +127,9 @@ def parse_args(argv):
                           help='The date from which to start looking for workouts in the calendar.')
     unschedule.add_argument('--training-plan', required=True, 
                           help='The training plan ID. Corresponds to the common prefix of all workouts in the plan.')
+    unschedule.add_argument('--sport-type', required=False,
+                          choices=['running', 'cycling'],
+                          help='Filter by sport type when unscheduling')
 
     # List command
     list_scheduled = subparsers.add_parser('list', help='List scheduled workouts')
@@ -123,6 +142,9 @@ def parse_args(argv):
                               help='The date range. Can be: TODAY, TOMORROW, CURRENT-WEEK, CURRENT-MONTH.')
     list_scheduled.add_argument('--name-filter', required=False, 
                               help='Name (or pattern) of workouts to list. Accepts regular expressions.')
+    list_scheduled.add_argument('--sport-type', required=False,
+                             choices=['running', 'cycling'],
+                             help='Filter by sport type when listing workouts')
 
     # Parse the arguments
     args = parser.parse_args(argv)
