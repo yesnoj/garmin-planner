@@ -5,6 +5,7 @@ import os
 import yaml
 import re
 import copy
+import logging
 from functools import partial
 from planner.license_manager import LicenseManager
 
@@ -1337,6 +1338,7 @@ class WorkoutEditor(tk.Toplevel):
         y = (self.winfo_screenheight() // 2) - (height // 2)
         self.geometry(f"{width}x{height}+{x}+{y}")
     
+
     def init_ui(self):
         """Initialize the user interface"""
         name_frame = ttk.Frame(self)
@@ -1444,16 +1446,30 @@ class WorkoutEditor(tk.Toplevel):
         
         # Programmazione del disegno iniziale dopo che l'interfaccia è stata completamente inizializzata
         self.after(100, self.initial_draw)
+        
+        # Chiamata esplicita per inizializzare la UI in base al tipo di sport
+        # Passa None come event per indicare che è un'inizializzazione e non un cambio manuale
+        self.on_sport_type_change(None)
 
 
     def on_sport_type_change(self, event):
         """Handle sport type change"""
         # Aggiorna l'interfaccia o esegui azioni quando il tipo di sport cambia
-        self.sport_type = self.sport_type_var.get()
-        self.draw_workout()  # Ridisegna il workout
+        # Se l'evento è None (inizializzazione), usa il valore self.sport_type 
+        # altrimenti prendi il valore dalla variabile
+        if event is None:
+            # Imposta il valore della variabile in base al tipo di sport attuale
+            self.sport_type_var.set(self.sport_type)
+        else:
+            # Aggiorna il tipo di sport in base alla selezione dell'utente
+            self.sport_type = self.sport_type_var.get()
         
-        # Puoi anche aggiungere avvisi o conferme per cambiamenti rilevanti
-        if self.workout_steps:
+        # Ridisegna il workout per riflettere eventuali cambiamenti
+        self.draw_workout()
+        
+        # Mostra un avviso solo se è un cambio manuale (event non è None)
+        # e se ci sono già passi definiti
+        if event is not None and self.workout_steps:
             messagebox.showinfo("Cambio tipo di sport", 
                               f"Hai cambiato il tipo di sport in {self.sport_type}.\n"
                               f"Ricorda che le zone di ritmo e velocità hanno unità di misura diverse.")
@@ -2361,9 +2377,9 @@ def create_workout(parent):
     editor = WorkoutEditor(parent)
     return editor.result
 
-def edit_workout(parent, workout_name, workout_steps):
+def edit_workout(parent, workout_name, workout_steps, sport_type=None):
     """Edit an existing workout"""
-    editor = WorkoutEditor(parent, workout_name, workout_steps)
+    editor = WorkoutEditor(parent, workout_name, workout_steps, sport_type)
     return editor.result
 
 
@@ -2547,35 +2563,56 @@ def add_workout_editor_tab(notebook, parent):
             messagebox.showwarning("Nessuna selezione", "Seleziona un allenamento da modificare", parent=parent)
             return
         
-        # Get the selected workout index
-        index = workout_tree.index(selection[0])
-        name, steps = workouts[index]
-        
-        # Estrai sport_type dall'allenamento originale se presente
-        original_sport_type = None
-        if steps and isinstance(steps[0], dict) and 'sport_type' in steps[0]:
-            original_sport_type = steps[0]['sport_type']
-        
-        # Open the editor
-        result = edit_workout(parent, name, copy.deepcopy(steps))
-        
-        if result:
-            # Gestire il caso in cui result contiene anche sport_type
-            if len(result) == 3:
-                new_name, new_steps, sport_type = result
-            else:
-                new_name, new_steps = result
-                sport_type = original_sport_type or workout_config.get('sport_type', 'running')
+        try:
+            # Get the selected workout index
+            index = workout_tree.index(selection[0])
             
-            # Crea una copia profonda della lista dei passi
-            steps_copy = copy.deepcopy(new_steps)
+            # Verifica che l'indice sia valido
+            if index < 0 or index >= len(workouts):
+                logging.warning(f"Indice non valido: {index}, totale workouts: {len(workouts)}")
+                messagebox.showwarning("Errore", "Selezione non valida. Riprova.", parent=parent)
+                return
+                
+            name, steps = workouts[index]
             
-            # Aggiungi lo sport_type come primo elemento se non è già presente
-            if not (steps_copy and isinstance(steps_copy[0], dict) and 'sport_type' in steps_copy[0]):
-                steps_copy.insert(0, {'sport_type': sport_type})
+            # Estrai il tipo di sport dagli step
+            sport_type = "running"  # Default a running
+            if steps and isinstance(steps, list) and len(steps) > 0:
+                first_step = steps[0]
+                if isinstance(first_step, dict) and 'sport_type' in first_step:
+                    sport_type = first_step['sport_type']
             
-            workouts[index] = (new_name, steps_copy)
-            load_workouts_to_tree()
+            # Ora possiamo accedere in sicurezza a name e sport_type
+            logging.debug(f"Editing workout: {name} with sport type: {sport_type}")
+            
+            # Open the editor with the correct sport type
+            result = edit_workout(parent, name, copy.deepcopy(steps), sport_type)
+            
+            if result:
+                # Gestire il caso in cui result contiene anche sport_type
+                if len(result) == 3:
+                    new_name, new_steps, sport_type = result
+                else:
+                    new_name, new_steps = result
+                    # Se result non contiene sport_type, usa quello estratto precedentemente
+                    sport_type = sport_type
+                
+                # Crea una copia profonda della lista dei passi
+                steps_copy = copy.deepcopy(new_steps)
+                
+                # Aggiungi lo sport_type come primo elemento se non è già presente
+                if not (steps_copy and isinstance(steps_copy[0], dict) and 'sport_type' in steps_copy[0]):
+                    steps_copy.insert(0, {'sport_type': sport_type})
+                else:
+                    # Aggiorna lo sport_type nel primo elemento se è già presente
+                    steps_copy[0]['sport_type'] = sport_type
+                
+                workouts[index] = (new_name, steps_copy)
+                load_workouts_to_tree()
+    
+        except Exception as e:
+            logging.error(f"Errore durante la modifica dell'allenamento: {str(e)}")
+            messagebox.showerror("Errore", f"Si è verificato un errore durante la modifica dell'allenamento:\n{str(e)}", parent=parent)
     
     def delete_selected_workout():
         """Delete the selected workouts"""
