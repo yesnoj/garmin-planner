@@ -1,0 +1,88 @@
+config:
+  heart_rates:
+    max_hr: 180
+    Z1_HR: 62-76% max_hr
+    Z2_HR: 76-85% max_hr
+    Z3_HR: 85-91% max_hr
+    Z4_HR: 91-95% max_hr
+    Z5_HR: 95-100% max_hr
+  paces:
+    Z1: '6:30'
+    Z2: '6:00'
+    Z3: '5:30'
+    Z4: '5:00'
+    Z5: '4:30'
+    race_pace: '5:10'
+    threshold: 5:20-5:10
+    marathon: '5:30'
+  speeds: {}
+  margins:
+    faster: 0:03
+    slower: 0:03
+    faster_spd: '2.0'
+    slower_spd: '2.0'
+    hr_up: 5
+    hr_down: 5
+  name_prefix: 'MYRUN_LPQT3C_ '
+  sport_type: running
+  athlete_name: Nicola Tesla
+  race_day: '2025-09-28'
+W01S01 Recovery run: # Recovery run
+- sport_type: running
+- date: '2025-09-08'
+- interval: 30min @ Z1_HR
+W01S02 Tempo run: # Tempo run
+- sport_type: running
+- date: '2025-09-10'
+- warmup: 15min @ Z1_HR
+- interval: 20min @ Z4
+- cooldown: 10min @ Z1_HR
+W01S03 Interval training: # Interval training
+- sport_type: running
+- date: '2025-09-12'
+- warmup: 15min @ Z1_HR
+- repeat: 5
+  steps:
+  - interval: 400m @ Z5
+  - recovery: 2min @ Z1_HR
+- cooldown: 10min @ Z1_HR
+W02S01 Recovery run: # Recovery run
+- sport_type: running
+- date: '2025-09-15'
+- interval: 30min @ Z1_HR
+W02S02 Tempo run: # Tempo run
+- sport_type: running
+- date: '2025-09-17'
+- warmup: 15min @ Z1_HR
+- interval: 20min @ Z4
+- cooldown: 10min @ Z1_HR
+W02S03 Interval training: # Interval training
+- sport_type: running
+- date: '2025-09-19'
+- warmup: 15min @ Z1_HR
+- repeat: 5
+  steps:
+  - interval: 400m @ Z5
+  - recovery: 2min @ Z1_HR
+- cooldown: 10min @ Z1_HR
+W03S01 Race day: # Race day
+- sport_type: running
+- date: '2025-09-22'
+- warmup: 10min @ Z1_HR
+- interval: 3000m @ race_pace
+- cooldown: 10min @ Z1_HR
+W03S02 Tempo run: # Tempo run
+- sport_type: running
+- date: '2025-09-24'
+- warmup: 15min @ Z1_HR
+- interval: 20min @ Z4
+- cooldown: 10min @ Z1_HR
+W03S03 Interval training: # Interval training
+- sport_type: running
+- date: '2025-09-26'
+- warmup: 15min @ Z1_HR
+- repeat: 5
+  steps:
+  - interval: 400m @ Z5
+  - recovery: 2min @ Z1_HR
+- cooldown: 10min @ Z1_HR

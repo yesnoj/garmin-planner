@@ -1647,8 +1647,6 @@ class GarminPlannerGUI(tk.Tk):
         sport_combo = ttk.Combobox(sport_frame, textvariable=self.plan_sport_type, values=["running", "cycling"], state="readonly", width=10)
         sport_combo.pack(side=tk.LEFT, padx=5)
         
-        # Aggiungi etichette descrittive per i tipi di sport
-        ttk.Label(sport_frame, text="(running = corsa, cycling = ciclismo)", foreground="gray", font=("", 9)).pack(side=tk.LEFT, padx=5)
         
         # Nome Atleta (con asterisco rosso per indicare campo obbligatorio)
         athlete_frame = ttk.Frame(input_frame)

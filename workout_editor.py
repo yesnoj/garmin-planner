@@ -1109,6 +1109,7 @@ class RepeatDialog(tk.Toplevel):
         
         # Packing
         self.steps_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        self.steps_tree.bind("<Double-1>", self.on_step_double_click)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
         # Bottoni per aggiungere/modificare/rimuovere passi
@@ -1175,6 +1176,9 @@ class RepeatDialog(tk.Toplevel):
                 else:
                     self.steps_tree.insert("", "end", values=(step_type, step_detail))
     
+    def on_step_double_click(self, event):
+        """Handle double click on a step to edit it"""
+        self.edit_step()
 
     def on_ok(self):
         """Handle OK button click"""
