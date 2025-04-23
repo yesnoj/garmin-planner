@@ -102,7 +102,6 @@ def excel_to_yaml(excel_file, output_file=None, sport_type="running"):
             'hr_down': 5
         },
         'name_prefix': '',
-        'sport_type': sport_type  # Imposta il tipo di sport
     }}
     
     # Estrai il nome atleta dalla prima riga se presente
@@ -132,7 +131,6 @@ def excel_to_yaml(excel_file, output_file=None, sport_type="running"):
                 extracted_sport_type = str(sport_type_rows.iloc[0, 1]).strip().lower()
                 if extracted_sport_type in ["running", "cycling"]:
                     sport_type = extracted_sport_type
-                    plan['config']['sport_type'] = sport_type
                     print(f"Tipo di sport trovato nel foglio Config: {sport_type}")
             
             if not race_day_rows.empty and pd.notna(race_day_rows.iloc[0, 1]):

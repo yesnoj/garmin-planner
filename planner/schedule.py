@@ -154,6 +154,33 @@ def cmd_schedule_workouts(args):
     return scheduled_count
 
 
+def debug_list_all_scheduled_titles(args):
+    """
+    Lista tutti i titoli degli allenamenti pianificati per debug.
+    
+    Args:
+        args: Arguments with the following attributes:
+            - oauth_folder: Path to the OAuth folder
+    """
+    # Get current and future workouts (from today onward)
+    client = GarminClient.get_instance(args.oauth_folder)
+    start_date = datetime.now().strftime('%Y-%m-%d')
+    end_date = (datetime.now() + timedelta(days=365)).strftime('%Y-%m-%d')
+    
+    logging.info(f"DEBUG: Looking for ALL scheduled workouts from {start_date} to {end_date}")
+    
+    # Get scheduled workouts with the same method used when updating the calendar
+    calendar_items = get_scheduled(args)
+    
+    logging.info(f"DEBUG: Found {len(calendar_items)} total scheduled workouts")
+    
+    # Log tutti i titoli
+    for i, item in enumerate(calendar_items):
+        logging.info(f"DEBUG: Item {i+1}: Date={item.get('date', 'N/A')}, Title={item.get('title', 'Unknown')}")
+    
+    return calendar_items
+
+
 def cmd_unschedule_workouts(args):
     """
     Unschedule workouts in Garmin Connect.
@@ -168,60 +195,105 @@ def cmd_unschedule_workouts(args):
     """
     logging.info(f"Unscheduling workouts for training plan: {args.training_plan}")
     
-    # Get current and future workouts (from today onward)
+    # Get current date or use specified start date
+    start_date = datetime.now()
+    if hasattr(args, 'start_date') and args.start_date:
+        try:
+            start_date = datetime.strptime(args.start_date, '%Y-%m-%d')
+        except ValueError:
+            logging.error(f"Invalid start date format: {args.start_date}. Using today instead.")
+    
+    # Initialize client
     client = GarminClient.get_instance(args.oauth_folder)
-    end_date = (datetime.now() + timedelta(days=365)).strftime('%Y-%m-%d')  # Look up to a year ahead
     
-    # Use today's date or specified start date
-    if args.start_date:
-        start_date = args.start_date
-    else:
-        start_date = datetime.now().strftime('%Y-%m-%d')
+    # Start scanning from current month
+    search_year = start_date.year
+    search_month = start_date.month
     
-    logging.info(f"Looking for scheduled workouts from {start_date} to {end_date}")
-    
-    # Get scheduled workouts
-    calendar_items = client.get_calendar(start_date, end_date)
-    
-    # Find matching workouts
-    training_plan_filter = args.training_plan.strip()
-    
-    # Filter by sport type if specified
+    # Optional sport type filter
     sport_type = getattr(args, 'sport_type', None)
-    if sport_type:
-        logging.info(f"Filtering workouts by sport type: {sport_type}")
     
-    matching_items = []
-    for item in calendar_items:
-        # Check if this is a workout and not an event or other calendar item
-        if 'calendarItemId' in item and 'title' in item and training_plan_filter in item['title']:
-            # Check sport type if filter is applied
-            if sport_type:
-                item_sport_type = item.get('sportType', {}).get('sportTypeKey', 'running')
-                if item_sport_type != sport_type:
-                    logging.info(f"Skipping workout {item['title']} with sport type {item_sport_type}")
+    # Keep track of total deletions
+    total_deleted = 0
+    
+    # Continue searching month by month
+    while True:
+        logging.info(f"Checking calendar for {search_year}-{search_month:02d}")
+        
+        # Get calendar data for this month
+        response = client.get_calendar(search_year, search_month)
+        
+        # Get calendar items
+        calendar_items = response.get('calendarItems', [])
+        
+        # Count matching workouts for this month
+        found_workouts = 0
+        
+        # Process each calendar item
+        for item in calendar_items:
+            # Verify this is a workout
+            if item.get('itemType', '') == 'workout':
+                workout_name = item.get('title', '')
+                workout_id = item.get('workoutId', None)
+                schedule_id = item.get('id', None)  # Important: use 'id' not 'calendarItemId'
+                schedule_date = item.get('date', None)
+                
+                # Skip if we don't have essential data
+                if not schedule_date or not schedule_id:
                     continue
                 
-            matching_items.append(item)
+                # Parse date for comparison
+                try:
+                    date_cmp = datetime.strptime(schedule_date, '%Y-%m-%d')
+                except ValueError:
+                    logging.warning(f"Invalid date format in calendar: {schedule_date}. Skipping.")
+                    continue
+                
+                # Skip workouts in the past
+                if date_cmp.date() < start_date.date():
+                    logging.info(f'Ignoring past workout [{schedule_date}, {schedule_id}]: {workout_name} ({workout_id})')
+                    continue
+                
+                # Check if workout name matches filter pattern using re.search
+                if re.search(args.training_plan, workout_name):
+                    # Check sport type if filter is applied
+                    if sport_type:
+                        item_sport_type = item.get('sportType', {}).get('sportTypeKey', 'running')
+                        if item_sport_type != sport_type:
+                            logging.info(f"Skipping workout {workout_name} with sport type {item_sport_type}")
+                            continue
+                    
+                    found_workouts += 1
+                    
+                    # Delete or simulate deletion
+                    if not args.dry_run:
+                        try:
+                            logging.info(f'Unscheduling workout [{schedule_date}, {schedule_id}]: {workout_name} ({workout_id})')
+                            client.unschedule_workout(schedule_id)  # Important: use unschedule_workout not delete_calendar_item
+                            total_deleted += 1
+                        except Exception as e:
+                            logging.error(f"Error unscheduling workout: {str(e)}")
+                    else:
+                        logging.info(f'SIMULATION: Would unschedule workout [{schedule_date}, {schedule_id}]: {workout_name} ({workout_id})')
+                        total_deleted += 1
+        
+        # If no workouts were found in this month, or we've gone too far ahead, stop searching
+        if found_workouts == 0:
+            # If we're searching 12 months ahead with no results, it's probably time to stop
+            current_month = datetime.now().month
+            current_year = datetime.now().year
+            months_ahead = (search_year - current_year) * 12 + (search_month - current_month)
+            if months_ahead >= 12:
+                break
+        
+        # Continue looking for workouts in the following month
+        search_month += 1
+        if search_month > 12:
+            search_year += 1
+            search_month = 1
     
-    logging.info(f"Found {len(matching_items)} scheduled workouts matching '{training_plan_filter}'")
-    
-    # Delete matching calendar items
-    deleted_count = 0
-    for item in matching_items:
-        if not args.dry_run:
-            try:
-                logging.info(f"Deleting calendar item: {item['title']} on {item['date']}")
-                client.delete_calendar_item(item['calendarItemId'])
-                deleted_count += 1
-            except Exception as e:
-                logging.error(f"Error deleting calendar item: {str(e)}")
-        else:
-            logging.info(f"SIMULATION: Would delete calendar item: {item['title']} on {item['date']}")
-            deleted_count += 1
-    
-    logging.info(f"Successfully unscheduled {deleted_count} workouts")
-    return deleted_count
+    logging.info(f"Successfully unscheduled {total_deleted} workouts")
+    return total_deleted
 
 
 def get_scheduled(args):
@@ -294,6 +366,15 @@ def get_scheduled(args):
     # Get calendar items for the specified date range
     calendar_items = client.get_calendar(start_date, end_date)
     
+    # Verifica se calendar_items è una lista
+    if isinstance(calendar_items, dict) and 'calendarItems' in calendar_items:
+        calendar_items = calendar_items.get('calendarItems', [])
+    
+    # Assicurati che calendar_items sia una lista
+    if not isinstance(calendar_items, list):
+        logging.warning(f"Unexpected calendar_items type: {type(calendar_items)}")
+        calendar_items = []
+    
     # Filter by name if specified
     name_filter = getattr(args, 'name_filter', None)
     sport_type = getattr(args, 'sport_type', None)
@@ -301,6 +382,11 @@ def get_scheduled(args):
     if name_filter or sport_type:
         filtered_items = []
         for item in calendar_items:
+            # Verifica che item sia un dizionario
+            if not isinstance(item, dict):
+                logging.warning(f"Skipping non-dictionary item: {item}")
+                continue
+                
             # Check if this is a workout and not an event
             if 'title' in item:
                 item_name = item['title']
@@ -325,18 +411,23 @@ def get_scheduled(args):
     # Process and return the items
     result = []
     for item in calendar_items:
-        # Add sport type information to each item
-        if 'sportType' in item and 'sportTypeKey' in item['sportType']:
-            sport_type_key = item['sportType']['sportTypeKey']
+        # Verifica che item sia un dizionario prima di usare get()
+        if isinstance(item, dict):
+            # Add sport type information to each item
+            if 'sportType' in item and 'sportTypeKey' in item['sportType']:
+                sport_type_key = item['sportType']['sportTypeKey']
+            else:
+                sport_type_key = 'running'  # Default
+            
+            result.append({
+                'date': item.get('date', 'N/A'),
+                'title': item.get('title', 'Unknown'),
+                'id': item.get('calendarItemId', 'N/A'),
+                'sport_type': sport_type_key
+            })
         else:
-            sport_type_key = 'running'  # Default
-        
-        result.append({
-            'date': item.get('date', 'N/A'),
-            'title': item.get('title', 'Unknown'),
-            'id': item.get('calendarItemId', 'N/A'),
-            'sport_type': sport_type_key
-        })
+            # Se item non è un dizionario, log di avviso
+            logging.warning(f"Skipping non-dictionary item: {item}")
     
     # Sort by date
     result.sort(key=lambda x: x['date'])

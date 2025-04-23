@@ -735,7 +735,7 @@ def get_target(step_txt, verbose=False, sport_type="running"):
         # Convert to the format Garmin expects (e.g., "30" or "25-35")
         if re.compile(r'^\d+(?:\.\d+)?(?:-\d+(?:\.\d+)?)?$').match(target):
             pass  # Already in correct format
-        elif re.compile(r'^[zZ][1-5]$', target):
+        elif re.compile(r'^[zZ][1-5]$').match(target):
             # Convert zone to default speed
             zone_num = int(target[1:])
             zone_speeds = {

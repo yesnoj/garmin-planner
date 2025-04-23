@@ -2509,18 +2509,20 @@ def add_workout_editor_tab(notebook, parent):
                 name, steps, sport_type = result
             else:
                 name, steps = result
-                sport_type = None  # valore predefinito se non fornito
+                sport_type = workout_config.get('sport_type', 'running')  # valore predefinito se non fornito
+            
+            # Crea una copia profonda della lista dei passi
+            steps_copy = copy.deepcopy(steps)
+            
+            # Aggiungi lo sport_type come primo elemento se non è già presente
+            if not (steps_copy and isinstance(steps_copy[0], dict) and 'sport_type' in steps_copy[0]):
+                steps_copy.insert(0, {'sport_type': sport_type})
             
             # Aggiungi alla lista degli allenamenti in memoria
-            workouts.append((name, copy.deepcopy(steps)))
+            workouts.append((name, steps_copy))
             
             # Aggiorna la vista
             load_workouts_to_tree()
-            
-            # Opzionale: mostra un messaggio di conferma
-            messagebox.showinfo("Allenamento aggiunto", 
-                                f"L'allenamento '{name}' è stato aggiunto alla lista.",
-                                parent=parent)
     
     def edit_selected_workout():
         """Edit the selected workout"""
@@ -2534,6 +2536,11 @@ def add_workout_editor_tab(notebook, parent):
         index = workout_tree.index(selection[0])
         name, steps = workouts[index]
         
+        # Estrai sport_type dall'allenamento originale se presente
+        original_sport_type = None
+        if steps and isinstance(steps[0], dict) and 'sport_type' in steps[0]:
+            original_sport_type = steps[0]['sport_type']
+        
         # Open the editor
         result = edit_workout(parent, name, copy.deepcopy(steps))
         
@@ -2543,9 +2550,16 @@ def add_workout_editor_tab(notebook, parent):
                 new_name, new_steps, sport_type = result
             else:
                 new_name, new_steps = result
-                sport_type = None  # valore predefinito se non fornito
-                
-            workouts[index] = (new_name, copy.deepcopy(new_steps))
+                sport_type = original_sport_type or workout_config.get('sport_type', 'running')
+            
+            # Crea una copia profonda della lista dei passi
+            steps_copy = copy.deepcopy(new_steps)
+            
+            # Aggiungi lo sport_type come primo elemento se non è già presente
+            if not (steps_copy and isinstance(steps_copy[0], dict) and 'sport_type' in steps_copy[0]):
+                steps_copy.insert(0, {'sport_type': sport_type})
+            
+            workouts[index] = (new_name, steps_copy)
             load_workouts_to_tree()
     
     def delete_selected_workout():
