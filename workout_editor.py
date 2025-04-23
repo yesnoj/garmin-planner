@@ -1351,16 +1351,76 @@ class WorkoutEditor(tk.Toplevel):
         sport_combo.grid(row=0, column=1, padx=5, pady=5, sticky=tk.W)
         sport_combo.bind("<<ComboboxSelected>>", self.on_sport_type_change)
 
+        # Data allenamento
+        ttk.Label(name_frame, text="Data:").grid(row=0, column=2, padx=(10, 5), pady=5, sticky=tk.W)
+        self.workout_date_var = tk.StringVar()
+
+        # Estrai la data se presente nei passi
+        workout_date = ""
+        if self.workout_steps:
+            for step in self.workout_steps:
+                if isinstance(step, dict) and 'date' in step:
+                    workout_date = step['date']
+                    break
+
+        # Imposta la data nella variabile
+        self.workout_date_var.set(workout_date)
+
+        # Input per la data in formato YYYY-MM-DD
+        date_frame = ttk.Frame(name_frame)
+        date_frame.grid(row=0, column=3, padx=5, pady=5, sticky=tk.W)
+
+        # Utilizziamo un widget DateEntry se disponibile, altrimenti un Entry semplice
+        try:
+            from tkcalendar import DateEntry
+            
+            # Se abbiamo una data, inizializza il DateEntry con quella data
+            if workout_date:
+                try:
+                    year, month, day = map(int, workout_date.split('-'))
+                    date_picker = DateEntry(date_frame, width=12, background='darkblue',
+                                          foreground='white', borderwidth=2, date_pattern='yyyy-mm-dd',
+                                          textvariable=self.workout_date_var,
+                                          year=year, month=month, day=day)
+                except (ValueError, AttributeError):
+                    # Se c'è un errore nel parsing della data, usa il DateEntry standard
+                    date_picker = DateEntry(date_frame, width=12, background='darkblue',
+                                          foreground='white', borderwidth=2, date_pattern='yyyy-mm-dd',
+                                          textvariable=self.workout_date_var)
+            else:
+                # Se non c'è una data, usa il DateEntry standard
+                date_picker = DateEntry(date_frame, width=12, background='darkblue',
+                                      foreground='white', borderwidth=2, date_pattern='yyyy-mm-dd',
+                                      textvariable=self.workout_date_var)
+            
+            date_picker.pack(side=tk.LEFT)
+            
+            # Forza l'aggiornamento del widget con il valore della variabile
+            if workout_date:
+                self.workout_date_var.set(workout_date)
+        except ImportError:
+            date_entry = ttk.Entry(date_frame, textvariable=self.workout_date_var, width=12)
+            date_entry.pack(side=tk.LEFT)
+            ttk.Label(date_frame, text="(YYYY-MM-DD)", font=("Arial", 8)).pack(side=tk.LEFT, padx=2)
+        
+        # Bottone per cancellare la data
+        clear_button = ttk.Button(date_frame, text="✕", width=2, 
+                                command=lambda: self.workout_date_var.set(""))
+        clear_button.pack(side=tk.LEFT, padx=2)
+
         # Nome allenamento
-        ttk.Label(name_frame, text="Nome allenamento:").grid(row=0, column=2, padx=(20,5), pady=5, sticky=tk.W)
+        ttk.Label(name_frame, text="Nome:").grid(row=0, column=4, padx=(10, 5), pady=5, sticky=tk.W)
         self.name_var = tk.StringVar(value=self.workout_name)
-        name_entry = ttk.Entry(name_frame, textvariable=self.name_var, width=40)
-        name_entry.grid(row=0, column=3, padx=5, pady=5, sticky=tk.W+tk.E)
+        name_entry = ttk.Entry(name_frame, textvariable=self.name_var, width=30)
+        name_entry.grid(row=0, column=5, padx=5, pady=5, sticky=tk.W+tk.E)
 
         # Aggiungiamo un suggerimento sulla formattazione
         format_label = ttk.Label(name_frame, text="(Formato consigliato: W01S01 Descrizione)", 
-                               font=("Arial", 9), foreground="gray")
-        format_label.grid(row=0, column=4, padx=5, pady=5, sticky=tk.W)
+                               font=("Arial", 8), foreground="gray")
+        format_label.grid(row=0, column=6, padx=5, pady=5, sticky=tk.W)
+        
+        # Configura il peso delle colonne
+        name_frame.columnconfigure(5, weight=1)
 
         # Aggiungiamo anche una funzione di placeholder per il campo nome
         if self.workout_name == "Nuovo allenamento":
@@ -2361,8 +2421,32 @@ class WorkoutEditor(tk.Toplevel):
         # Get the final sport type
         sport_type = self.sport_type_var.get()
         
-        # Set the result - now includes sport type
-        self.result = (workout_name, self.workout_steps, sport_type)
+        # Get workout date if set - usa self.workout_date_var invece di workout_date
+        workout_date = self.workout_date_var.get().strip()
+        
+        # Create a new steps list with metadata at the beginning
+        final_steps = []
+        
+        # Add sport_type as first element
+        final_steps.append({"sport_type": sport_type})
+        
+        # Add date as second element if provided
+        if workout_date:
+            # Validate date format (YYYY-MM-DD)
+            if re.match(r'^\d{4}-\d{2}-\d{2}$', workout_date):
+                final_steps.append({"date": workout_date})
+            else:
+                messagebox.showwarning("Avviso", "Formato data non valido. Usa YYYY-MM-DD.\nLa data non sarà salvata.", parent=self)
+        
+        # Add the actual workout steps (filtering out any existing metadata)
+        for step in self.workout_steps:
+            # Skip metadata steps
+            if not (isinstance(step, dict) and len(step) == 1 and 
+                  ('sport_type' in step or 'date' in step)):
+                final_steps.append(step)
+        
+        # Set the result - now includes sport type and possibly date
+        self.result = (workout_name, final_steps, sport_type)
         
         # Close the editor
         self.destroy()
@@ -2394,13 +2478,15 @@ def add_workout_editor_tab(notebook, parent):
     upper_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
     
     # Create treeview for the list of workouts
-    workout_tree = ttk.Treeview(upper_frame, columns=("name", "sport", "steps"), show="headings")
+    workout_tree = ttk.Treeview(upper_frame, columns=("name", "sport", "date", "steps"), show="headings")
     workout_tree.heading("name", text="Nome")
-    workout_tree.heading("sport", text="Sport")  # Nuova colonna per il tipo di sport
+    workout_tree.heading("sport", text="Sport")
+    workout_tree.heading("date", text="Data")
     workout_tree.heading("steps", text="Passi")
-    workout_tree.column("name", width=300)
-    workout_tree.column("sport", width=80)  # Larghezza della nuova colonna
-    workout_tree.column("steps", width=100)
+    workout_tree.column("name", width=250)
+    workout_tree.column("sport", width=80)
+    workout_tree.column("date", width=100)
+    workout_tree.column("steps", width=80)
     
     # Add scrollbar
     scrollbar = ttk.Scrollbar(upper_frame, orient=tk.VERTICAL, command=workout_tree.yview)
@@ -2515,14 +2601,22 @@ def add_workout_editor_tab(notebook, parent):
         
         # Add workouts to the tree
         for name, steps in workouts:
-            # Estrai il tipo di sport dagli step
+            # Estrai il tipo di sport e la data dagli step
             sport_type = "running"  # Default a running
+            workout_date = ""  # Default a nessuna data
             
-            # Cerca il tipo di sport nel primo step (se presente)
-            if steps and isinstance(steps, list) and len(steps) > 0:
-                first_step = steps[0]
-                if isinstance(first_step, dict) and 'sport_type' in first_step:
-                    sport_type = first_step['sport_type']
+            # Log per debug
+            logging.debug(f"Loading workout: {name} with steps: {steps}")
+            
+            # Cerca il tipo di sport e la data nei passi
+            if steps and isinstance(steps, list):
+                for step in steps:
+                    if isinstance(step, dict):
+                        if 'sport_type' in step:
+                            sport_type = step['sport_type']
+                        elif 'date' in step:
+                            workout_date = step['date']
+                            logging.debug(f"Found date in workout {name}: {workout_date}")
             
             # Formatta il tipo di sport per la visualizzazione
             sport_display = sport_type.capitalize()
@@ -2535,8 +2629,12 @@ def add_workout_editor_tab(notebook, parent):
                       ('sport_type' in step or 'date' in step)):
                     actual_steps_count += 1
             
-            # Aggiungi l'allenamento con il tipo di sport e il conteggio corretto
-            workout_tree.insert("", "end", values=(name, sport_display, f"{actual_steps_count} passi"))
+            # Formatta il testo per il numero di passi
+            steps_text = f"{actual_steps_count} passo" if actual_steps_count == 1 else f"{actual_steps_count} passi"
+            
+            # Aggiungi l'allenamento con il tipo di sport, la data e il conteggio corretto
+            workout_tree.insert("", "end", values=(name, sport_display, workout_date, steps_text))
+
     
     def create_new_workout():
         """Create a new workout"""
@@ -2583,17 +2681,22 @@ def add_workout_editor_tab(notebook, parent):
                 
             name, steps = workouts[index]
             
-            # Estrai il tipo di sport dagli step
+            # Estrai il tipo di sport e la data dagli step
             sport_type = "running"  # Default a running
-            if steps and isinstance(steps, list) and len(steps) > 0:
-                first_step = steps[0]
-                if isinstance(first_step, dict) and 'sport_type' in first_step:
-                    sport_type = first_step['sport_type']
+            
+            # Log per debug
+            logging.debug(f"Editing workout steps: {steps}")
+            
+            if steps and isinstance(steps, list):
+                for step in steps:
+                    if isinstance(step, dict) and 'sport_type' in step:
+                        sport_type = step['sport_type']
+                        break
             
             # Ora possiamo accedere in sicurezza a name e sport_type
             logging.debug(f"Editing workout: {name} with sport type: {sport_type}")
             
-            # Open the editor with the correct sport type
+            # Open the editor with the correct sport type and steps (including date metadata)
             result = edit_workout(parent, name, copy.deepcopy(steps), sport_type)
             
             if result:
@@ -2605,19 +2708,12 @@ def add_workout_editor_tab(notebook, parent):
                     # Se result non contiene sport_type, usa quello estratto precedentemente
                     sport_type = sport_type
                 
-                # Crea una copia profonda della lista dei passi
-                steps_copy = copy.deepcopy(new_steps)
+                # La lista new_steps dovrebbe già includere metadata come sport_type e date
+                # in quanto gestito nel metodo on_save dell'editor
                 
-                # Aggiungi lo sport_type come primo elemento se non è già presente
-                if not (steps_copy and isinstance(steps_copy[0], dict) and 'sport_type' in steps_copy[0]):
-                    steps_copy.insert(0, {'sport_type': sport_type})
-                else:
-                    # Aggiorna lo sport_type nel primo elemento se è già presente
-                    steps_copy[0]['sport_type'] = sport_type
-                
-                workouts[index] = (new_name, steps_copy)
+                workouts[index] = (new_name, new_steps)
                 load_workouts_to_tree()
-    
+        
         except Exception as e:
             logging.error(f"Errore durante la modifica dell'allenamento: {str(e)}")
             messagebox.showerror("Errore", f"Si è verificato un errore durante la modifica dell'allenamento:\n{str(e)}", parent=parent)
