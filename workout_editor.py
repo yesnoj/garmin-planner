@@ -2527,8 +2527,16 @@ def add_workout_editor_tab(notebook, parent):
             # Formatta il tipo di sport per la visualizzazione
             sport_display = sport_type.capitalize()
             
-            # Aggiungi l'allenamento con il tipo di sport
-            workout_tree.insert("", "end", values=(name, sport_display, f"{len(steps)} passi"))
+            # Conta solo i passi effettivi, escludendo date e sport_type
+            actual_steps_count = 0
+            for step in steps:
+                # Verifica che non sia un passo di metadati
+                if not (isinstance(step, dict) and len(step) == 1 and
+                      ('sport_type' in step or 'date' in step)):
+                    actual_steps_count += 1
+            
+            # Aggiungi l'allenamento con il tipo di sport e il conteggio corretto
+            workout_tree.insert("", "end", values=(name, sport_display, f"{actual_steps_count} passi"))
     
     def create_new_workout():
         """Create a new workout"""
