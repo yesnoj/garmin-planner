@@ -2378,10 +2378,12 @@ def add_workout_editor_tab(notebook, parent):
     upper_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
     
     # Create treeview for the list of workouts
-    workout_tree = ttk.Treeview(upper_frame, columns=("name", "steps"), show="headings")
+    workout_tree = ttk.Treeview(upper_frame, columns=("name", "sport", "steps"), show="headings")
     workout_tree.heading("name", text="Nome")
+    workout_tree.heading("sport", text="Sport")  # Nuova colonna per il tipo di sport
     workout_tree.heading("steps", text="Passi")
     workout_tree.column("name", width=300)
+    workout_tree.column("sport", width=80)  # Larghezza della nuova colonna
     workout_tree.column("steps", width=100)
     
     # Add scrollbar
@@ -2497,7 +2499,20 @@ def add_workout_editor_tab(notebook, parent):
         
         # Add workouts to the tree
         for name, steps in workouts:
-            workout_tree.insert("", "end", values=(name, f"{len(steps)} passi"))
+            # Estrai il tipo di sport dagli step
+            sport_type = "running"  # Default a running
+            
+            # Cerca il tipo di sport nel primo step (se presente)
+            if steps and isinstance(steps, list) and len(steps) > 0:
+                first_step = steps[0]
+                if isinstance(first_step, dict) and 'sport_type' in first_step:
+                    sport_type = first_step['sport_type']
+            
+            # Formatta il tipo di sport per la visualizzazione
+            sport_display = sport_type.capitalize()
+            
+            # Aggiungi l'allenamento con il tipo di sport
+            workout_tree.insert("", "end", values=(name, sport_display, f"{len(steps)} passi"))
     
     def create_new_workout():
         """Create a new workout"""
