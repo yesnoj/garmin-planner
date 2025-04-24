@@ -14,6 +14,7 @@ import re
 import os
 import sys
 import copy
+import openpyxl  # Aggiungi questa riga
 from datetime import datetime
 import argparse
 import logging
@@ -34,6 +35,233 @@ class NoAliasDumper(yaml.SafeDumper):
 
 # Valid step types supported by garmin-planner
 VALID_STEP_TYPES = {"warmup", "cooldown", "interval", "recovery", "rest", "repeat", "other"}
+
+
+def yaml_to_excel(yaml_data, excel_file, create_new=False):
+    """
+    Converti i dati YAML in un file Excel.
+    
+    Args:
+        yaml_data: Dizionario con i dati YAML
+        excel_file: Percorso del file Excel di output
+        create_new: Se True, crea un nuovo file. Se False, aggiorna un file esistente.
+    
+    Returns:
+        True se la conversione è riuscita, False altrimenti
+    """
+    try:
+        # Importa openpyxl all'interno della funzione
+        import openpyxl
+        from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+        
+        # Estrai la configurazione
+        config = yaml_data.get('config', {})
+        sport_type = config.get('sport_type', 'running')
+        
+        # Se il file non esiste o vogliamo crearne uno nuovo, crealo
+        if create_new or not os.path.exists(excel_file):
+            # Crea un nuovo file Excel con la struttura di base
+            create_sample_excel(excel_file, sport_type)
+            wb = openpyxl.load_workbook(excel_file)
+        else:
+            # Altrimenti carica il file esistente per preservare la struttura
+            wb = openpyxl.load_workbook(excel_file)
+            
+            # Verifica quali fogli esistono nel file originale
+            original_sheets = wb.sheetnames
+            
+            # Se nel file originale esiste Speeds ma non Paces e stiamo passando a running
+            # oppure esiste Paces ma non Speeds e stiamo passando a cycling
+            # creiamo il foglio mancante
+            if 'Speeds' in original_sheets and 'Paces' not in original_sheets and sport_type == 'running':
+                wb.create_sheet('Paces')
+            elif 'Paces' in original_sheets and 'Speeds' not in original_sheets and sport_type == 'cycling':
+                wb.create_sheet('Speeds')
+        
+        # Aggiorna la configurazione se esiste un foglio Config
+        if 'Config' in wb.sheetnames:
+            update_config_sheet(wb['Config'], config)
+        
+        # Aggiorna i ritmi/velocità in base al tipo di sport
+        if sport_type == 'running' and 'Paces' in wb.sheetnames:
+            update_paces_sheet(wb['Paces'], config.get('paces', {}))
+        elif sport_type == 'cycling' and 'Speeds' in wb.sheetnames:
+            update_speeds_sheet(wb['Speeds'], config.get('speeds', {}))
+        
+        # Aggiorna le frequenze cardiache se esiste il foglio HeartRates
+        if 'HeartRates' in wb.sheetnames:
+            update_heart_rates_sheet(wb['HeartRates'], config.get('heart_rates', {}))
+        
+        # Definisci i colori per le settimane
+        week_colors = [
+            "FFF2CC",  # Light yellow
+            "DAEEF3",  # Light blue
+            "E2EFDA",  # Light green
+            "FCE4D6",  # Light orange
+            "EAD1DC",  # Light pink
+            "D9D9D9",  # Light gray
+        ]
+        
+        # Bordo per le celle
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        # Aggiorna gli allenamenti nel foglio Workouts se esiste
+        if 'Workouts' in wb.sheetnames:
+            workouts_sheet = wb['Workouts']
+            
+            # Mantieni le prime due righe (intestazione e nome atleta)
+            if workouts_sheet.max_row > 2:
+                for row in range(workouts_sheet.max_row, 2, -1):
+                    workouts_sheet.delete_rows(row)
+            
+            # Imposta il nome dell'atleta se presente
+            if 'athlete_name' in config:
+                workouts_sheet['A1'] = f"Atleta: {config['athlete_name']}"
+            
+            # Ottieni la lista di allenamenti (escluso 'config')
+            workouts = []
+            for name, steps in yaml_data.items():
+                if name != 'config' and isinstance(steps, list):
+                    # Estrai informazioni dall'allenamento
+                    match = re.match(r'W(\d+)S(\d+)\s+(.*)', name)
+                    if match:
+                        week = int(match.group(1))
+                        session = int(match.group(2))
+                        description = match.group(3)
+                        
+                        # Estrai la data se presente
+                        workout_date = ""
+                        workout_sport_type = sport_type  # Default al tipo di sport principale
+                        
+                        # Filtra i passi effettivi (escludendo metadati)
+                        actual_steps = []
+                        for step in steps:
+                            if isinstance(step, dict):
+                                if 'sport_type' in step:
+                                    workout_sport_type = step['sport_type']
+                                elif 'date' in step:
+                                    workout_date = step['date']
+                                else:
+                                    actual_steps.append(step)
+                        
+                        # Converti i passi in formato leggibile e ben formattato
+                        steps_text = format_steps_for_excel(actual_steps, workout_sport_type)
+                        
+                        workouts.append((week, session, workout_date, description, steps_text, workout_sport_type))
+            
+            # Ordina gli allenamenti per settimana e sessione
+            workouts.sort(key=lambda x: (x[0], x[1]))
+            
+            # Aggiungi gli allenamenti al foglio
+            current_week = None
+            current_color_index = 0
+            
+            row = 3  # Prima riga di dati (dopo intestazione e atleta)
+            for week, session, workout_date, description, steps_text, workout_sport_type in workouts:
+                # Se la settimana cambia, cambia il colore
+                if week != current_week:
+                    current_week = week
+                    current_color_index = (week - 1) % len(week_colors)
+                
+                # Colore di sfondo per la riga corrente
+                row_fill = PatternFill(start_color=week_colors[current_color_index],
+                                     end_color=week_colors[current_color_index],
+                                     fill_type="solid")
+                
+                # Aggiungi valori alle celle
+                workouts_sheet.cell(row=row, column=1, value=week)
+                workouts_sheet.cell(row=row, column=2, value=workout_date)
+                workouts_sheet.cell(row=row, column=3, value=session)
+                workouts_sheet.cell(row=row, column=4, value=description)
+                workouts_sheet.cell(row=row, column=5, value=steps_text)
+                
+                # Applica colore di sfondo e bordo a tutte le celle della riga
+                for col in range(1, 6):  # Colonne A-E
+                    cell = workouts_sheet.cell(row=row, column=col)
+                    cell.fill = row_fill
+                    cell.border = thin_border
+                    
+                    # Imposta testo a capo e allineamento
+                    cell.alignment = Alignment(wrapText=True, vertical='top')
+                
+                # Calcola l'altezza appropriata della riga in base al contenuto
+                # Conta le linee di testo negli step (sia \n che ;)
+                num_lines = 1 + steps_text.count('\n') + steps_text.count(';')
+                
+                # Considera l'indentazione per i repeat
+                if 'repeat' in steps_text and '\n' in steps_text:
+                    # Conta le linee indentate dopo repeat
+                    lines_after_repeat = steps_text.split('repeat')[1].count('\n')
+                    if lines_after_repeat > 0:
+                        num_lines += lines_after_repeat - 1  # -1 perché la linea con 'repeat' è già contata
+                
+                # Altezza minima più altezza per ogni linea di testo (circa 15 punti per linea)
+                row_height = max(20, 15 * num_lines)  # Altezza minima aumentata
+                workouts_sheet.row_dimensions[row].height = row_height
+                
+                row += 1
+            
+            # Assicurati che le colonne abbiano la giusta larghezza
+            workouts_sheet.column_dimensions['A'].width = 10  # Week
+            workouts_sheet.column_dimensions['B'].width = 15  # Date
+            workouts_sheet.column_dimensions['C'].width = 10  # Session
+            workouts_sheet.column_dimensions['D'].width = 25  # Description
+            workouts_sheet.column_dimensions['E'].width = 60  # Steps
+            
+        # Salva il file Excel
+        wb.save(excel_file)
+        return True
+    
+    except Exception as e:
+        logging.error(f"Errore nella conversione YAML to Excel: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
+def format_steps_for_excel(steps):
+    """
+    Formatta i passi per il foglio Excel con la corretta indentazione.
+    
+    Args:
+        steps: Lista di passi dell'allenamento
+        
+    Returns:
+        Testo formattato dei passi
+    """
+    formatted_steps = []
+    
+    for step in steps:
+        if 'repeat' in step and 'steps' in step:
+            # Passo di tipo repeat
+            iterations = step['repeat']
+            substeps = step['steps']
+            
+            # Formatta il passo di repeat
+            formatted_steps.append(f"repeat {iterations}:")
+            
+            # Formatta i substeps con indentazione
+            for substep in substeps:
+                if isinstance(substep, dict) and len(substep) == 1:
+                    substep_type = list(substep.keys())[0]
+                    substep_detail = substep[substep_type]
+                    # Usa l'indentazione con due spazi per i substep
+                    formatted_steps.append(f"  {substep_type}: {substep_detail}")
+        
+        elif isinstance(step, dict) and len(step) == 1:
+            # Passo normale
+            step_type = list(step.keys())[0]
+            step_detail = step[step_type]
+            formatted_steps.append(f"{step_type}: {step_detail}")
+    
+    return "\n".join(formatted_steps)
+
+
 
 def excel_to_yaml(excel_file, output_file=None, sport_type="running"):
     """
@@ -311,6 +539,262 @@ def excel_to_yaml(excel_file, output_file=None, sport_type="running"):
     add_comments_to_yaml(output_file, workout_descriptions)
     
     return plan
+
+
+def update_workouts_sheet(sheet, yaml_data):
+    """
+    Aggiorna il foglio Workouts con i dati dagli allenamenti YAML.
+    
+    Args:
+        sheet: Foglio Excel Workouts
+        yaml_data: Dizionario con i dati YAML
+    """
+    # Mantieni le prime due righe (intestazione e atleta)
+    for row in range(sheet.max_row, 2, -1):
+        sheet.delete_rows(row)
+    
+    # Ottieni la lista di allenamenti (escluso 'config')
+    workouts = []
+    for name, steps in yaml_data.items():
+        if name != 'config' and isinstance(steps, list):
+            # Estrai informazioni dall'allenamento
+            match = re.match(r'W(\d+)S(\d+)\s+(.*)', name)
+            if match:
+                week = int(match.group(1))
+                session = int(match.group(2))
+                description = match.group(3)
+                
+                # Estrai la data se presente
+                workout_date = ""
+                sport_type = "running"
+                
+                # Filtra i passi effettivi (escludendo metadati)
+                actual_steps = []
+                for step in steps:
+                    if isinstance(step, dict):
+                        if 'sport_type' in step:
+                            sport_type = step['sport_type']
+                        elif 'date' in step:
+                            workout_date = step['date']
+                        else:
+                            actual_steps.append(step)
+                
+                # Converti i passi in formato leggibile
+                steps_text = format_steps_for_excel(actual_steps)
+                
+                workouts.append((week, session, workout_date, description, steps_text, sport_type))
+    
+    # Ordina gli allenamenti per settimana e sessione
+    workouts.sort(key=lambda x: (x[0], x[1]))
+    
+    # Aggiungi gli allenamenti al foglio
+    row = 3  # Prima riga di dati (dopo intestazione e atleta)
+    for week, session, workout_date, description, steps_text, sport_type in workouts:
+        sheet.cell(row=row, column=1).value = week
+        sheet.cell(row=row, column=2).value = workout_date
+        sheet.cell(row=row, column=3).value = session
+        sheet.cell(row=row, column=4).value = description
+        sheet.cell(row=row, column=5).value = steps_text
+        row += 1
+
+
+def format_steps_for_excel(steps, sport_type="running"):
+    """
+    Formatta i passi per il foglio Excel con la corretta indentazione.
+    
+    Args:
+        steps: Lista di passi dell'allenamento
+        sport_type: Tipo di sport ('running' o 'cycling')
+        
+    Returns:
+        Testo formattato dei passi
+    """
+    formatted_steps = []
+    
+    for step in steps:
+        if 'repeat' in step and 'steps' in step:
+            # Passo di tipo repeat
+            iterations = step['repeat']
+            substeps = step['steps']
+            
+            # Formatta il passo di repeat
+            formatted_steps.append(f"repeat {iterations}:")
+            
+            # Formatta i substeps con indentazione
+            for substep in substeps:
+                if isinstance(substep, dict) and len(substep) == 1:
+                    substep_type = list(substep.keys())[0]
+                    substep_detail = substep[substep_type]
+                    
+                    # Gestisci i diversi formati in base al tipo di sport
+                    if sport_type == "cycling":
+                        # Per il ciclismo, assicurati che @ diventi @spd nei passi che hanno zona di ritmo
+                        if '@' in substep_detail and '@spd' not in substep_detail and '@hr' not in substep_detail:
+                            substep_detail = substep_detail.replace('@', '@spd ')
+                    else:  # running
+                        # Per la corsa, assicurati che @spd diventi @ nei passi che hanno zona di velocità
+                        if '@spd' in substep_detail:
+                            substep_detail = substep_detail.replace('@spd', '@')
+                    
+                    # Usa l'indentazione con due spazi per i substep
+                    formatted_steps.append(f"  {substep_type}: {substep_detail}")
+        
+        elif isinstance(step, dict) and len(step) == 1:
+            # Passo normale
+            step_type = list(step.keys())[0]
+            step_detail = step[step_type]
+            
+            # Gestisci i diversi formati in base al tipo di sport
+            if sport_type == "cycling":
+                # Per il ciclismo, assicurati che @ diventi @spd nei passi che hanno zona di ritmo
+                if '@' in step_detail and '@spd' not in step_detail and '@hr' not in step_detail:
+                    step_detail = step_detail.replace('@', '@spd ')
+            else:  # running
+                # Per la corsa, assicurati che @spd diventi @ nei passi che hanno zona di velocità
+                if '@spd' in step_detail:
+                    step_detail = step_detail.replace('@spd', '@')
+            
+            formatted_steps.append(f"{step_type}: {step_detail}")
+    
+    return "\n".join(formatted_steps)
+
+def update_heart_rates_sheet(sheet, heart_rates):
+    """
+    Aggiorna il foglio HeartRates con i dati dalle frequenze cardiache YAML.
+    
+    Args:
+        sheet: Foglio Excel HeartRates
+        heart_rates: Dizionario con le frequenze cardiache
+    """
+    # Cancella le righe esistenti (tranne l'intestazione)
+    for row in range(sheet.max_row, 1, -1):
+        sheet.delete_rows(row)
+    
+    # Aggiungi le nuove righe
+    row = 2
+    for name, value in heart_rates.items():
+        sheet.cell(row=row, column=1).value = name
+        sheet.cell(row=row, column=2).value = value
+        row += 1
+
+
+def update_speeds_sheet(sheet, speeds):
+    """
+    Aggiorna il foglio Speeds con i dati dalle velocità YAML.
+    
+    Args:
+        sheet: Foglio Excel Speeds
+        speeds: Dizionario con le velocità
+    """
+    # Cancella le righe esistenti (tranne l'intestazione)
+    for row in range(sheet.max_row, 1, -1):
+        sheet.delete_rows(row)
+    
+    # Aggiungi le nuove righe
+    row = 2
+    for name, value in speeds.items():
+        sheet.cell(row=row, column=1).value = name
+        sheet.cell(row=row, column=2).value = value
+        row += 1
+
+def update_paces_sheet(sheet, paces):
+    """
+    Aggiorna il foglio Paces con i dati dai ritmi YAML.
+    
+    Args:
+        sheet: Foglio Excel Paces
+        paces: Dizionario con i ritmi
+    """
+    # Cancella le righe esistenti (tranne l'intestazione)
+    for row in range(sheet.max_row, 1, -1):
+        sheet.delete_rows(row)
+    
+    # Aggiungi le nuove righe
+    row = 2
+    for name, value in paces.items():
+        sheet.cell(row=row, column=1).value = name
+        sheet.cell(row=row, column=2).value = value
+        row += 1
+
+def update_config_sheet(sheet, config):
+    """
+    Aggiorna il foglio Config con i dati dalla configurazione YAML.
+    
+    Args:
+        sheet: Foglio Excel Config
+        config: Dizionario con la configurazione
+    """
+    # Mappa delle righe da aggiornare
+    config_rows = {}
+    
+    # Trova le righe esistenti e mappa le chiavi alle righe
+    for row in range(1, sheet.max_row + 1):
+        key = sheet.cell(row=row, column=1).value
+        if key:
+            config_rows[key] = row
+    
+    # Liste delle chiavi da gestire
+    priority_keys = ['name_prefix', 'sport_type', 'margins', 'race_day', 'preferred_days', 'athlete_name']
+    
+    # Prima gestisci le chiavi prioritarie
+    for key in priority_keys:
+        if key in config:
+            if key in config_rows:
+                row_index = config_rows[key]
+            else:
+                row_index = sheet.max_row + 1
+                sheet.cell(row=row_index, column=1).value = key
+            
+            if key == 'margins':
+                # Aggiorna i margini
+                margins = config.get('margins', {})
+                if 'faster' in margins and margins['faster'] is not None:
+                    sheet.cell(row=row_index, column=2).value = margins['faster']
+                if 'slower' in margins and margins['slower'] is not None:
+                    sheet.cell(row=row_index, column=3).value = margins['slower']
+                if 'hr_up' in margins and margins['hr_up'] is not None:
+                    sheet.cell(row=row_index, column=4).value = margins['hr_up']
+                if 'hr_down' in margins and margins['hr_down'] is not None:
+                    sheet.cell(row=row_index, column=5).value = margins['hr_down']
+            elif key == 'preferred_days':
+                # Gestisci preferred_days come lista o stringa
+                preferred_days = config[key]
+                if preferred_days is not None:
+                    if isinstance(preferred_days, list):
+                        sheet.cell(row=row_index, column=2).value = str(preferred_days)
+                    else:
+                        sheet.cell(row=row_index, column=2).value = str(preferred_days)
+            else:
+                # Gestisci altre chiavi normali
+                value = config[key]
+                if value is not None:
+                    # Converti dizionari, liste o altri tipi complessi in stringhe
+                    if isinstance(value, (dict, list, tuple, set)):
+                        if value:  # Se non è vuoto
+                            sheet.cell(row=row_index, column=2).value = str(value)
+                        else:
+                            sheet.cell(row=row_index, column=2).value = ""  # Dizionario vuoto -> stringa vuota
+                    else:
+                        sheet.cell(row=row_index, column=2).value = value
+    
+    # Poi gestisci altre chiavi che potrebbero essere presenti nel config
+    for key, value in config.items():
+        if key not in priority_keys:
+            if key in config_rows:
+                row_index = config_rows[key]
+            else:
+                row_index = sheet.max_row + 1
+                sheet.cell(row=row_index, column=1).value = key
+            
+            # Gestisci tutti gli altri parametri, convertendo tipi complessi in stringhe
+            if value is not None:
+                if isinstance(value, (dict, list, tuple, set)):
+                    if value:  # Se non è vuoto
+                        sheet.cell(row=row_index, column=2).value = str(value)
+                    else:
+                        sheet.cell(row=row_index, column=2).value = ""  # Dizionario vuoto -> stringa vuota
+                else:
+                    sheet.cell(row=row_index, column=2).value = value
 
 
 def are_required_columns_present(df, required_cols):

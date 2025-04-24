@@ -6,6 +6,7 @@ import yaml
 import re
 import copy
 import logging
+import openpyxl
 from functools import partial
 from planner.license_manager import LicenseManager
 
@@ -2470,6 +2471,9 @@ def edit_workout(parent, workout_name, workout_steps, sport_type=None):
 def add_workout_editor_tab(notebook, parent):
     """Add a tab with workout editor functionality"""
     # Create a frame for the editor tab
+    import openpyxl  # Aggiungi questa riga
+    import re
+
     editor_frame = ttk.Frame(notebook)
     notebook.add(editor_frame, text="Editor Allenamenti")
     
@@ -2763,6 +2767,56 @@ def add_workout_editor_tab(notebook, parent):
         # Open the configuration editor dialog
         ConfigEditorDialog(parent)
         
+    def update_excel_file():
+        """Update an Excel file with the current workout data"""
+        if not workouts:
+            messagebox.showwarning("Attenzione", "Nessun allenamento da salvare in Excel", parent=parent)
+            return
+        
+        # Chiedi all'utente di selezionare un file Excel esistente o di crearne uno nuovo
+        excel_file = filedialog.asksaveasfilename(
+            title="Seleziona o crea un file Excel",
+            filetypes=[("Excel files", "*.xlsx"), ("All files", "*.*")],
+            defaultextension=".xlsx"
+        )
+        
+        if not excel_file:
+            return
+        
+        try:
+            # Verifica se il file esiste già
+            file_exists = os.path.exists(excel_file)
+            
+            # Importa la funzione yaml_to_excel dal modulo excel_to_yaml_converter
+            from planner.excel_to_yaml_converter import yaml_to_excel
+            
+            # Aggiungi la funzione yaml_to_excel al modulo se non esiste ancora
+            if not hasattr(yaml_to_excel, '__call__'):
+                messagebox.showerror("Errore", "La funzione yaml_to_excel non è disponibile", parent=parent)
+                return
+            
+            # Crea un dizionario con i dati del YAML
+            yaml_data = {}
+            
+            # Aggiungi la sezione config
+            global workout_config
+            yaml_data['config'] = workout_config
+            
+            # Aggiungi tutti gli allenamenti
+            for name, steps in workouts:
+                yaml_data[name] = steps
+            
+            # Converti i dati YAML in Excel
+            result = yaml_to_excel(yaml_data, excel_file, create_new=not file_exists)
+            
+            if result:
+                messagebox.showinfo("Successo", f"File Excel aggiornato con successo: {excel_file}", parent=parent)
+            else:
+                messagebox.showerror("Errore", "Errore durante l'aggiornamento del file Excel", parent=parent)
+                
+        except Exception as e:
+            messagebox.showerror("Errore", f"Si è verificato un errore: {str(e)}", parent=parent)
+
     # Button frame
     button_frame = ttk.Frame(editor_frame)
     button_frame.pack(fill=tk.X, padx=10, pady=5)
@@ -2774,15 +2828,18 @@ def add_workout_editor_tab(notebook, parent):
     # File operations frame
     file_frame = ttk.Frame(editor_frame)
     file_frame.pack(fill=tk.X, padx=10, pady=5)
-    
+
     ttk.Button(file_frame, text="Carica da file", command=load_workouts_from_file).pack(side=tk.LEFT, padx=5)
     ttk.Button(file_frame, text="Salva su file", command=save_workouts_to_file).pack(side=tk.LEFT, padx=5)
     ttk.Button(file_frame, text="Modifica Configurazione", command=edit_configuration).pack(side=tk.LEFT, padx=5)
-    
+    ttk.Button(file_frame, text="Aggiorna Excel", command=update_excel_file).pack(side=tk.LEFT, padx=5)
+
+
     # Double-click to edit
     workout_tree.bind("<Double-1>", lambda e: edit_selected_workout())
     
     return editor_frame
+
 
 
 
