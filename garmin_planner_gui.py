@@ -1073,7 +1073,16 @@ class GarminPlannerGUI(tk.Tk):
         options_frame.pack(fill=tk.X, padx=10, pady=5)
         
         ttk.Checkbutton(options_frame, text="Pulisci dati", variable=self.export_clean).pack(side=tk.LEFT, padx=5, pady=5)
-                
+        
+        # Aggiunta del selettore di tipo di sport
+        sport_frame = ttk.Frame(options_frame)
+        sport_frame.pack(side=tk.RIGHT, padx=5, pady=5)
+        
+        ttk.Label(sport_frame, text="Filtra per sport:").pack(side=tk.LEFT, padx=5)
+        sport_values = ["", "running", "cycling"]  # Opzione vuota per "tutti"
+        sport_combo = ttk.Combobox(sport_frame, textvariable=self.export_sport_type, values=sport_values, state="readonly", width=10)
+        sport_combo.pack(side=tk.LEFT, padx=5)
+        
         # Bottoni per l'esportazione
         export_buttons_frame = ttk.Frame(export_frame)
         export_buttons_frame.pack(fill=tk.X, padx=10, pady=5)
@@ -1647,6 +1656,8 @@ class GarminPlannerGUI(tk.Tk):
         sport_combo = ttk.Combobox(sport_frame, textvariable=self.plan_sport_type, values=["running", "cycling"], state="readonly", width=10)
         sport_combo.pack(side=tk.LEFT, padx=5)
         
+        # Aggiungi etichette descrittive per i tipi di sport
+        ttk.Label(sport_frame, text="(running = corsa, cycling = ciclismo)", foreground="gray", font=("", 9)).pack(side=tk.LEFT, padx=5)
         
         # Nome Atleta (con asterisco rosso per indicare campo obbligatorio)
         athlete_frame = ttk.Frame(input_frame)

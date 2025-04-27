@@ -50,45 +50,97 @@ def yaml_to_excel(yaml_data, excel_file, create_new=False):
         True se la conversione è riuscita, False altrimenti
     """
     try:
-        # Importa openpyxl all'interno della funzione
         import openpyxl
         from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+        import os
         
         # Estrai la configurazione
         config = yaml_data.get('config', {})
         sport_type = config.get('sport_type', 'running')
         
-        # Se il file non esiste o vogliamo crearne uno nuovo, crealo
-        if create_new or not os.path.exists(excel_file):
-            # Crea un nuovo file Excel con la struttura di base
-            create_sample_excel(excel_file, sport_type)
-            wb = openpyxl.load_workbook(excel_file)
-        else:
-            # Altrimenti carica il file esistente per preservare la struttura
-            wb = openpyxl.load_workbook(excel_file)
-            
-            # Verifica quali fogli esistono nel file originale
-            original_sheets = wb.sheetnames
-            
-            # Se nel file originale esiste Speeds ma non Paces e stiamo passando a running
-            # oppure esiste Paces ma non Speeds e stiamo passando a cycling
-            # creiamo il foglio mancante
-            if 'Speeds' in original_sheets and 'Paces' not in original_sheets and sport_type == 'running':
-                wb.create_sheet('Paces')
-            elif 'Paces' in original_sheets and 'Speeds' not in original_sheets and sport_type == 'cycling':
-                wb.create_sheet('Speeds')
+        logging.info(f"Tipo di sport rilevato: {sport_type}")
         
-        # Aggiorna la configurazione se esiste un foglio Config
+        # NUOVO APPROCCIO: Se il file esiste, eliminalo prima di ricrearlo
+        if os.path.exists(excel_file):
+            try:
+                os.remove(excel_file)
+                logging.info(f"File Excel esistente eliminato: {excel_file}")
+            except PermissionError:
+                # Se non possiamo eliminare il file (potrebbe essere aperto), 
+                # crea un nuovo file con un nome diverso
+                dir_name = os.path.dirname(excel_file)
+                base_name = os.path.basename(excel_file)
+                name, ext = os.path.splitext(base_name)
+                new_file = os.path.join(dir_name, f"{name}_new{ext}")
+                logging.warning(f"Impossibile eliminare il file esistente. Creazione di un nuovo file: {new_file}")
+                excel_file = new_file
+        
+        # Crea un nuovo file Excel con il tipo di sport corretto
+        create_sample_excel(excel_file, sport_type)
+        
+        # Carica il nuovo file appena creato
+        try:
+            wb = openpyxl.load_workbook(excel_file)
+        except Exception as e:
+            logging.error(f"Errore nel caricamento del file Excel: {str(e)}")
+            return False
+        
+        # Aggiorna la configurazione nel foglio Config
         if 'Config' in wb.sheetnames:
             update_config_sheet(wb['Config'], config)
         
-        # Aggiorna i ritmi/velocità in base al tipo di sport
-        if sport_type == 'running' and 'Paces' in wb.sheetnames:
-            update_paces_sheet(wb['Paces'], config.get('paces', {}))
-        elif sport_type == 'cycling' and 'Speeds' in wb.sheetnames:
-            update_speeds_sheet(wb['Speeds'], config.get('speeds', {}))
+        # Aggiorna i ritmi in base al tipo di sport - ora entrambi nel foglio Paces
+        if 'Paces' in wb.sheetnames:
+            # Crea una nuova versione del foglio Paces con entrambi i tipi di dati
+            wb.remove(wb['Paces'])
+            create_unified_paces_sheet(wb, sport_type)
+            
+            # Aggiorna i valori specifici per il tipo di sport attuale
+            paces_sheet = wb['Paces']
+            
+            # Dobbiamo rilevare dove sono le sezioni per running e cycling
+            running_section_start = None
+            running_section_end = None
+            cycling_section_start = None
+            cycling_section_end = None
+            
+            for row in range(1, paces_sheet.max_row + 1):
+                cell_value = paces_sheet.cell(row=row, column=1).value
+                if isinstance(cell_value, str) and "RITMI PER LA CORSA" in cell_value:
+                    running_section_start = row + 1
+                elif isinstance(cell_value, str) and "VELOCITÀ PER IL CICLISMO" in cell_value:
+                    if running_section_start and not running_section_end:
+                        running_section_end = row - 2  # -2 per escludere la riga vuota
+                    cycling_section_start = row + 1
+            
+            # Se non abbiamo trovato la fine della sezione cycling, è l'ultima riga prima della nota
+            if cycling_section_start and not cycling_section_end:
+                for row in range(cycling_section_start, paces_sheet.max_row + 1):
+                    if not paces_sheet.cell(row=row, column=1).value:
+                        cycling_section_end = row - 1
+                        break
+                # Se ancora non troviamo la fine, prendiamo l'ultima riga
+                if not cycling_section_end:
+                    cycling_section_end = paces_sheet.max_row - 1  # -1 per escludere la nota
+            
+            # Aggiorna i valori in base al tipo di sport
+            if sport_type == "running" and running_section_start and running_section_end:
+                # Aggiorna i valori per la corsa dalle configurazioni
+                running_values = config.get('paces', {})
+                for row in range(running_section_start, running_section_end + 1):
+                    name = paces_sheet.cell(row=row, column=1).value
+                    if name in running_values:
+                        paces_sheet.cell(row=row, column=2).value = running_values[name]
+            
+            elif sport_type == "cycling" and cycling_section_start and cycling_section_end:
+                # Aggiorna i valori per il ciclismo dalle configurazioni
+                cycling_values = config.get('speeds', {})
+                for row in range(cycling_section_start, cycling_section_end + 1):
+                    name = paces_sheet.cell(row=row, column=1).value
+                    if name in cycling_values:
+                        paces_sheet.cell(row=row, column=2).value = cycling_values[name]
         
-        # Aggiorna le frequenze cardiache se esiste il foglio HeartRates
+        # Aggiorna le frequenze cardiache
         if 'HeartRates' in wb.sheetnames:
             update_heart_rates_sheet(wb['HeartRates'], config.get('heart_rates', {}))
         
@@ -110,7 +162,7 @@ def yaml_to_excel(yaml_data, excel_file, create_new=False):
             bottom=Side(style='thin')
         )
         
-        # Aggiorna gli allenamenti nel foglio Workouts se esiste
+        # Aggiorna gli allenamenti nel foglio Workouts
         if 'Workouts' in wb.sheetnames:
             workouts_sheet = wb['Workouts']
             
@@ -149,7 +201,7 @@ def yaml_to_excel(yaml_data, excel_file, create_new=False):
                                 else:
                                     actual_steps.append(step)
                         
-                        # Converti i passi in formato leggibile e ben formattato
+                        # Converti i passi in formato leggibile e ben formattato, specificando il tipo di sport
                         steps_text = format_steps_for_excel(actual_steps, workout_sport_type)
                         
                         workouts.append((week, session, workout_date, description, steps_text, workout_sport_type))
@@ -212,11 +264,39 @@ def yaml_to_excel(yaml_data, excel_file, create_new=False):
             workouts_sheet.column_dimensions['C'].width = 10  # Session
             workouts_sheet.column_dimensions['D'].width = 25  # Description
             workouts_sheet.column_dimensions['E'].width = 60  # Steps
-            
+        
+        # Crea un foglio Examples unificato con esempi per entrambi i tipi di sport
+        create_unified_examples_sheet(wb)
+        
+        # Assicurati che i fogli siano nell'ordine corretto
+        sheet_order = ['Config', 'Paces', 'HeartRates', 'Workouts', 'Examples']
+        
+        # Riordina i fogli solo se necessario e solo quelli che esistono
+        existing_sheets = []
+        for sheet_name in sheet_order:
+            if sheet_name in wb.sheetnames:
+                existing_sheets.append(sheet_name)
+        
+        # Aggiungi eventuali fogli non specificati alla fine
+        for sheet_name in wb.sheetnames:
+            if sheet_name not in existing_sheets:
+                existing_sheets.append(sheet_name)
+        
+        # Riordina i fogli
+        try:
+            wb._sheets = [wb[sheet_name] for sheet_name in existing_sheets]
+        except Exception as e:
+            logging.warning(f"Impossibile riordinare i fogli: {str(e)}")
+        
         # Salva il file Excel
-        wb.save(excel_file)
-        return True
-    
+        try:
+            wb.save(excel_file)
+            logging.info(f"File Excel salvato con successo: {excel_file}")
+            return True
+        except Exception as e:
+            logging.error(f"Errore nel salvataggio del file Excel: {str(e)}")
+            return False
+            
     except Exception as e:
         logging.error(f"Errore nella conversione YAML to Excel: {str(e)}")
         import traceback
@@ -224,12 +304,13 @@ def yaml_to_excel(yaml_data, excel_file, create_new=False):
         return False
 
 
-def format_steps_for_excel(steps):
+def format_steps_for_excel(steps, sport_type="running"):
     """
     Formatta i passi per il foglio Excel con la corretta indentazione.
     
     Args:
         steps: Lista di passi dell'allenamento
+        sport_type: Tipo di sport ('running' o 'cycling')
         
     Returns:
         Testo formattato dei passi
@@ -250,6 +331,17 @@ def format_steps_for_excel(steps):
                 if isinstance(substep, dict) and len(substep) == 1:
                     substep_type = list(substep.keys())[0]
                     substep_detail = substep[substep_type]
+                    
+                    # Gestisci i diversi formati in base al tipo di sport
+                    if sport_type == "cycling":
+                        # Per il ciclismo, assicurati che @ diventi @spd nei passi che hanno zona di ritmo
+                        if '@' in substep_detail and '@spd' not in substep_detail and '@hr' not in substep_detail:
+                            substep_detail = substep_detail.replace('@', '@spd ')
+                    else:  # running
+                        # Per la corsa, assicurati che @spd diventi @ nei passi che hanno zona di velocità
+                        if '@spd' in substep_detail:
+                            substep_detail = substep_detail.replace('@spd ', '@')
+                    
                     # Usa l'indentazione con due spazi per i substep
                     formatted_steps.append(f"  {substep_type}: {substep_detail}")
         
@@ -257,9 +349,21 @@ def format_steps_for_excel(steps):
             # Passo normale
             step_type = list(step.keys())[0]
             step_detail = step[step_type]
+            
+            # Gestisci i diversi formati in base al tipo di sport
+            if sport_type == "cycling":
+                # Per il ciclismo, assicurati che @ diventi @spd nei passi che hanno zona di ritmo
+                if '@' in step_detail and '@spd' not in step_detail and '@hr' not in step_detail:
+                    step_detail = step_detail.replace('@', '@spd ')
+            else:  # running
+                # Per la corsa, assicurati che @spd diventi @ nei passi che hanno zona di velocità
+                if '@spd' in step_detail:
+                    step_detail = step_detail.replace('@spd ', '@')
+            
             formatted_steps.append(f"{step_type}: {step_detail}")
     
     return "\n".join(formatted_steps)
+
 
 
 
@@ -267,6 +371,7 @@ def excel_to_yaml(excel_file, output_file=None, sport_type="running"):
     """
     Converte un file Excel strutturato in un file YAML compatibile con garmin-planner.
     Include supporto per estrarre le date degli allenamenti e la data della gara.
+    Ora estrae sia paces che speeds indipendentemente dal tipo di sport.
     
     Args:
         excel_file: Percorso del file Excel di input
@@ -320,7 +425,7 @@ def excel_to_yaml(excel_file, output_file=None, sport_type="running"):
     plan = {'config': {
         'heart_rates': {},
         'paces': {},
-        'speeds': {},  # Aggiungi sezione speeds per il ciclismo
+        'speeds': {},  # Manteniamo sempre entrambe le sezioni
         'margins': {
             'faster': '0:03',
             'slower': '0:03',
@@ -441,26 +546,22 @@ def excel_to_yaml(excel_file, output_file=None, sport_type="running"):
                 plan['config']['margins']['hr_up'] = int(margins_rows.iloc[0, 3])
             if pd.notna(margins_rows.iloc[0, 4]):
                 plan['config']['margins']['hr_down'] = int(margins_rows.iloc[0, 4])
+        
+        # Estrai preferred_days se presente
+        preferred_days_rows = config_df[config_df.iloc[:, 0] == 'preferred_days']
+        if not preferred_days_rows.empty and pd.notna(preferred_days_rows.iloc[0, 1]):
+            preferred_days_value = str(preferred_days_rows.iloc[0, 1]).strip()
+            plan['config']['preferred_days'] = preferred_days_value
     
-    # Estrai i ritmi per corsa o velocità per ciclismo
-    if sport_type == "running" and 'Paces' in xls.sheet_names:
-        paces_df = pd.read_excel(xls, 'Paces', header=0)
+    # NUOVA IMPLEMENTAZIONE: Utilizzare il parser migliorato per estrarre ritmi e velocità
+    if 'Paces' in xls.sheet_names:
+        paces, speeds = extract_paces_and_speeds_from_excel(excel_file)
         
-        for _, row in paces_df.iterrows():
-            # Assicurati che ci siano sia il nome che il valore
-            if pd.notna(row.iloc[0]) and pd.notna(row.iloc[1]):
-                name = str(row.iloc[0]).strip()
-                value = str(row.iloc[1]).strip()
-                plan['config']['paces'][name] = value
-    elif sport_type == "cycling" and 'Speeds' in xls.sheet_names:
-        speeds_df = pd.read_excel(xls, 'Speeds', header=0)
-        
-        for _, row in speeds_df.iterrows():
-            # Assicurati che ci siano sia il nome che il valore
-            if pd.notna(row.iloc[0]) and pd.notna(row.iloc[1]):
-                name = str(row.iloc[0]).strip()
-                value = str(row.iloc[1]).strip()
-                plan['config']['speeds'][name] = value
+        # Aggiorna il piano con i valori estratti
+        if paces:
+            plan['config']['paces'] = paces
+        if speeds:
+            plan['config']['speeds'] = speeds
     
     # Estrai le frequenze cardiache
     if 'HeartRates' in xls.sheet_names:
@@ -540,6 +641,94 @@ def excel_to_yaml(excel_file, output_file=None, sport_type="running"):
     
     return plan
 
+def extract_paces_and_speeds_from_excel(excel_file):
+    """
+    Estrae sia i ritmi per la corsa che le velocità per il ciclismo
+    dal foglio Paces unificato, usando openpyxl per accedere alle celle direttamente.
+    
+    Args:
+        excel_file: Percorso del file Excel
+        
+    Returns:
+        Tuple (paces, speeds) con i dizionari contenenti i valori estratti
+    """
+    try:
+        import openpyxl
+        
+        # Carica il workbook
+        wb = openpyxl.load_workbook(excel_file, data_only=True)
+        
+        # Verifica se il foglio Paces esiste
+        if 'Paces' not in wb.sheetnames:
+            print("Foglio Paces non trovato!")
+            return {}, {}
+        
+        # Ottieni il foglio
+        sheet = wb['Paces']
+        
+        # Dizionari da popolare
+        paces = {}
+        speeds = {}
+        
+        # Inizializza lo stato del parser
+        current_section = None  # 'running' o 'cycling'
+        
+        # Processa riga per riga
+        for row_idx in range(1, sheet.max_row + 1):
+            # Leggi i valori dalle prime tre colonne
+            col0 = sheet.cell(row=row_idx, column=1).value
+            col1 = sheet.cell(row=row_idx, column=2).value
+            
+            col0_str = str(col0) if col0 is not None else ""
+            
+            # Stampa la riga per debug
+            print(f"Riga {row_idx}: {col0_str} - {col1}")
+            
+            # Controlla se è un'intestazione di sezione
+            if col0_str and "RITMI PER LA CORSA" in col0_str:
+                current_section = 'running'
+                print(f"Trovata sezione RUNNING a riga {row_idx}")
+                continue
+            elif col0_str and "VELOCITÀ PER IL CICLISMO" in col0_str:
+                current_section = 'cycling'
+                print(f"Trovata sezione CYCLING a riga {row_idx}")
+                continue
+            
+            # Salta righe vuote, intestazioni o righe di commento
+            if not col0 or col0 == "Name" or col0_str.startswith('*') or col0_str.startswith('#'):
+                continue
+            
+            # Se abbiamo un nome e un valore in una sezione valida
+            if current_section and col0 and col1:
+                # Estrai nome e valore
+                name = col0_str.strip()
+                
+                # Gestisci diversi tipi di dati per il valore
+                if isinstance(col1, (int, float)):
+                    value = str(col1)
+                else:
+                    value = str(col1).strip()
+                
+                # Aggiunta importante di debug
+                print(f"Aggiungendo {name}: {value} a {current_section}")
+                
+                # Aggiungi al dizionario appropriato
+                if current_section == 'running':
+                    paces[name] = value
+                elif current_section == 'cycling':
+                    speeds[name] = value
+        
+        # Stampa i valori estratti per debug
+        print(f"Ritmi estratti: {paces}")
+        print(f"Velocità estratte: {speeds}")
+        
+        return paces, speeds
+    
+    except Exception as e:
+        import traceback
+        print(f"Errore nell'estrazione dei ritmi e velocità: {str(e)}")
+        traceback.print_exc()
+        return {}, {}
 
 def update_workouts_sheet(sheet, yaml_data):
     """
@@ -733,8 +922,12 @@ def update_config_sheet(sheet, config):
         if key:
             config_rows[key] = row
     
-    # Liste delle chiavi da gestire
-    priority_keys = ['name_prefix', 'sport_type', 'margins', 'race_day', 'preferred_days', 'athlete_name']
+    # Liste delle chiavi da gestire - SENZA 'athlete_name'
+    priority_keys = ['name_prefix', 'sport_type', 'margins', 'race_day', 'preferred_days']
+    
+    # Chiavi da NON includere nelle righe di Config in quanto già presenti nei loro fogli dedicati
+    # o perché non devono essere mostrate nel foglio Config
+    excluded_keys = ['paces', 'speeds', 'heart_rates', 'athlete_name']
     
     # Prima gestisci le chiavi prioritarie
     for key in priority_keys:
@@ -777,9 +970,10 @@ def update_config_sheet(sheet, config):
                     else:
                         sheet.cell(row=row_index, column=2).value = value
     
-    # Poi gestisci altre chiavi che potrebbero essere presenti nel config
+    # Poi gestisci altre chiavi che potrebbero essere presenti nel config,
+    # ma escludiamo le chiavi che non vanno nel foglio Config
     for key, value in config.items():
-        if key not in priority_keys:
+        if key not in priority_keys and key not in excluded_keys:
             if key in config_rows:
                 row_index = config_rows[key]
             else:
@@ -1119,31 +1313,38 @@ def parse_workout_steps(steps_str, workout_name, sport_type="running"):
 
 def auto_adjust_column_widths(worksheet):
     """
-    Automatically adjust column widths based on content.
+    Automatically adjust column widths based on content, handling merged cells properly.
     
     Args:
         worksheet: openpyxl worksheet object
     """
-    for column in worksheet.columns:
+    for column_cells in worksheet.columns:
         max_length = 0
-        column_letter = column[0].column_letter
+        column = None
         
-        for cell in column:
-            if cell.value:
-                cell_length = len(str(cell.value))
-                max_length = max(max_length, cell_length)
+        for cell in column_cells:
+            # Skip merged cells which don't have column_letter attribute
+            if hasattr(cell, 'column_letter'):
+                if column is None:
+                    column = cell.column_letter
+                
+                if cell.value:
+                    cell_length = len(str(cell.value))
+                    max_length = max(max_length, cell_length)
         
-        adjusted_width = max(max_length + 2, 8)  # Add some extra space
-        worksheet.column_dimensions[column_letter].width = min(adjusted_width, 60)  # Limit to 60 to avoid too wide columns
+        if column is not None:  # Only adjust if we found a valid column
+            adjusted_width = max(max_length + 2, 8)  # Add some extra space
+            worksheet.column_dimensions[column].width = min(adjusted_width, 60)  # Limit to 60 to avoid too wide columns
+
 
 def create_sample_excel(output_file='sample_training_plan.xlsx', sport_type="running"):
     """
     Create a sample Excel file with the expected structure for the training plan.
-    Includes support for a Date column.
+    Always includes both running and cycling paces in a unified Paces sheet.
     
     Args:
         output_file: Path for the output Excel file
-        sport_type: Type of sport ('running' or 'cycling')
+        sport_type: Type of sport ('running' or 'cycling') - usato solo per impostare il valore di default
         
     Returns:
         Path to the created Excel file, or None if there was an error
@@ -1157,7 +1358,7 @@ def create_sample_excel(output_file='sample_training_plan.xlsx', sport_type="run
         logging.error("Install openpyxl with: pip install openpyxl")
         return None
     
-    logging.info(f"Creating sample Excel file for {sport_type}: {output_file}")
+    logging.info(f"Creating sample Excel file: {output_file}")
     
     wb = openpyxl.Workbook()
     
@@ -1170,7 +1371,7 @@ def create_sample_excel(output_file='sample_training_plan.xlsx', sport_type="run
     )
 
     random_suffix = ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-    prefix = f"MY{'RUN' if sport_type == 'running' else 'BIKE'}_{random_suffix}_"
+    prefix = f"MYRUN_{random_suffix}_"
     
     # Config sheet
     config_sheet = wb.active
@@ -1187,20 +1388,27 @@ def create_sample_excel(output_file='sample_training_plan.xlsx', sport_type="run
     config_sheet['A2'] = 'name_prefix'
     config_sheet['B2'] = prefix
     
-    # Aggiungi il tipo di sport alla configurazione
+    # Imposta il tipo di sport
     config_sheet['A3'] = 'sport_type'
     config_sheet['B3'] = sport_type
     
-    # Imposta i margini appropriati in base al tipo di sport
+    # Imposta i margini appropriati 
     config_sheet['A4'] = 'margins'
-    if sport_type == "cycling":
-        config_sheet['B4'] = '2.0'    # faster_spd in km/h
-        config_sheet['C4'] = '2.0'    # slower_spd in km/h
-    else:  # running
-        config_sheet['B4'] = '0:03'   # faster in min:sec
-        config_sheet['C4'] = '0:03'   # slower in min:sec
+    config_sheet['B4'] = '0:03'   # faster in min:sec
+    config_sheet['C4'] = '0:03'   # slower in min:sec
     config_sheet['D4'] = 5        # hr_up
     config_sheet['E4'] = 5        # hr_down
+    
+    # Aggiungi race_day (data gara)
+    config_sheet['A5'] = 'race_day'
+    # Imposta una data di esempio 6 mesi nel futuro
+    from datetime import datetime, timedelta
+    future_date = datetime.now() + timedelta(days=180)
+    config_sheet['B5'] = future_date.strftime("%Y-%m-%d")
+    
+    # Aggiungi preferred_days (giorni preferiti)
+    config_sheet['A6'] = 'preferred_days'
+    config_sheet['B6'] = '[1, 3, 5]'  # Martedì, Giovedì, Sabato
     
     # Format header
     header_fill = PatternFill(start_color="DDEBF7", end_color="DDEBF7", fill_type="solid")
@@ -1208,52 +1416,8 @@ def create_sample_excel(output_file='sample_training_plan.xlsx', sport_type="run
         config_sheet[f'{col}1'].font = Font(bold=True)
         config_sheet[f'{col}1'].fill = header_fill
     
-    # Crea il foglio appropriato in base al tipo di sport
-    if sport_type == "running":
-        # Paces sheet per running
-        zones_sheet = wb.create_sheet(title='Paces')
-        zones_sheet['A1'] = 'Name'
-        zones_sheet['B1'] = 'Value'
-        
-        zones_sheet['A2'] = 'Z1'
-        zones_sheet['B2'] = '6:30'
-        
-        zones_sheet['A3'] = 'Z2'
-        zones_sheet['B3'] = '6:00'
-        
-        zones_sheet['A4'] = 'Z3'
-        zones_sheet['B4'] = '5:30'
-        
-        zones_sheet['A5'] = 'Z4'
-        zones_sheet['B5'] = '5:00'
-        
-        zones_sheet['A6'] = 'Z5'
-        zones_sheet['B6'] = '4:30'
-    else:  # cycling
-        # Speeds sheet per cycling
-        zones_sheet = wb.create_sheet(title='Speeds')
-        zones_sheet['A1'] = 'Name'
-        zones_sheet['B1'] = 'Value'
-        
-        zones_sheet['A2'] = 'Z1'
-        zones_sheet['B2'] = '15.0'
-        
-        zones_sheet['A3'] = 'Z2'
-        zones_sheet['B3'] = '20.0'
-        
-        zones_sheet['A4'] = 'Z3'
-        zones_sheet['B4'] = '25.0'
-        
-        zones_sheet['A5'] = 'Z4'
-        zones_sheet['B5'] = '30.0'
-        
-        zones_sheet['A6'] = 'Z5'
-        zones_sheet['B6'] = '35.0'
-    
-    # Format header
-    for col in ['A', 'B']:
-        zones_sheet[f'{col}1'].font = Font(bold=True)
-        zones_sheet[f'{col}1'].fill = header_fill
+    # Crea il foglio Paces unificato con entrambi i tipi di ritmi/velocità
+    create_unified_paces_sheet(wb, sport_type)
     
     # HeartRates sheet (Z1-Z5 zones)
     hr_sheet = wb.create_sheet(title='HeartRates')
@@ -1292,7 +1456,7 @@ def create_sample_excel(output_file='sample_training_plan.xlsx', sport_type="run
     # Create a merged cell for the athlete's name
     workouts_sheet.merge_cells('A1:E1')
     athlete_cell = workouts_sheet['A1']
-    athlete_cell.value = "Athlete: "  # Prepared to be filled in
+    athlete_cell.value = "Atleta: "  # Prepared to be filled in
     athlete_cell.alignment = Alignment(horizontal='center', vertical='center')
     athlete_cell.font = Font(size=12, bold=True)
     # Add border to the athlete cell
@@ -1312,27 +1476,16 @@ def create_sample_excel(output_file='sample_training_plan.xlsx', sport_type="run
         cell.fill = header_fill
         cell.border = thin_border  # Add border to all header cells
     
-    # Scegli gli esempi di workout in base al tipo di sport
-    if sport_type == "running":
-        workouts = [
-            # Week, Session, Description, Steps
-            (1, 1, 'Easy run', 'warmup: 10min @ Z1_HR\ninterval: 30min @ Z2\ncooldown: 5min @ Z1_HR'),
-            (1, 2, 'Short intervals', 'warmup: 15min @ Z1_HR\nrepeat 5:\n  interval: 400m @ Z5\n  recovery: 2min @ Z1_HR\ncooldown: 10min @ Z1_HR'),
-            (1, 3, 'Long slow run', 'warmup: 10min @ Z1_HR\ninterval: 45min @ Z2\ncooldown: 5min @ Z1_HR'),
-            (2, 1, 'Recovery run', 'interval: 30min @ Z1_HR'),
-            (2, 2, 'Threshold run', 'warmup: 15min @ Z1_HR\ninterval: 20min @ Z4\ncooldown: 10min @ Z1_HR'),
-            (2, 3, 'Progressive long run', 'warmup: 10min @ Z1_HR\ninterval: 30min @ Z2\ninterval: 20min @ Z3\ncooldown: 10min @ Z1_HR')
-        ]
-    else:  # cycling
-        workouts = [
-            # Week, Session, Description, Steps
-            (1, 1, 'Easy ride', 'warmup: 10min @hr Z1_HR\ninterval: 30min @spd Z2\ncooldown: 5min @hr Z1_HR'),
-            (1, 2, 'Short intervals', 'warmup: 15min @hr Z1_HR\nrepeat 5:\n  interval: 2min @spd Z5\n  recovery: 3min @hr Z1_HR\ncooldown: 10min @hr Z1_HR'),
-            (1, 3, 'Long endurance ride', 'warmup: 10min @hr Z1_HR\ninterval: 60min @spd Z2\ncooldown: 5min @hr Z1_HR'),
-            (2, 1, 'Recovery ride', 'interval: 30min @hr Z1_HR'),
-            (2, 2, 'Threshold ride', 'warmup: 15min @hr Z1_HR\ninterval: 20min @spd Z4\ncooldown: 10min @hr Z1_HR'),
-            (2, 3, 'Progressive ride', 'warmup: 10min @hr Z1_HR\ninterval: 30min @spd Z2\ninterval: 20min @spd Z3\ncooldown: 10min @hr Z1_HR')
-        ]
+    # Esempi di allenamenti per running (sempre mostriamo questi)
+    workouts = [
+        # Week, Session, Description, Steps
+        (1, 1, 'Easy run', 'warmup: 10min @ Z1_HR\ninterval: 30min @ Z2\ncooldown: 5min @ Z1_HR'),
+        (1, 2, 'Short intervals', 'warmup: 15min @ Z1_HR\nrepeat 5:\n  interval: 400m @ Z5\n  recovery: 2min @ Z1_HR\ncooldown: 10min @ Z1_HR'),
+        (1, 3, 'Long slow run', 'warmup: 10min @ Z1_HR\ninterval: 45min @ Z2\ncooldown: 5min @ Z1_HR'),
+        (2, 1, 'Recovery run', 'interval: 30min @ Z1_HR'),
+        (2, 2, 'Threshold run', 'warmup: 15min @ Z1_HR\ninterval: 20min @ Z4\ncooldown: 10min @ Z1_HR'),
+        (2, 3, 'Progressive long run', 'warmup: 10min @ Z1_HR\ninterval: 30min @ Z2\ninterval: 20min @ Z3\ncooldown: 10min @ Z1_HR')
+    ]
     
     # Define alternating colors for weeks
     week_colors = [
@@ -1348,7 +1501,7 @@ def create_sample_excel(output_file='sample_training_plan.xlsx', sport_type="run
     current_week = None
     current_color_index = 0
     
-    for i, (week, session, description, steps) in enumerate(workouts, start=3):  # Start from row 3 (after header and athlete row)
+    for i, (week, session, description, steps) in enumerate(workouts, start=3):
         # If the week changes, change the color
         if week != current_week:
             current_week = week
@@ -1397,15 +1550,580 @@ def create_sample_excel(output_file='sample_training_plan.xlsx', sport_type="run
     workouts_sheet.column_dimensions['D'].width = 25  # Description
     workouts_sheet.column_dimensions['E'].width = 60  # Steps
     
-    # Automatically adjust column widths in Config and HR sheets
-    auto_adjust_column_widths(config_sheet)
-    auto_adjust_column_widths(zones_sheet)
-    auto_adjust_column_widths(hr_sheet)
+    # Create Examples sheet with proper content for both running and cycling
+    create_unified_examples_sheet(wb)
+    
+    # Ensure sheets are in the correct order
+    sheet_order = ['Config', 'Paces', 'HeartRates', 'Workouts', 'Examples']
+    
+    # Reorder sheets
+    wb._sheets = [wb[sheet_name] for sheet_name in sheet_order if sheet_name in wb.sheetnames]
     
     # Save the file
     wb.save(output_file)
-    logging.info(f"Sample Excel file created for {sport_type}: {output_file}")
+    logging.info(f"Sample Excel file created: {output_file}")
     return output_file
+
+
+
+def create_unified_paces_sheet(workbook, sport_type="running"):
+    """
+    Crea un foglio Paces unificato che contiene sia i ritmi per la corsa
+    che le velocità per il ciclismo.
+    
+    Args:
+        workbook: Workbook di openpyxl
+        sport_type: Tipo di sport ('running' o 'cycling') - determina quali valori evidenziare
+        
+    Returns:
+        Il foglio Paces creato
+    """
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    
+    # Crea o ottieni il foglio Paces
+    if 'Paces' in workbook.sheetnames:
+        paces_sheet = workbook['Paces']
+        # Pulisci il foglio esistente
+        for row in range(paces_sheet.max_row, 0, -1):
+            paces_sheet.delete_rows(row)
+    else:
+        paces_sheet = workbook.create_sheet(title='Paces')
+    
+    # Definisci stili
+    header_font = Font(bold=True)
+    subheader_font = Font(bold=True, size=12)
+    wrapped_alignment = Alignment(wrap_text=True, vertical='top')
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    header_fill = PatternFill(start_color="E6E6E6", end_color="E6E6E6", fill_type="solid")
+    running_fill = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")  # Verde chiaro
+    cycling_fill = PatternFill(start_color="DAEEF3", end_color="DAEEF3", fill_type="solid")  # Azzurro chiaro
+    active_fill = running_fill if sport_type == "running" else cycling_fill
+    
+    # Imposta le intestazioni di colonna
+    paces_sheet['A1'] = 'Name'
+    paces_sheet['B1'] = 'Value'
+    paces_sheet['C1'] = 'Note'
+    
+    # Formatta le intestazioni
+    for col in ['A', 'B', 'C']:
+        cell = paces_sheet[f'{col}1']
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.border = thin_border
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+    
+    # Imposta larghezze colonne
+    paces_sheet.column_dimensions['A'].width = 15
+    paces_sheet.column_dimensions['B'].width = 15
+    paces_sheet.column_dimensions['C'].width = 30
+    
+    # Sezione Running
+    row = 2
+    paces_sheet.merge_cells(f'A{row}:C{row}')
+    paces_sheet[f'A{row}'] = 'RITMI PER LA CORSA (min/km)'
+    paces_sheet[f'A{row}'].font = subheader_font
+    paces_sheet[f'A{row}'].fill = running_fill
+    paces_sheet[f'A{row}'].alignment = Alignment(horizontal='center', vertical='center')
+    row += 1
+    
+    # Ritmi per la corsa
+    running_paces = [
+        ('Z1', '6:30', 'Ritmo facile (rigenerativo)'),
+        ('Z2', '6:00', 'Ritmo aerobico (endurance)'),
+        ('Z3', '5:30', 'Ritmo medio (soglia aerobica)'),
+        ('Z4', '5:00', 'Ritmo soglia (soglia anaerobica)'),
+        ('Z5', '4:30', 'Ritmo VO2max (anaerobico)'),
+        ('recovery', '7:00', 'Ritmo recupero (molto lento)'),
+        ('threshold', '5:10', 'Ritmo soglia personalizzato'),
+        ('marathon', '5:20', 'Ritmo maratona personalizzato'),
+        ('race_pace', '5:10', 'Ritmo gara personalizzato'),
+    ]
+    
+    # Aggiungi ritmi per la corsa
+    for name, value, note in running_paces:
+        paces_sheet[f'A{row}'] = name
+        paces_sheet[f'B{row}'] = value
+        paces_sheet[f'C{row}'] = note
+        
+        # Applica bordi e formattazione a tutte le celle della riga
+        for col in ['A', 'B', 'C']:
+            cell = paces_sheet[f'{col}{row}']
+            cell.border = thin_border
+            cell.alignment = wrapped_alignment
+            
+            # Evidenzia le righe in base al tipo di sport attivo
+            if sport_type == "running":
+                cell.fill = PatternFill(start_color="F5F5F5", end_color="F5F5F5", fill_type="solid")
+        
+        row += 1
+    
+    # Aggiungi una riga vuota tra le sezioni
+    row += 1
+    
+    # Sezione Cycling
+    paces_sheet.merge_cells(f'A{row}:C{row}')
+    paces_sheet[f'A{row}'] = 'VELOCITÀ PER IL CICLISMO (km/h)'
+    paces_sheet[f'A{row}'].font = subheader_font
+    paces_sheet[f'A{row}'].fill = cycling_fill
+    paces_sheet[f'A{row}'].alignment = Alignment(horizontal='center', vertical='center')
+    row += 1
+    
+    # Velocità per il ciclismo
+    cycling_speeds = [
+        ('Z1', '15.0', 'Velocità facile (zona 1)'),
+        ('Z2', '20.0', 'Velocità aerobica (zona 2)'),
+        ('Z3', '25.0', 'Velocità media (zona 3)'),
+        ('Z4', '30.0', 'Velocità soglia (zona 4)'),
+        ('Z5', '35.0', 'Velocità VO2max (zona 5)'),
+        ('recovery', '12.0', 'Velocità recupero (molto lenta)'),
+        ('threshold', '28.0', 'Velocità soglia personalizzata'),
+        ('ftp', '32.0', 'Velocità FTP personalizzata'),
+    ]
+    
+    # Aggiungi velocità per il ciclismo
+    for name, value, note in cycling_speeds:
+        paces_sheet[f'A{row}'] = name
+        paces_sheet[f'B{row}'] = value
+        paces_sheet[f'C{row}'] = note
+        
+        # Applica bordi e formattazione a tutte le celle della riga
+        for col in ['A', 'B', 'C']:
+            cell = paces_sheet[f'{col}{row}']
+            cell.border = thin_border
+            cell.alignment = wrapped_alignment
+            
+            # Evidenzia le righe in base al tipo di sport attivo
+            if sport_type == "cycling":
+                cell.fill = PatternFill(start_color="F5F5F5", end_color="F5F5F5", fill_type="solid")
+        
+        row += 1
+    
+    # Aggiungi una nota informativa alla fine
+    row += 1
+    paces_sheet.merge_cells(f'A{row}:C{row}')
+    if sport_type == "running":
+        paces_sheet[f'A{row}'] = '* Il tipo di sport attivo è CORSA. Le zone Z1-Z5 si riferiscono ai ritmi in min/km.'
+    else:
+        paces_sheet[f'A{row}'] = '* Il tipo di sport attivo è CICLISMO. Le zone Z1-Z5 si riferiscono alle velocità in km/h.'
+    paces_sheet[f'A{row}'].font = Font(italic=True)
+    paces_sheet[f'A{row}'].alignment = wrapped_alignment
+    
+    return paces_sheet
+
+
+
+def create_examples_sheet(workbook, sport_type="running"):
+    """
+    Crea un foglio Examples nel formato corretto in italiano con formattazione appropriata,
+    adattato al tipo di sport specificato.
+    
+    Args:
+        workbook: Workbook di openpyxl
+        sport_type: Tipo di sport ('running' o 'cycling')
+        
+    Returns:
+        Il foglio Examples creato
+    """
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    
+    # Crea o ottieni il foglio Examples
+    if 'Examples' in workbook.sheetnames:
+        examples_sheet = workbook['Examples']
+        # Pulisci il foglio esistente
+        for row in range(examples_sheet.max_row, 0, -1):
+            examples_sheet.delete_rows(row)
+    else:
+        examples_sheet = workbook.create_sheet(title='Examples')
+    
+    # Definisci stili
+    header_font = Font(bold=True)
+    wrapped_alignment = Alignment(wrap_text=True, vertical='top')
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    header_fill = PatternFill(start_color="E6E6E6", end_color="E6E6E6", fill_type="solid")
+    alternate_fill = PatternFill(start_color="F5F5F5", end_color="F5F5F5", fill_type="solid")
+    
+    # Imposta le intestazioni di colonna
+    examples_sheet['A1'] = 'Tipo di Esempio'
+    examples_sheet['B1'] = 'Descrizione'
+    examples_sheet['C1'] = 'Passi (Steps)'
+    
+    # Formatta le intestazioni
+    for col in ['A', 'B', 'C']:
+        cell = examples_sheet[f'{col}1']
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.border = thin_border
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+    
+    # Imposta larghezze colonne
+    examples_sheet.column_dimensions['A'].width = 20
+    examples_sheet.column_dimensions['B'].width = 40
+    examples_sheet.column_dimensions['C'].width = 60
+    
+    # Riga 2: Nota informativa
+    examples_sheet.merge_cells('A2:C2')
+    examples_sheet['A2'] = '# ESEMPI DI SINTASSI - questo foglio è solo per scopo informativo e non viene importato'
+    examples_sheet['A2'].font = Font(italic=True)
+    examples_sheet['A2'].alignment = wrapped_alignment
+    
+    # Compila dati di esempio in base al tipo di sport
+    examples_data = []
+    
+    if sport_type == "running":
+        # Esempi per la corsa
+        examples_data = [
+            # Distanza
+            ('Distanza', 'Esempio di allenamento basato su distanza', 
+             "warmup: 2km @Z1_HR\ninterval: 5km @Z3\ncooldown: 1km @Z1_HR"),
+            
+            # Tempo
+            ('Tempo', 'Esempio di allenamento basato su tempo', 
+             "warmup: 10min @Z1_HR\ninterval: 30min @Z2\ncooldown: 5min @Z1_HR"),
+            
+            # Ripetute semplici
+            ('Ripetute semplici', 'Esempio di allenamento con ripetute', 
+             "warmup: 10min @Z1_HR\nrepeat 5:\n  interval: 1km @Z4\n  recovery: 2min @Z1_HR\ncooldown: 10min @Z1_HR"),
+            
+            # Ripetute annidate
+            ('Ripetute annidate', 'Esempio di ripetute annidate', 
+             "warmup: 10min @Z1_HR\nrepeat 3:\n  interval: 5min @Z3\n  repeat 4:\n    interval: 30s @Z5\n    recovery: 30s @Z1_HR\n  recovery: 3min @Z2_HR\ncooldown: 10min @Z1_HR"),
+            
+            # Con descrizioni
+            ('Con descrizioni', 'Esempio con descrizioni per ogni passo', 
+             "warmup: 10min @Z1_HR -- Inizia lentamente\ninterval: 20min @Z3 -- Mantieni ritmo costante\ncooldown: 5min @Z1_HR -- Rallenta gradualmente"),
+            
+            # Pulsante lap
+            ('Pulsante lap', 'Esempio con pulsante lap', 
+             "warmup: 10min @Z1_HR\nrest: lap-button @Z1_HR -- Premi lap quando sei pronto\ninterval: 5km @Z3\ncooldown: 5min @Z1_HR"),
+            
+            # Zone personalizzate
+            ('Zone personalizzate', 'Esempio con zone personalizzate', 
+             "warmup: 10min @Z1_HR\ninterval: 20min @marathon\ninterval: 10min @threshold\ncooldown: 5min @Z1_HR")
+        ]
+    else:  # cycling
+        # Esempi per il ciclismo
+        examples_data = [
+            # Distanza
+            ('Distanza', 'Esempio di allenamento basato su distanza', 
+             "warmup: 5km @hr Z1_HR\ninterval: 20km @spd Z3\ncooldown: 3km @hr Z1_HR"),
+            
+            # Tempo
+            ('Tempo', 'Esempio di allenamento basato su tempo', 
+             "warmup: 15min @hr Z1_HR\ninterval: 40min @spd Z2\ncooldown: 5min @hr Z1_HR"),
+            
+            # Ripetute semplici
+            ('Ripetute semplici', 'Esempio di allenamento con ripetute', 
+             "warmup: 15min @hr Z1_HR\nrepeat 5:\n  interval: 2min @spd Z4\n  recovery: 2min @hr Z1_HR\ncooldown: 10min @hr Z1_HR"),
+            
+            # Ripetute annidate
+            ('Ripetute annidate', 'Esempio di ripetute annidate', 
+             "warmup: 15min @hr Z1_HR\nrepeat 3:\n  interval: 8min @spd Z3\n  repeat 4:\n    interval: 20s @spd Z5\n    recovery: 40s @hr Z1_HR\n  recovery: 3min @hr Z2_HR\ncooldown: 10min @hr Z1_HR"),
+            
+            # Con descrizioni
+            ('Con descrizioni', 'Esempio con descrizioni per ogni passo', 
+             "warmup: 15min @hr Z1_HR -- Inizia lentamente\ninterval: 30min @spd Z3 -- Mantieni ritmo costante\ncooldown: 10min @hr Z1_HR -- Rallenta gradualmente"),
+            
+            # Pulsante lap
+            ('Pulsante lap', 'Esempio con pulsante lap', 
+             "warmup: 15min @hr Z1_HR\nrest: lap-button @hr Z1_HR -- Premi lap quando sei pronto\ninterval: 20km @spd Z3\ncooldown: 5min @hr Z1_HR"),
+            
+            # Zone personalizzate
+            ('Zone personalizzate', 'Esempio con zone personalizzate', 
+             "warmup: 15min @hr Z1_HR\ninterval: 30min @spd 28.0\ninterval: 20min @spd threshold\ncooldown: 10min @hr Z1_HR")
+        ]
+    
+    # Aggiungi esempi alla tabella
+    for i, (tipo, descrizione, passi) in enumerate(examples_data, start=3):
+        row_num = i
+        examples_sheet[f'A{row_num}'] = tipo
+        examples_sheet[f'B{row_num}'] = descrizione
+        examples_sheet[f'C{row_num}'] = passi
+        
+        # Applica bordi e formattazione a tutte le celle della riga
+        for col in ['A', 'B', 'C']:
+            cell = examples_sheet[f'{col}{row_num}']
+            cell.border = thin_border
+            cell.alignment = wrapped_alignment
+            
+            # Applica un colore di sfondo alternato per migliorare la leggibilità
+            if row_num % 2 == 1:
+                cell.fill = alternate_fill
+    
+    # Aggiungi una riga vuota prima delle note sulla sintassi
+    row_num = len(examples_data) + 3
+    
+    # Aggiungi note sulla sintassi, diverse per ogni sport
+    row_num += 1
+    examples_sheet.merge_cells(f'A{row_num}:C{row_num}')
+    examples_sheet[f'A{row_num}'] = '# SINTASSI SUPPORTATA NEGLI STEP'
+    examples_sheet[f'A{row_num}'].font = Font(italic=True)
+    examples_sheet[f'A{row_num}'].alignment = wrapped_alignment
+    
+    # Regole di sintassi specifiche per sport
+    if sport_type == "running":
+        syntax_rules = [
+            "Tipo: durata @zona -- descrizione opzionale",
+            "Tipi: warmup, interval, recovery, cooldown, rest, repeat, other",
+            "Durata: tempo (s, min, h) o distanza (m, km)",
+            "Zone: Z1-Z5 (passo), Z1_HR-Z5_HR (freq. cardiaca), o qualsiasi zona definita nei fogli Paces/HeartRates",
+            "Repeat: repeat N: seguito da step indentati con 2 spazi"
+        ]
+    else:  # cycling
+        syntax_rules = [
+            "Tipo: durata @hr zona o durata @spd zona -- descrizione opzionale",
+            "Tipi: warmup, interval, recovery, cooldown, rest, repeat, other",
+            "Durata: tempo (s, min, h) o distanza (m, km)",
+            "Zone HR: Z1_HR-Z5_HR (freq. cardiaca) o qualsiasi zona HR definita nel foglio HeartRates",
+            "Zone Velocità: Z1-Z5 (km/h) o qualsiasi zona definita nel foglio Speeds",
+            "Repeat: repeat N: seguito da step indentati con 2 spazi"
+        ]
+    
+    for i, rule in enumerate(syntax_rules, start=1):
+        rule_row = row_num + i
+        examples_sheet.merge_cells(f'A{rule_row}:C{rule_row}')
+        examples_sheet[f'A{rule_row}'] = rule
+        examples_sheet[f'A{rule_row}'].font = Font(italic=True)
+        examples_sheet[f'A{rule_row}'].alignment = wrapped_alignment
+    
+    return examples_sheet
+
+
+def create_unified_examples_sheet(workbook):
+    """
+    Crea un foglio Examples unificato che contiene esempi sia per la corsa che per il ciclismo.
+    
+    Args:
+        workbook: Workbook di openpyxl
+        
+    Returns:
+        Il foglio Examples creato
+    """
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    
+    # Crea o ottieni il foglio Examples
+    if 'Examples' in workbook.sheetnames:
+        examples_sheet = workbook['Examples']
+        # Pulisci il foglio esistente
+        for row in range(examples_sheet.max_row, 0, -1):
+            examples_sheet.delete_rows(row)
+    else:
+        examples_sheet = workbook.create_sheet(title='Examples')
+    
+    # Definisci stili
+    header_font = Font(bold=True)
+    subheader_font = Font(bold=True, size=12)
+    wrapped_alignment = Alignment(wrap_text=True, vertical='top')
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    header_fill = PatternFill(start_color="E6E6E6", end_color="E6E6E6", fill_type="solid")
+    running_fill = PatternFill(start_color="E2EFDA", end_color="E2EFDA", fill_type="solid")  # Verde chiaro
+    cycling_fill = PatternFill(start_color="DAEEF3", end_color="DAEEF3", fill_type="solid")  # Azzurro chiaro
+    alternate_fill = PatternFill(start_color="F5F5F5", end_color="F5F5F5", fill_type="solid")
+    
+    # Imposta le intestazioni di colonna
+    examples_sheet['A1'] = 'Tipo di Esempio'
+    examples_sheet['B1'] = 'Descrizione'
+    examples_sheet['C1'] = 'Passi (Steps)'
+    
+    # Formatta le intestazioni
+    for col in ['A', 'B', 'C']:
+        cell = examples_sheet[f'{col}1']
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.border = thin_border
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+    
+    # Imposta larghezze colonne
+    examples_sheet.column_dimensions['A'].width = 20
+    examples_sheet.column_dimensions['B'].width = 40
+    examples_sheet.column_dimensions['C'].width = 60
+    
+    # Riga 2: Nota informativa
+    examples_sheet.merge_cells('A2:C2')
+    examples_sheet['A2'] = '# ESEMPI DI SINTASSI - questo foglio è solo per scopo informativo e non viene importato'
+    examples_sheet['A2'].font = Font(italic=True)
+    examples_sheet['A2'].alignment = wrapped_alignment
+    
+    # Sezione Running
+    row = 3
+    examples_sheet.merge_cells(f'A{row}:C{row}')
+    examples_sheet[f'A{row}'] = 'ESEMPI PER LA CORSA (RUNNING)'
+    examples_sheet[f'A{row}'].font = subheader_font
+    examples_sheet[f'A{row}'].fill = running_fill
+    examples_sheet[f'A{row}'].alignment = Alignment(horizontal='center', vertical='center')
+    row += 1
+    
+    # Esempi per la corsa
+    running_examples = [
+        # Distanza
+        ('Distanza', 'Esempio di allenamento basato su distanza', 
+         "warmup: 2km @Z1_HR\ninterval: 5km @Z3\ncooldown: 1km @Z1_HR"),
+        
+        # Tempo
+        ('Tempo', 'Esempio di allenamento basato su tempo', 
+         "warmup: 10min @Z1_HR\ninterval: 30min @Z2\ncooldown: 5min @Z1_HR"),
+        
+        # Ripetute semplici
+        ('Ripetute semplici', 'Esempio di allenamento con ripetute', 
+         "warmup: 10min @Z1_HR\nrepeat 5:\n  interval: 1km @Z4\n  recovery: 2min @Z1_HR\ncooldown: 10min @Z1_HR"),
+        
+        # Con descrizioni
+        ('Con descrizioni', 'Esempio con descrizioni per ogni passo', 
+         "warmup: 10min @Z1_HR -- Inizia lentamente\ninterval: 20min @Z3 -- Mantieni ritmo costante\ncooldown: 5min @Z1_HR -- Rallenta gradualmente"),
+        
+        # Pulsante lap
+        ('Pulsante lap', 'Esempio con pulsante lap', 
+         "warmup: 10min @Z1_HR\nrest: lap-button @Z1_HR -- Premi lap quando sei pronto\ninterval: 5km @Z3\ncooldown: 5min @Z1_HR"),
+        
+        # Zone personalizzate
+        ('Zone personalizzate', 'Esempio con zone personalizzate', 
+         "warmup: 10min @Z1_HR\ninterval: 20min @marathon\ninterval: 10min @threshold\ncooldown: 5min @Z1_HR")
+    ]
+    
+    # Aggiungi esempi per la corsa
+    for i, (tipo, descrizione, passi) in enumerate(running_examples):
+        examples_sheet[f'A{row}'] = tipo
+        examples_sheet[f'B{row}'] = descrizione
+        examples_sheet[f'C{row}'] = passi
+        
+        # Applica bordi e formattazione a tutte le celle della riga
+        for col in ['A', 'B', 'C']:
+            cell = examples_sheet[f'{col}{row}']
+            cell.border = thin_border
+            cell.alignment = wrapped_alignment
+            
+            # Applica un colore di sfondo alternato per migliorare la leggibilità
+            if i % 2 == 0:
+                cell.fill = alternate_fill
+        
+        row += 1
+    
+    # Aggiungi una riga vuota tra le sezioni
+    row += 1
+    
+    # Sezione Cycling
+    examples_sheet.merge_cells(f'A{row}:C{row}')
+    examples_sheet[f'A{row}'] = 'ESEMPI PER IL CICLISMO (CYCLING)'
+    examples_sheet[f'A{row}'].font = subheader_font
+    examples_sheet[f'A{row}'].fill = cycling_fill
+    examples_sheet[f'A{row}'].alignment = Alignment(horizontal='center', vertical='center')
+    row += 1
+    
+    # Esempi per il ciclismo
+    cycling_examples = [
+        # Distanza
+        ('Distanza', 'Esempio di allenamento basato su distanza', 
+         "warmup: 5km @hr Z1_HR\ninterval: 20km @spd Z3\ncooldown: 3km @hr Z1_HR"),
+        
+        # Tempo
+        ('Tempo', 'Esempio di allenamento basato su tempo', 
+         "warmup: 15min @hr Z1_HR\ninterval: 40min @spd Z2\ncooldown: 5min @hr Z1_HR"),
+        
+        # Ripetute semplici
+        ('Ripetute semplici', 'Esempio di allenamento con ripetute', 
+         "warmup: 15min @hr Z1_HR\nrepeat 5:\n  interval: 2min @spd Z4\n  recovery: 2min @hr Z1_HR\ncooldown: 10min @hr Z1_HR"),
+        
+        # Con descrizioni
+        ('Con descrizioni', 'Esempio con descrizioni per ogni passo', 
+         "warmup: 15min @hr Z1_HR -- Inizia lentamente\ninterval: 30min @spd Z3 -- Mantieni ritmo costante\ncooldown: 10min @hr Z1_HR -- Rallenta gradualmente"),
+        
+        # Pulsante lap
+        ('Pulsante lap', 'Esempio con pulsante lap', 
+         "warmup: 15min @hr Z1_HR\nrest: lap-button @hr Z1_HR -- Premi lap quando sei pronto\ninterval: 20km @spd Z3\ncooldown: 5min @hr Z1_HR"),
+        
+        # Zone personalizzate
+        ('Zone personalizzate', 'Esempio con zone personalizzate', 
+         "warmup: 15min @hr Z1_HR\ninterval: 30min @spd 28.0\ninterval: 20min @spd threshold\ncooldown: 10min @hr Z1_HR")
+    ]
+    
+    # Aggiungi esempi per il ciclismo
+    for i, (tipo, descrizione, passi) in enumerate(cycling_examples):
+        examples_sheet[f'A{row}'] = tipo
+        examples_sheet[f'B{row}'] = descrizione
+        examples_sheet[f'C{row}'] = passi
+        
+        # Applica bordi e formattazione a tutte le celle della riga
+        for col in ['A', 'B', 'C']:
+            cell = examples_sheet[f'{col}{row}']
+            cell.border = thin_border
+            cell.alignment = wrapped_alignment
+            
+            # Applica un colore di sfondo alternato per migliorare la leggibilità
+            if i % 2 == 0:
+                cell.fill = alternate_fill
+        
+        row += 1
+    
+    # Aggiungi una riga vuota prima delle note sulla sintassi
+    row += 1
+    
+    # Aggiungi note sulla sintassi generali
+    examples_sheet.merge_cells(f'A{row}:C{row}')
+    examples_sheet[f'A{row}'] = '# SINTASSI SUPPORTATA NEGLI STEP'
+    examples_sheet[f'A{row}'].font = Font(italic=True, bold=True)
+    examples_sheet[f'A{row}'].alignment = wrapped_alignment
+    row += 1
+    
+    # Regole di sintassi comuni
+    syntax_rules = [
+        "Tipi di passo: warmup, interval, recovery, cooldown, rest, repeat, other",
+        "Durata: tempo (s, min, h) o distanza (m, km)",
+        "Per la corsa: usa @ per il ritmo (es. @Z2) e @hr per la frequenza cardiaca (es. @hr Z2_HR)",
+        "Per il ciclismo: usa @spd per la velocità (es. @spd Z3) e @hr per la frequenza cardiaca (es. @hr Z1_HR)",
+        "Zone ritmo/velocità: Z1-Z5 o qualsiasi zona definita nei fogli Paces",
+        "Zone freq. cardiaca: Z1_HR-Z5_HR o qualsiasi zona definita nel foglio HeartRates",
+        "Repeat: repeat N: seguito da step indentati con 2 spazi",
+        "Descrizioni opzionali: aggiungi -- seguito dalla descrizione alla fine del passo"
+    ]
+    
+    for rule in syntax_rules:
+        examples_sheet.merge_cells(f'A{row}:C{row}')
+        examples_sheet[f'A{row}'] = rule
+        examples_sheet[f'A{row}'].font = Font(italic=True)
+        examples_sheet[f'A{row}'].alignment = wrapped_alignment
+        row += 1
+    
+    return examples_sheet
+
+
+def safe_adjust_column_widths(worksheet):
+    """
+    Automatically adjust column widths based on content, safely handling merged cells.
+    
+    Args:
+        worksheet: openpyxl worksheet object
+    """
+    for column_cells in worksheet.columns:
+        max_length = 0
+        column = None
+        
+        for cell in column_cells:
+            # Skip merged cells which don't have column_letter attribute
+            if hasattr(cell, 'column_letter'):
+                if column is None:
+                    column = cell.column_letter
+                
+                if cell.value:
+                    cell_length = len(str(cell.value))
+                    max_length = max(max_length, cell_length)
+        
+        if column is not None:  # Only adjust if we found a valid column
+            adjusted_width = max(max_length + 2, 8)  # Add some extra space
+            worksheet.column_dimensions[column].width = min(adjusted_width, 60)  # Limit to 60 to avoid too wide columns
 
 
 def main():

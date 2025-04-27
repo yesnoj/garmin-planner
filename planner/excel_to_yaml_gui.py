@@ -702,10 +702,6 @@ class ExcelToYamlGUI(tk.Tk):
         sport_type_frame = ttk.Frame(options_frame)
         sport_type_frame.pack(fill=tk.X, pady=5)
         
-        ttk.Label(sport_type_frame, text="Tipo di sport:").grid(row=0, column=0, sticky=tk.W, padx=5)
-        sport_combo = ttk.Combobox(sport_type_frame, textvariable=self.sport_type, 
-                                  values=["running", "cycling"], state="readonly", width=15)
-        sport_combo.grid(row=0, column=1, padx=5, sticky=tk.W)
         
         # Aggiungi una descrizione chiara
         sport_desc = "running = corsa, cycling = ciclismo"
